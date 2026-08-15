@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#040405" />
   <title>mind.exe</title>
   <link rel="icon" href="data:," />
+  <!-- The app is built entirely with Tailwind utility classes (flex, rounded-xl, text-[24px], etc.)
+       — inside Claude's artifact preview Tailwind is provided automatically, but a plain static site
+       needs it loaded explicitly. Without this script every className does nothing and the app falls
+       back to unstyled browser-default form controls. -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html, body { margin: 0; padding: 0; background: #040405; overscroll-behavior: none; }
     #root { min-height: 100vh; }
