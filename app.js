@@ -83,6 +83,142 @@ var INSTRUMENTS = [
 var SETUP_TAGS = ["\u041F\u0440\u043E\u0431\u043E\u0439", "\u0420\u0430\u0437\u0432\u043E\u0440\u043E\u0442", "\u0420\u0435\u0432\u0430\u043D\u0448", "\u0422\u0440\u0435\u043D\u0434", "\u0424\u043B\u044D\u0442", "\u041D\u043E\u0432\u043E\u0441\u0442\u0438", "\u0418\u043C\u043F\u0443\u043B\u044C\u0441", "\u041E\u0442\u0431\u043E\u0439 \u0443\u0440\u043E\u0432\u043D\u044F", "\u0421\u043A\u0430\u043B\u044C\u043F", "\u0423\u0441\u0440\u0435\u0434\u043D\u0435\u043D\u0438\u0435"];
 var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "\u0423\u0431\u044B\u0442\u043E\u043A", Breakeven: "\u0412 \u043D\u043E\u043B\u044C", All: "\u0412\u0441\u0435" };
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
+var STRINGS = {
+  ru: {
+    nav: { home: "\u0418\u0418", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    home: {
+      welcomeBack: (name) => `\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ${name}`,
+      defaultName: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440",
+      subtitle: "\u0422\u0435\u0431\u044F \u0436\u0434\u0451\u0442 \u044F\u0441\u043D\u043E\u0441\u0442\u044C.",
+      capital: "\u041A\u0430\u043F\u0438\u0442\u0430\u043B",
+      totalResult: "\u041E\u0431\u0449\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442",
+      sinceStart: "\u0441 \u043D\u0430\u0447\u0430\u043B\u0430",
+      calibrationToday: (pct) => `\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F: ${pct}%`,
+      calibrationCta: "\u041F\u0440\u043E\u0439\u0442\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439",
+      insight: "\u0418\u043D\u0441\u0430\u0439\u0442",
+      moodPrefix: "\u041D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435 \u0440\u044B\u043D\u043A\u0430: ",
+      insightConfident: "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442, \u0447\u0442\u043E \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u043E\u043A\u0443\u043F\u0430\u0435\u0442\u0441\u044F \u2014 \u0434\u0435\u0440\u0436\u0438 \u043E\u0431\u044A\u0451\u043C \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C.",
+      insightFocus: "\u0421\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u044F\u0432\u0438\u043B\u0441\u044F \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D.",
+      moodCalm: "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E\u0435",
+      moodStable: "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0435",
+      moodReactive: "\u0420\u0435\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435",
+      traderLevel: "\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u0442\u0440\u0435\u0439\u0434\u0435\u0440\u0430",
+      awareness: "\u041E\u0441\u043E\u0437\u043D\u0430\u043D\u043D\u043E\u0441\u0442\u044C",
+      reflection: "\u0420\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F",
+      discipline: "\u0414\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430",
+      riskStability: "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0440\u0438\u0441\u043A\u0430",
+      calibrationTodayShort: "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F",
+      newEntryTile: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C",
+      logTile: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438",
+      patternsTile: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430",
+      market: "\u0420\u044B\u043D\u043E\u043A"
+    },
+    newEntry: {
+      title: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C",
+      instrument: "\u0418\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442",
+      pickOrAdd: "\u0412\u044B\u0431\u0435\u0440\u0438 \u0438\u043B\u0438 \u0434\u043E\u0431\u0430\u0432\u044C",
+      setupType: "\u0422\u0438\u043F \u0441\u0435\u0442\u0430\u043F\u0430",
+      result: (unit) => `\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 (${unit})`,
+      direction: "\u041D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435",
+      entry: "\u0412\u0445\u043E\u0434",
+      exit: "\u0412\u044B\u0445\u043E\u0434",
+      outcome: "\u0418\u0441\u0445\u043E\u0434",
+      screenshots: (max) => `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0433\u0440\u0430\u0444\u0438\u043A\u0430 (\u0434\u043E ${max})`,
+      pullQuestion: "\u0427\u0442\u043E \u0437\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u0442\u0435\u0431\u044F \u0432 \u044D\u0442\u0443 \u0441\u0434\u0435\u043B\u043A\u0443?",
+      pullPlaceholder: "\u0427\u0435\u0441\u0442\u043D\u043E, \u0430 \u043D\u0435 \u043A\u0440\u0430\u0441\u0438\u0432\u043E.",
+      lessonQuestion: "\u0427\u0442\u043E \u0431\u044B \u0442\u044B \u0441\u043A\u0430\u0437\u0430\u043B \u0441\u0435\u0431\u0435 \u0432 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437?",
+      lessonPlaceholder: "\u041E\u0434\u043D\u0430 \u0444\u0440\u0430\u0437\u0430, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u0442\u044B \u043F\u0440\u0430\u0432\u0434\u0430 \u0437\u0430\u043F\u043E\u043C\u043D\u0438\u0448\u044C.",
+      emotionQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0432 \u043C\u043E\u043C\u0435\u043D\u0442 \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0434\u0435\u043B\u043A\u0443?",
+      save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C"
+    },
+    log: {
+      title: "\u0416\u0443\u0440\u043D\u0430\u043B \u0441\u0434\u0435\u043B\u043E\u043A",
+      totalTrades: "\u0412\u0441\u0435\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A",
+      profitable: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445",
+      searchPlaceholder: "\u041F\u043E\u0438\u0441\u043A \u043F\u043E \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u2026",
+      filters: { All: "\u0412\u0441\u0435", Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435", Loss: "\u0423\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435", Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" },
+      empty: "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0434\u0440\u0443\u0433\u043E\u0439 \u0444\u0438\u043B\u044C\u0442\u0440.",
+      colEntry: "\u0412\u0445\u043E\u0434",
+      colExit: "\u0412\u044B\u0445\u043E\u0434",
+      colRR: "R/R",
+      colResult: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442"
+    },
+    settings: {
+      title: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+      language: "\u042F\u0437\u044B\u043A \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
+      languageNote: "\u041C\u0435\u043D\u044F\u0435\u0442 \u044F\u0437\u044B\u043A \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430. \u0417\u0430\u043F\u0438\u0441\u0438 \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 \u043E\u0441\u0442\u0430\u043D\u0443\u0442\u0441\u044F \u0442\u0430\u043A\u0438\u043C\u0438, \u043A\u0430\u043A \u0442\u044B \u0438\u0445 \u043D\u0430\u043F\u0438\u0441\u0430\u043B.",
+      russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
+      english: "English"
+    }
+  },
+  en: {
+    nav: { home: "AI", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", settings: "Settings" },
+    home: {
+      welcomeBack: (name) => `Welcome back, ${name}`,
+      defaultName: "Operator",
+      subtitle: "Clarity is waiting for you.",
+      capital: "Capital",
+      totalResult: "Total result",
+      sinceStart: "since start",
+      calibrationToday: (pct) => `Today's calibration: ${pct}%`,
+      calibrationCta: "Calibrate before your session",
+      insight: "Insight",
+      moodPrefix: "Market mood: ",
+      insightConfident: "Recent trades show confidence is paying off \u2014 keep your size consistent.",
+      insightFocus: "Focus on consistency. Add a few more trades for a real pattern to show up.",
+      moodCalm: "Calm",
+      moodStable: "Stable",
+      moodReactive: "Reactive",
+      traderLevel: "Trader level",
+      awareness: "Awareness",
+      reflection: "Reflection",
+      discipline: "Discipline",
+      riskStability: "Risk stability",
+      calibrationTodayShort: "Today's calibration",
+      newEntryTile: "New entry",
+      logTile: "Notes",
+      patternsTile: "Analytics",
+      market: "Market"
+    },
+    newEntry: {
+      title: "New entry",
+      instrument: "Instrument",
+      pickOrAdd: "Pick or add",
+      setupType: "Setup type",
+      result: (unit) => `Result (${unit})`,
+      direction: "Direction",
+      entry: "Entry",
+      exit: "Exit",
+      outcome: "Outcome",
+      screenshots: (max) => `Chart screenshots (up to ${max})`,
+      pullQuestion: "What pulled you into this trade?",
+      pullPlaceholder: "Be honest, not flattering.",
+      lessonQuestion: "What would you tell yourself next time?",
+      lessonPlaceholder: "One line you'll actually remember.",
+      emotionQuestion: "What did you feel the moment you entered?",
+      save: "Save entry"
+    },
+    log: {
+      title: "Trade journal",
+      totalTrades: "Total trades",
+      profitable: "Profitable",
+      searchPlaceholder: "Search trades\u2026",
+      filters: { All: "All", Win: "Profitable", Loss: "Losing", Long: "Long", Short: "Short" },
+      empty: "Nothing found. Try a different filter.",
+      colEntry: "Entry",
+      colExit: "Exit",
+      colRR: "R/R",
+      colResult: "Result"
+    },
+    settings: {
+      title: "Settings",
+      language: "App language",
+      languageNote: "Changes the interface language. Your journal entries stay exactly as you wrote them.",
+      russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
+      english: "English"
+    }
+  }
+};
 var CURRENCIES = [
   { code: "USD", symbol: "$", prefix: true },
   { code: "RUB", symbol: "\u20BD", prefix: false },
@@ -2136,7 +2272,7 @@ function Sparkline({ points, color, width = 68, height = 26 }) {
   const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
   return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
 }
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics }) {
+function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
   const traderPatterns = useMemo(() => analyzeTraderPatterns(entries), [entries]);
@@ -2147,7 +2283,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const riskStabilityScore = analytics.risk.stability.value;
   const level = calculateTraderLevel(total);
   const { streak, week } = useStreak(entries);
-  const moodKey = consciousScoreTarget > 80 ? "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E\u0435" : consciousScoreTarget > 60 ? "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0435" : "\u0420\u0435\u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0435";
+  const moodKey = consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive;
   const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
   const cumResult = withR.reduce((s, e) => s + e.r, 0);
   const heroTarget = measureMode === "currency" ? startingCapital + cumResult : cumResult;
@@ -2163,30 +2299,28 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const animatedStreak = Math.round(useAnimatedNumber(streak));
   const animatedHero = useAnimatedNumber(heroTarget);
   const tiles = [
-    { id: "new", label: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C", icon: BookOpen, primary: true },
-    { id: "log", label: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", icon: NotebookText },
-    { id: "patterns", label: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", icon: LineChartIcon }
+    { id: "new", label: t.home.newEntryTile, icon: BookOpen, primary: true },
+    { id: "log", label: t.home.logTile, icon: NotebookText },
+    { id: "patterns", label: t.home.patternsTile, icon: LineChartIcon }
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-6", children: [
-      /* @__PURE__ */ jsxs("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: [
-        "\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ",
-        name || "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440"
-      ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u0422\u0435\u0431\u044F \u0436\u0434\u0451\u0442 \u044F\u0441\u043D\u043E\u0441\u0442\u044C." })
+      /* @__PURE__ */ jsx("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: t.home.welcomeBack(name || t.home.defaultName) }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.home.subtitle })
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-1.5", children: [
         /* @__PURE__ */ jsxs("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: [
           /* @__PURE__ */ jsx(Wallet, { size: 11, className: "inline mr-1 -mt-0.5", style: { color: accent } }),
-          measureMode === "currency" ? "\u041A\u0430\u043F\u0438\u0442\u0430\u043B" : "\u041E\u0431\u0449\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442"
+          measureMode === "currency" ? t.home.capital : t.home.totalResult
         ] }),
         sparkPoints.length >= 2 && /* @__PURE__ */ jsx(Sparkline, { points: sparkPoints, color: cumResult >= 0 ? WIN : LOSS })
       ] }),
       /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none mb-1", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 500 }, children: measureMode === "currency" ? formatBalance(animatedHero, currency) : formatResult(animatedHero, "R", currency) }),
       measureMode === "currency" && /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: cumResult >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
         formatResult(cumResult, "currency", currency),
-        " \u0441 \u043D\u0430\u0447\u0430\u043B\u0430"
+        " ",
+        t.home.sinceStart
       ] })
     ] }),
     /* @__PURE__ */ jsxs(
@@ -2198,7 +2332,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         children: [
           /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: [
             /* @__PURE__ */ jsx(Gauge, { size: 15, style: { color: calibratedToday ? lastCalibration.tierColor : accent } }),
-            calibratedToday ? `\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F: ${lastCalibration.pct}%` : "\u041F\u0440\u043E\u0439\u0442\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439"
+            calibratedToday ? t.home.calibrationToday(lastCalibration.pct) : t.home.calibrationCta
           ] }),
           /* @__PURE__ */ jsx(ChevronRight, { size: 15, style: { color: BASE.inkFaint } })
         ]
@@ -2208,26 +2342,27 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: [
           /* @__PURE__ */ jsx(Sparkles, { size: 12, style: { color: accent } }),
-          " \u0418\u043D\u0441\u0430\u0439\u0442"
+          " ",
+          t.home.insight
         ] }),
         /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: accent } })
       ] }),
       /* @__PURE__ */ jsxs("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: [
-        "\u041D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435 \u0440\u044B\u043D\u043A\u0430: ",
+        t.home.moodPrefix,
         /* @__PURE__ */ jsx("span", { style: { color: accent }, children: moodKey }),
         ".",
         " ",
-        total >= 4 ? "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442, \u0447\u0442\u043E \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u043E\u043A\u0443\u043F\u0430\u0435\u0442\u0441\u044F \u2014 \u0434\u0435\u0440\u0436\u0438 \u043E\u0431\u044A\u0451\u043C \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C." : "\u0421\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u044F\u0432\u0438\u043B\u0441\u044F \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D."
+        total >= 4 ? t.home.insightConfident : t.home.insightFocus
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 divide-x", style: { borderColor: BASE.line }, children: [
         /* @__PURE__ */ jsxs("div", { className: "pr-4", children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: "\u0423\u0440\u043E\u0432\u0435\u043D\u044C \u0442\u0440\u0435\u0439\u0434\u0435\u0440\u0430" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.traderLevel }),
           /* @__PURE__ */ jsx("div", { className: "text-[26px] leading-none", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: level })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "pl-4", style: { borderLeft: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: "\u041E\u0441\u043E\u0437\u043D\u0430\u043D\u043D\u043E\u0441\u0442\u044C" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.awareness }),
           /* @__PURE__ */ jsxs("div", { className: "text-[26px] leading-none", style: { fontFamily: "'Space Grotesk', sans-serif", color: accent, fontWeight: 500 }, children: [
             consciousScore,
             "%"
@@ -2237,26 +2372,30 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mt-3 mb-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-700 ease-out", style: { width: `${consciousScore}%`, background: accent } }) }),
       total > 0 && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 flex-wrap text-[10px]", style: { color: BASE.inkFaint }, children: [
         reflectionScore != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\u0420\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F ",
+          t.home.reflection,
+          " ",
           reflectionScore,
           "%"
         ] }),
         reflectionScore != null && (disciplineScore != null || riskStabilityScore != null) && /* @__PURE__ */ jsx("span", { children: "\xB7" }),
         disciplineScore != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\u0414\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430 ",
+          t.home.discipline,
+          " ",
           disciplineScore,
           "%"
         ] }),
         disciplineScore != null && riskStabilityScore != null && /* @__PURE__ */ jsx("span", { children: "\xB7" }),
         riskStabilityScore != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0440\u0438\u0441\u043A\u0430 ",
+          t.home.riskStability,
+          " ",
           riskStabilityScore,
           "%"
         ] }),
         calibratedToday && /* @__PURE__ */ jsxs(Fragment, { children: [
           /* @__PURE__ */ jsx("span", { children: "\xB7" }),
           /* @__PURE__ */ jsxs("span", { style: { color: lastCalibration.tierColor }, children: [
-            "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F ",
+            t.home.calibrationTodayShort,
+            " ",
             lastCalibration.pct,
             "%"
           ] })
@@ -2330,22 +2469,22 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: "\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0438\u0449\u0435\u0442 \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0435\u0441\u044F \u0441\u0432\u044F\u0437\u0438 \u043C\u0435\u0436\u0434\u0443 \u0442\u0432\u043E\u0438\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u043C \u2014 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0437\u0430\u043F\u0438\u0441\u0438 \u0441 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0439 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0439 \u0442\u043E\u0447\u043A\u043E\u0439." })
     ] }),
     patternOpen && traderPatterns.primaryPattern && /* @__PURE__ */ jsx(TraderPatternDetail, { pattern: traderPatterns.primaryPattern, accent, currency, onClose: () => setPatternOpen(false) }),
-    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-3", children: tiles.map((t) => /* @__PURE__ */ jsxs(
+    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-3", children: tiles.map((tile) => /* @__PURE__ */ jsxs(
       "button",
       {
-        onClick: () => goTo(t.id),
+        onClick: () => goTo(tile.id),
         className: "flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-all duration-200 active:scale-[0.98]",
         style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.ink },
         children: [
           /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { fontFamily: "'Space Grotesk', sans-serif" }, children: [
-            /* @__PURE__ */ jsx(t.icon, { size: 15, style: { color: t.primary ? accent : BASE.inkDim } }),
+            /* @__PURE__ */ jsx(tile.icon, { size: 15, style: { color: tile.primary ? accent : BASE.inkDim } }),
             " ",
-            t.label
+            tile.label
           ] }),
           /* @__PURE__ */ jsx(ChevronRight, { size: 15, style: { color: BASE.inkFaint } })
         ]
       },
-      t.id
+      tile.id
     )) }),
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
       /* @__PURE__ */ jsxs("span", { children: [
@@ -2364,7 +2503,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         ] })
       ] }),
       /* @__PURE__ */ jsxs("span", { style: { fontFamily: "'Space Grotesk', sans-serif" }, children: [
-        "\u0420\u044B\u043D\u043E\u043A: ",
+        t.home.market,
+        ": ",
         moodKey
       ] })
     ] })
@@ -2599,7 +2739,7 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     ] }, g.category)) })
   ] }) });
 }
-function NewEntry({ onSave, accent, measureMode, currency, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify }) {
+function NewEntry({ onSave, accent, measureMode, currency, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify, t }) {
   const [instrument, setInstrument] = useState("");
   const [direction, setDirection] = useState("Long");
   const [outcome, setOutcome] = useState("Win");
@@ -2675,25 +2815,22 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
-      " \u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C"
+      " ",
+      t.newEntry.title
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u0418\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442" }),
-        /* @__PURE__ */ jsx(PickerField, { value: instrument, onChange: setInstrument, options: instrumentOptions, placeholder: "\u0412\u044B\u0431\u0435\u0440\u0438 \u0438\u043B\u0438 \u0434\u043E\u0431\u0430\u0432\u044C", accent, allowCustom: true, mono: true, onCustomAdd: onAddCustomInstrument })
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.instrument }),
+        /* @__PURE__ */ jsx(PickerField, { value: instrument, onChange: setInstrument, options: instrumentOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, mono: true, onCustomAdd: onAddCustomInstrument })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u0422\u0438\u043F \u0441\u0435\u0442\u0430\u043F\u0430" }),
-        /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: "\u0412\u044B\u0431\u0435\u0440\u0438 \u0438\u043B\u0438 \u0434\u043E\u0431\u0430\u0432\u044C", accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.setupType }),
+        /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
       ] })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
       /* @__PURE__ */ jsxs("div", { className: "w-[38%] shrink-0", children: [
-        /* @__PURE__ */ jsxs(L, { children: [
-          "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 (",
-          unitSymbol(measureMode, currency),
-          ")"
-        ] }),
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -2708,7 +2845,7 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
         )
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u041D\u0430\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435" }),
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.direction }),
         /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Long", "Short"].map((d) => /* @__PURE__ */ jsx(
           "button",
           {
@@ -2723,7 +2860,7 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u0412\u0445\u043E\u0434" }),
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.entry }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -2739,7 +2876,7 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
         )
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u0412\u044B\u0445\u043E\u0434" }),
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -2772,7 +2909,7 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
       ] })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: "\u0418\u0441\u0445\u043E\u0434" }),
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.outcome }),
       /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Win", "Loss", "Breakeven"].map((o) => /* @__PURE__ */ jsx(
         "button",
         {
@@ -2785,11 +2922,7 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
       )) })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsxs(L, { children: [
-        "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0433\u0440\u0430\u0444\u0438\u043A\u0430 (\u0434\u043E ",
-        MAX_SHOTS,
-        ")"
-      ] }),
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
         screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
@@ -2818,34 +2951,34 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
       /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-      /* @__PURE__ */ jsx(L, { children: "\u0427\u0442\u043E \u0437\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u0442\u0435\u0431\u044F \u0432 \u044D\u0442\u0443 \u0441\u0434\u0435\u043B\u043A\u0443?" }),
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
       /* @__PURE__ */ jsx(
         "textarea",
         {
           value: pull,
           onChange: (e) => setPull(e.target.value),
           rows: 2,
-          placeholder: "\u0427\u0435\u0441\u0442\u043D\u043E, \u0430 \u043D\u0435 \u043A\u0440\u0430\u0441\u0438\u0432\u043E.",
+          placeholder: t.newEntry.pullPlaceholder,
           className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none",
           style: { borderColor: BASE.line, color: BASE.ink }
         }
       )
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: "\u0427\u0442\u043E \u0431\u044B \u0442\u044B \u0441\u043A\u0430\u0437\u0430\u043B \u0441\u0435\u0431\u0435 \u0432 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437?" }),
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
       /* @__PURE__ */ jsx(
         "textarea",
         {
           value: lesson,
           onChange: (e) => setLesson(e.target.value),
           rows: 2,
-          placeholder: "\u041E\u0434\u043D\u0430 \u0444\u0440\u0430\u0437\u0430, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u0442\u044B \u043F\u0440\u0430\u0432\u0434\u0430 \u0437\u0430\u043F\u043E\u043C\u043D\u0438\u0448\u044C.",
+          placeholder: t.newEntry.lessonPlaceholder,
           className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none",
           style: { borderColor: BASE.line, color: BASE.ink }
         }
       )
     ] }),
-    /* @__PURE__ */ jsx(L, { children: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0432 \u043C\u043E\u043C\u0435\u043D\u0442 \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0434\u0435\u043B\u043A\u0443?" }),
+    /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
     /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
     /* @__PURE__ */ jsx(
       "button",
@@ -2862,29 +2995,29 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
           fontWeight: 600,
           boxShadow: canSave ? softLift(accent) : "none"
         },
-        children: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C"
+        children: t.newEntry.save
       }
     )
   ] });
 }
-var LOG_FILTERS = [
-  { id: "All", label: "\u0412\u0441\u0435" },
-  { id: "Win", label: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435" },
-  { id: "Loss", label: "\u0423\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435" },
-  { id: "Long", label: "\u041B\u043E\u043D\u0433" },
-  { id: "Short", label: "\u0428\u043E\u0440\u0442" }
-];
 function LogMiniStat({ label, value, color }) {
   return /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
     /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5 truncate", style: { color: BASE.inkFaint }, children: label }),
     /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: value })
   ] });
 }
-function Log({ entries, onDelete, accent, measureMode, currency }) {
+function Log({ entries, onDelete, accent, measureMode, currency, t }) {
   const [openId, setOpenId] = useState(null);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [confirmId, setConfirmId] = useState(null);
+  const logFilters = [
+    { id: "All", label: t.log.filters.All },
+    { id: "Win", label: t.log.filters.Win },
+    { id: "Loss", label: t.log.filters.Loss },
+    { id: "Long", label: t.log.filters.Long },
+    { id: "Short", label: t.log.filters.Short }
+  ];
   const filtered = entries.filter((e) => {
     const matchesFilter = filter === "All" ? true : filter === "Win" || filter === "Loss" ? e.outcome === filter : e.direction === filter;
     const matchesQuery = e.instrument.toLowerCase().includes(query.toLowerCase());
@@ -2896,19 +3029,20 @@ function Log({ entries, onDelete, accent, measureMode, currency }) {
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(NotebookText, { size: 17, style: { color: accent } }),
-      " \u0416\u0443\u0440\u043D\u0430\u043B \u0441\u0434\u0435\u043B\u043E\u043A"
+      " ",
+      t.log.title
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-4", children: [
-      /* @__PURE__ */ jsx(StatCard, { label: "\u0412\u0441\u0435\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A", value: entries.length, accent: BASE.ink }),
-      /* @__PURE__ */ jsx(StatCard, { label: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445", value: `${winRate}%`, accent: BASE.ink }),
+      /* @__PURE__ */ jsx(StatCard, { label: t.log.totalTrades, value: entries.length, accent: BASE.ink }),
+      /* @__PURE__ */ jsx(StatCard, { label: t.log.profitable, value: `${winRate}%`, accent: BASE.ink }),
       /* @__PURE__ */ jsx(StatCard, { label: `PnL (${unitSymbol(measureMode, currency)})`, value: formatResult(netR, measureMode, currency), accent: netR >= 0 ? WIN : LOSS })
     ] }),
     /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 mb-3", children: /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 flex-1 px-3 py-2 rounded-full", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
       /* @__PURE__ */ jsx(Search, { size: 13, style: { color: BASE.inkFaint } }),
-      /* @__PURE__ */ jsx("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: "\u041F\u043E\u0438\u0441\u043A \u043F\u043E \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u2026", className: "bg-transparent outline-none text-sm flex-1", style: { color: BASE.ink } })
+      /* @__PURE__ */ jsx("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: t.log.searchPlaceholder, className: "bg-transparent outline-none text-sm flex-1", style: { color: BASE.ink } })
     ] }) }),
-    /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 overflow-x-auto", children: LOG_FILTERS.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
-    filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0434\u0440\u0443\u0433\u043E\u0439 \u0444\u0438\u043B\u044C\u0442\u0440." }) : /* @__PURE__ */ jsx("div", { className: "space-y-2", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+    /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 overflow-x-auto", children: logFilters.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
+    filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.log.empty }) : /* @__PURE__ */ jsx("div", { className: "space-y-2", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
       /* @__PURE__ */ jsxs("button", { onClick: () => setOpenId(openId === e.id ? null : e.id), className: "w-full text-left transition-colors duration-150", style: { background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-4 pt-3 pb-2.5", children: [
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
@@ -2919,10 +3053,10 @@ function Log({ entries, onDelete, accent, measureMode, currency }) {
           /* @__PURE__ */ jsx("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint }, children: relTime(e.date) })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-4 gap-2 px-4 pb-3", children: [
-          /* @__PURE__ */ jsx(LogMiniStat, { label: "\u0412\u0445\u043E\u0434", value: formatPriceValue(e.entryPrice) }),
-          /* @__PURE__ */ jsx(LogMiniStat, { label: "\u0412\u044B\u0445\u043E\u0434", value: formatPriceValue(e.exitPrice) }),
-          /* @__PURE__ */ jsx(LogMiniStat, { label: "R/R", value: e.rr != null ? e.rr.toFixed(1) : "\u2014" }),
-          /* @__PURE__ */ jsx(LogMiniStat, { label: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442", value: formatResult(e.r, measureMode, currency), color: e.r != null ? outcomeColor(e.outcome) : void 0 })
+          /* @__PURE__ */ jsx(LogMiniStat, { label: t.log.colEntry, value: formatPriceValue(e.entryPrice) }),
+          /* @__PURE__ */ jsx(LogMiniStat, { label: t.log.colExit, value: formatPriceValue(e.exitPrice) }),
+          /* @__PURE__ */ jsx(LogMiniStat, { label: t.log.colRR, value: e.rr != null ? e.rr.toFixed(1) : "\u2014" }),
+          /* @__PURE__ */ jsx(LogMiniStat, { label: t.log.colResult, value: formatResult(e.r, measureMode, currency), color: e.r != null ? outcomeColor(e.outcome) : void 0 })
         ] })
       ] }),
       openId === e.id && /* @__PURE__ */ jsxs("div", { className: "tab-content px-4 py-3 space-y-2 text-sm", style: { background: BASE.bg, color: BASE.inkDim }, children: [
@@ -4382,7 +4516,10 @@ function Settings({
   startingCapital,
   setStartingCapital,
   username,
-  onLogout
+  onLogout,
+  lang,
+  setLang,
+  t
 }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFullReset, setConfirmFullReset] = useState(false);
@@ -4393,7 +4530,22 @@ function Settings({
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(SettingsIcon, { size: 17, style: { color: accent } }),
-      " \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438"
+      " ",
+      t.settings.title
+    ] }),
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.language }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: [{ id: "ru", label: t.settings.russian }, { id: "en", label: t.settings.english }].map((l) => /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: () => setLang(l.id),
+          className: "flex-1 px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+          style: { background: lang === l.id ? `${accent}12` : "transparent", color: lang === l.id ? accent : BASE.inkDim, border: `1px solid ${lang === l.id ? accent + "40" : BASE.line}` },
+          children: l.label
+        },
+        l.id
+      )) }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.languageNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442" }),
@@ -5082,6 +5234,7 @@ function MindExe() {
   const [toast, setToast] = useState(null);
   const [soundOn, setSoundOn] = useState(true);
   const [weeklyGoal, setWeeklyGoal] = useState(5);
+  const [lang, setLang] = useState("ru");
   const [measureMode, setMeasureMode] = useState("R");
   const [currency, setCurrency] = useState("USD");
   const [startingCapital, setStartingCapital] = useState(1e3);
@@ -5092,6 +5245,7 @@ function MindExe() {
   const [coinLedger, setCoinLedger] = useState([]);
   const [lastDailyReward, setLastDailyReward] = useState(null);
   const analytics = useMemo(() => calculateTraderAnalytics(entries, lastCalibration), [entries, lastCalibration]);
+  const t = STRINGS[lang] || STRINGS.ru;
   const [walletOpen, setWalletOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
@@ -5183,6 +5337,7 @@ function MindExe() {
           if (typeof settings.accentIndex === "number") setAccentPreset(ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
           if (typeof settings.soundOn === "boolean") setSoundOn(settings.soundOn);
           if (typeof settings.weeklyGoal === "number") setWeeklyGoal(settings.weeklyGoal);
+          if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
           if (settings.measureMode) setMeasureMode(settings.measureMode);
           if (settings.currency) setCurrency(settings.currency);
           if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
@@ -5208,7 +5363,7 @@ function MindExe() {
     };
   }, [authStatus, userId, migrateFor]);
   const buildPayload = (overrides = {}) => {
-    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
+    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
     return {
       version: SCHEMA_VERSION,
       user: { name: src.name, anonId },
@@ -5219,6 +5374,7 @@ function MindExe() {
         accentIndex: src.accentIndex,
         soundOn: src.soundOn,
         weeklyGoal: src.weeklyGoal,
+        lang: src.lang,
         measureMode: src.measureMode,
         currency: src.currency,
         startingCapital: src.startingCapital,
@@ -5245,7 +5401,7 @@ function MindExe() {
   useEffect(() => {
     if (!loaded || authStatus !== "authenticated" || !userId) return;
     persistNow();
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => {
     if (!loaded || authStatus !== "authenticated" || !userId) return;
     const flush = () => {
@@ -5257,7 +5413,7 @@ function MindExe() {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
     };
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
   const showToast = (text) => {
     setToast(text);
@@ -5377,6 +5533,7 @@ function MindExe() {
         if (typeof settings.accentIndex === "number") setAccentPreset(ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
         if (typeof settings.soundOn === "boolean") setSoundOn(settings.soundOn);
         if (typeof settings.weeklyGoal === "number") setWeeklyGoal(settings.weeklyGoal);
+        if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
         if (settings.measureMode) setMeasureMode(settings.measureMode);
         if (settings.currency) setCurrency(settings.currency);
         if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
@@ -5392,6 +5549,7 @@ function MindExe() {
           accentIndex: typeof settings.accentIndex === "number" ? settings.accentIndex : ACCENTS.findIndex((a) => a.value === accentPreset.value),
           soundOn: settings.soundOn ?? soundOn,
           weeklyGoal: settings.weeklyGoal ?? weeklyGoal,
+          lang: settings.lang ?? lang,
           measureMode: settings.measureMode ?? measureMode,
           currency: settings.currency ?? currency,
           startingCapital: settings.startingCapital ?? startingCapital,
@@ -5422,6 +5580,7 @@ function MindExe() {
       accentIndex: cosmicIndex >= 0 ? cosmicIndex : 0,
       soundOn: true,
       weeklyGoal: 5,
+      lang: "ru",
       measureMode: "R",
       currency: "USD",
       startingCapital: 1e3,
@@ -5437,6 +5596,7 @@ function MindExe() {
     setAccentPreset(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
     setSoundOn(true);
     setWeeklyGoal(5);
+    setLang("ru");
     setMeasureMode("R");
     setCurrency("USD");
     setStartingCapital(1e3);
@@ -5452,13 +5612,13 @@ function MindExe() {
   const addCustomInstrument = (v) => setCustomInstruments((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
   const addCustomTag = (v) => setCustomTags((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
   const nav = [
-    { id: "home", label: "\u0418\u0418", icon: Sparkles },
-    { id: "new", label: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", icon: BookOpen },
-    { id: "log", label: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", icon: NotebookText },
-    { id: "patterns", label: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", icon: LineChartIcon },
-    { id: "simulator", label: "\u0418\u0433\u0440\u0430", icon: Swords },
-    { id: "challenge", label: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", icon: Flame },
-    { id: "settings", label: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438", icon: SettingsIcon }
+    { id: "home", label: t.nav.home, icon: Sparkles },
+    { id: "new", label: t.nav.new, icon: BookOpen },
+    { id: "log", label: t.nav.log, icon: NotebookText },
+    { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
+    { id: "simulator", label: t.nav.simulator, icon: Swords },
+    { id: "challenge", label: t.nav.challenge, icon: Flame },
+    { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
   const activeIndex = nav.findIndex((n) => n.id === tab);
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "'Inter', sans-serif" }, children: [
@@ -5612,7 +5772,7 @@ function MindExe() {
         ] }),
         /* @__PURE__ */ jsx("div", { className: "mx-auto mb-8", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics }),
+          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
@@ -5624,6 +5784,7 @@ function MindExe() {
               onAddCustomInstrument: addCustomInstrument,
               onAddCustomTag: addCustomTag,
               notify: showToast,
+              t,
               onSave: (e) => {
                 const next = [...entries, e];
                 setEntries(next);
@@ -5634,7 +5795,7 @@ function MindExe() {
               }
             }
           ),
-          tab === "log" && /* @__PURE__ */ jsx(Log, { entries, accent, onDelete: deleteEntry, measureMode, currency }),
+          tab === "log" && /* @__PURE__ */ jsx(Log, { entries, accent, onDelete: deleteEntry, measureMode, currency, t }),
           tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics }),
           tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration }),
           tab === "simulator" && /* @__PURE__ */ jsx(Simulator, { accent, onWin: () => {
@@ -5667,7 +5828,10 @@ function MindExe() {
               startingCapital,
               setStartingCapital,
               username: authUser?.username,
-              onLogout: handleLogout
+              onLogout: handleLogout,
+              lang,
+              setLang,
+              t
             }
           )
         ] }, tab)
