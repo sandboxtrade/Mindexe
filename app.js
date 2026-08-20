@@ -1,3 +1,4 @@
+// mind.exe V0.1 — OPEN/CLOSED trade lifecycle
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -111,7 +112,9 @@ var STRINGS = {
       newEntryTile: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C",
       logTile: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438",
       patternsTile: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430",
-      market: "\u0420\u044B\u043D\u043E\u043A"
+      market: "\u0420\u044B\u043D\u043E\u043A",
+      streakDays: (n) => `${n} \u0434\u043D. \u043F\u043E\u0434\u0440\u044F\u0434`,
+      startStreak: "\u041D\u0430\u0447\u043D\u0438 \u0441\u0435\u0440\u0438\u044E"
     },
     newEntry: {
       title: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C",
@@ -148,7 +151,137 @@ var STRINGS = {
       language: "\u042F\u0437\u044B\u043A \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
       languageNote: "\u041C\u0435\u043D\u044F\u0435\u0442 \u044F\u0437\u044B\u043A \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430. \u0417\u0430\u043F\u0438\u0441\u0438 \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 \u043E\u0441\u0442\u0430\u043D\u0443\u0442\u0441\u044F \u0442\u0430\u043A\u0438\u043C\u0438, \u043A\u0430\u043A \u0442\u044B \u0438\u0445 \u043D\u0430\u043F\u0438\u0441\u0430\u043B.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
-      english: "English"
+      english: "English",
+      account: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442",
+      logout: "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430",
+      localAccountNote: "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u0414\u0430\u043D\u043D\u044B\u0435 \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u0432\u044B\u0445\u043E\u0434\u0435 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u044F\u0442\u0441\u044F \u043F\u0440\u0438 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u043C \u0432\u0445\u043E\u0434\u0435.",
+      operatorName: "\u0418\u043C\u044F \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u0430",
+      operatorPlaceholder: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440",
+      accentColor: "\u0410\u043A\u0446\u0435\u043D\u0442\u043D\u044B\u0439 \u0446\u0432\u0435\u0442",
+      resultUnits: "\u0415\u0434\u0438\u043D\u0438\u0446\u044B \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0438\u044F \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430",
+      rMultiplier: "R-\u043C\u0443\u043B\u044C\u0442\u0438\u043F\u043B\u0438\u043A\u0430\u0442\u043E\u0440",
+      currencyLabel: "\u0412\u0430\u043B\u044E\u0442\u0430",
+      startingCapital: "\u041D\u0430\u0447\u0430\u043B\u044C\u043D\u044B\u0439 \u043A\u0430\u043F\u0438\u0442\u0430\u043B",
+      weeklyGoalLabel: "\u041D\u0435\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0446\u0435\u043B\u044C \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438",
+      weeklyGoalNote: "\u0421\u043A\u043E\u043B\u044C\u043A\u043E \u0434\u043D\u0435\u0439 \u0432 \u043D\u0435\u0434\u0435\u043B\u044E \u043D\u0443\u0436\u043D\u043E \u0432\u0435\u0441\u0442\u0438 \u0436\u0443\u0440\u043D\u0430\u043B \u0434\u043B\u044F \u0447\u0435\u043B\u043B\u0435\u043D\u0434\u0436\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438.",
+      daysSuffix: "\u0434\u043D\u0435\u0439",
+      sound: "\u0417\u0432\u0443\u043A",
+      soundToggleLabel: "\u0417\u0432\u0443\u043A \u043F\u0440\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0438 \u0437\u0430\u043F\u0438\u0441\u0438",
+      data: "\u0414\u0430\u043D\u043D\u044B\u0435",
+      dataNote: "\u0412\u0441\u0451 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435 (\u0438\u043B\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0435, \u0435\u0441\u043B\u0438 \u0442\u044B \u0432\u043E\u0448\u0451\u043B). \u041F\u043E\u043B\u043D\u044B\u0439 \u0431\u044D\u043A\u0430\u043F \u2014 \u043D\u0430 \u0441\u043B\u0443\u0447\u0430\u0439 \u0441\u043C\u0435\u043D\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u043D\u0430 \u0432\u0441\u044F\u043A\u0438\u0439 \u0441\u043B\u0443\u0447\u0430\u0439.",
+      fullBackup: "\u041F\u043E\u043B\u043D\u044B\u0439 \u0431\u044D\u043A\u0430\u043F (.json)",
+      restoreBackup: "\u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0438\u0437 \u0431\u044D\u043A\u0430\u043F\u0430 (.json)",
+      exportJournalOnly: "\u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0436\u0443\u0440\u043D\u0430\u043B (.json)",
+      importJournalOnly: "\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0436\u0443\u0440\u043D\u0430\u043B (.json)",
+      confirmClearJournal: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u0441\u0435 \u0437\u0430\u043F\u0438\u0441\u0438 \u0431\u0435\u0437 \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u0438 \u043E\u0442\u043C\u0435\u043D\u044B?",
+      yes: "\u0414\u0430",
+      cancel: "\u041E\u0442\u043C\u0435\u043D\u0430",
+      clearJournal: "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u0436\u0443\u0440\u043D\u0430\u043B",
+      fullResetTitle: "\u041F\u043E\u043B\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441",
+      fullResetNote: "\u0421\u0442\u0438\u0440\u0430\u0435\u0442 \u0436\u0443\u0440\u043D\u0430\u043B, \u0432\u0441\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0441\u0432\u043E\u0438 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u044B, \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0438 \u0438 \u043A\u043E\u0448\u0435\u043B\u0451\u043A MindCoin \u2014 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043A \u043F\u0435\u0440\u0432\u043E\u043C\u0443 \u0437\u0430\u043F\u0443\u0441\u043A\u0443.",
+      confirmFullReset: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0432\u043E\u043E\u0431\u0449\u0435 \u0432\u0441\u0451?",
+      yesReset: "\u0414\u0430, \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C",
+      fullResetButton: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0432\u0441\u0451 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435",
+      footerNote: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0441\u0434\u0435\u043B\u043E\u043A \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u044D\u0442\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u0438 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u043C\u0435\u0436\u0434\u0443 \u0432\u0438\u0437\u0438\u0442\u0430\u043C\u0438. \u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F \u0438 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0441 \u0431\u0440\u043E\u043A\u0435\u0440\u043E\u043C \u043F\u043E\u043A\u0430 \u043D\u0435 \u0440\u0435\u0430\u043B\u0438\u0437\u043E\u0432\u0430\u043D\u044B."
+    },
+    challenge: {
+      title: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436",
+      daysInARow: "\u0434\u043D\u0435\u0439 \u043F\u043E\u0434\u0440\u044F\u0434",
+      weeklyConsistency: "\u041D\u0435\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u044C",
+      weeklyConsistencyDesc: (goal) => `\u0412\u0435\u0434\u0438 \u0436\u0443\u0440\u043D\u0430\u043B ${goal} \u0438\u0437 7 \u0434\u043D\u0435\u0439 \u044D\u0442\u043E\u0439 \u043D\u0435\u0434\u0435\u043B\u0438.`,
+      thisWeek: "\u042D\u0442\u0430 \u043D\u0435\u0434\u0435\u043B\u044F",
+      footer: "\u0420\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u044C \u0432\u0430\u0436\u043D\u0435\u0435 \u043B\u044E\u0431\u043E\u0439 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438. \u0421\u0435\u0440\u0438\u044F \u2014 \u044D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E \u043F\u043E\u0431\u0435\u0434\u044B, \u0430 \u043F\u0440\u043E \u0442\u043E, \u0447\u0442\u043E\u0431\u044B \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u0442\u044C\u0441\u044F \u043A \u0441\u0435\u0431\u0435 \u0434\u0430\u0436\u0435 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430."
+    },
+    calibration: {
+      heading: "\u041A\u0410\u041B\u0418\u0411\u0420\u041E\u0412\u041A\u0410",
+      subtitle: "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u044C \u0433\u043E\u0442\u043E\u0432\u043D\u043E\u0441\u0442\u044C \u043A \u0442\u043E\u0440\u0433\u043E\u0432\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438.",
+      intro: "\u042D\u0442\u043E \u0437\u0430\u0439\u043C\u0451\u0442 \u043C\u0435\u043D\u0435\u0435 30 \u0441\u0435\u043A\u0443\u043D\u0434. \u041E\u0442\u0432\u0435\u0447\u0430\u0439\u0442\u0435 \u0447\u0435\u0441\u0442\u043D\u043E. \u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u043D\u0435 \u0440\u044B\u043D\u043E\u043A, \u0430 \u0432\u0430\u0448\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435.",
+      start: "\u041D\u0430\u0447\u0430\u0442\u044C",
+      questionOf: (i, total) => `\u0412\u043E\u043F\u0440\u043E\u0441 ${i} \u0438\u0437 ${total}`,
+      cancel: "\u041E\u0442\u043C\u0435\u043D\u0430",
+      mainRiskFactor: "\u0413\u043B\u0430\u0432\u043D\u044B\u0439 \u0444\u0430\u043A\u0442\u043E\u0440 \u0440\u0438\u0441\u043A\u0430",
+      whatInfluenced: "\u0427\u0442\u043E \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E \u043D\u0430 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442",
+      restart: "\u041F\u0440\u043E\u0439\u0442\u0438 \u0437\u0430\u043D\u043E\u0432\u043E"
+    },
+    pattern: {
+      yourPattern: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D",
+      strongSignal: "\u0421\u0438\u043B\u044C\u043D\u044B\u0439 \u0441\u0438\u0433\u043D\u0430\u043B",
+      observedPattern: "\u041D\u0430\u0431\u043B\u044E\u0434\u0430\u0435\u043C\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D",
+      someSigns: "\u0415\u0441\u0442\u044C \u043F\u0440\u0438\u0437\u043D\u0430\u043A\u0438",
+      trades: (n) => `${n} ${pluralRu(n, "\u0441\u0434\u0435\u043B\u043A\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A")}`,
+      winShort: "win",
+      avgShort: "\u0441\u0440.",
+      breakdown: "\u0420\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C \u2192",
+      strength: "\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430",
+      noClearPattern: "\u042F\u0432\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E\u0433\u043E \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u044D\u0442\u043E \u0442\u043E\u0436\u0435 \u043D\u0435\u043F\u043B\u043E\u0445\u043E\u0439 \u0437\u043D\u0430\u043A. \u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0430\u0439 \u0432\u0435\u0441\u0442\u0438 \u0436\u0443\u0440\u043D\u0430\u043B, \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0441\u043B\u0435\u0434\u0438\u0442 \u0437\u0430 \u044D\u0442\u0438\u043C \u043F\u043E\u0441\u0442\u043E\u044F\u043D\u043D\u043E.",
+      buildingUp: (have, need) => `\u041F\u043E\u043A\u0430 \u0444\u043E\u0440\u043C\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u2014 ${have} / ${need}`,
+      buildingUpDesc: "\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0438\u0449\u0435\u0442 \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0435\u0441\u044F \u0441\u0432\u044F\u0437\u0438 \u043C\u0435\u0436\u0434\u0443 \u0442\u0432\u043E\u0438\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u043C \u2014 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0437\u0430\u043F\u0438\u0441\u0438 \u0441 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0439 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0439 \u0442\u043E\u0447\u043A\u043E\u0439.",
+      detailTitle: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D",
+      tradesLabel: "\u0421\u0434\u0435\u043B\u043E\u043A",
+      winRateLabel: "Win rate",
+      avgRLabel: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 R",
+      comparison: "\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435",
+      similarSituations: "\u041F\u043E\u0445\u043E\u0436\u0438\u0435 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0438",
+      otherTrades: "\u041E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438",
+      whereOnMap: "\u0413\u0434\u0435 \u044D\u0442\u043E \u043D\u0430 \u043A\u0430\u0440\u0442\u0435 \u044D\u043C\u043E\u0446\u0438\u0439",
+      fearToConfidence: "\u0421\u0442\u0440\u0430\u0445 \u2192 \u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C",
+      nervousToCalm: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445 \u2192 \u0421\u043F\u043E\u043A\u043E\u0435\u043D",
+      tradeExamples: "\u041F\u0440\u0438\u043C\u0435\u0440\u044B \u0441\u0434\u0435\u043B\u043E\u043A",
+      whyShown: "\u041F\u043E\u0447\u0435\u043C\u0443 mind.exe \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u044D\u0442\u043E",
+      whyShownText: (n, avgGroup, avgRest) => `${n} ${pluralRu(n, "\u0441\u0434\u0435\u043B\u043A\u0430 \u043F\u043E\u043F\u0430\u043B\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043F\u0430\u043B\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A \u043F\u043E\u043F\u0430\u043B\u043E")} \u0432 \u044D\u0442\u0443 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E. \u0412 \u044D\u0442\u043E\u0439 \u0433\u0440\u0443\u043F\u043F\u0435 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0441\u043E\u0441\u0442\u0430\u0432\u0438\u043B ${avgGroup}, \u043F\u0440\u043E\u0442\u0438\u0432 ${avgRest} \u0443 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A.`,
+      needMoreEntries: "\u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A \u0441 \u043E\u0431\u0435\u0438\u0445 \u0441\u0442\u043E\u0440\u043E\u043D \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u2014 \u0438 \u0437\u0434\u0435\u0441\u044C \u043D\u0430\u0447\u043D\u0451\u0442 \u043F\u0440\u043E\u044F\u0432\u043B\u044F\u0442\u044C\u0441\u044F \u043F\u0430\u0442\u0442\u0435\u0440\u043D.",
+      noPatternYetLong: "\u042F\u0432\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E\u0433\u043E \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u0440\u0438\u0445\u043E\u0434\u044F\u0442 \u0438\u0437 \u043F\u043E\u0445\u043E\u0436\u0438\u0445 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u044B\u0445 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0439. \u042D\u0442\u043E \u0441\u0430\u043C\u043E \u043F\u043E \u0441\u0435\u0431\u0435 \u0432\u0430\u0436\u043D\u043E \u0437\u0430\u043C\u0435\u0442\u0438\u0442\u044C.",
+      accumulating: (n) => `\u041F\u043E\u043A\u0430 \u043D\u0430\u043A\u0430\u043F\u043B\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B \u0434\u043B\u044F \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u044B\u0445 \u0432\u044B\u0432\u043E\u0434\u043E\u0432 (\u043D\u0443\u0436\u043D\u043E \u0435\u0449\u0451 ${n} \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0441 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0439 \u0442\u043E\u0447\u043A\u043E\u0439) \u2014 \u043D\u043E \u0443\u0436\u0435 \u0432\u0438\u0434\u043D\u043E, \u0447\u0442\u043E \u0436\u0443\u0440\u043D\u0430\u043B \u0432\u0435\u0434\u0451\u0442\u0441\u044F \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E, \u0438 \u044D\u0442\u043E \u0433\u043B\u0430\u0432\u043D\u043E\u0435.`
+    },
+    review: {
+      heading: "\u0420\u0410\u0417\u0411\u041E\u0420",
+      notEnough: "\u041F\u043E\u043A\u0430 \u043C\u0430\u043B\u043E\u0432\u0430\u0442\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439, \u0447\u0442\u043E\u0431\u044B \u0432\u044B\u0434\u0435\u043B\u0438\u0442\u044C \u0432 \u043D\u0438\u0445 \u0437\u0430\u043A\u043E\u043D\u043E\u043C\u0435\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u2014 \u0438 \u0440\u0430\u0437\u0431\u043E\u0440 \u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.",
+      back: "\u041D\u0430\u0437\u0430\u0434",
+      questionsCount: (n) => `${n} ${pluralRu(n, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432")} \u043F\u043E \u0442\u043E\u043C\u0443, \u0447\u0442\u043E \u0443\u0436\u0435 \u0432\u0438\u0434\u043D\u043E \u0432 \u0442\u0432\u043E\u0451\u043C \u0436\u0443\u0440\u043D\u0430\u043B\u0435.`,
+      intro: "\u042D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E \u0440\u044B\u043D\u043E\u043A \u0438 \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0439 \u0441\u043E\u0432\u0435\u0442 \u2014 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u0440\u043E \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435, \u0432 \u043A\u043E\u0442\u043E\u0440\u043E\u043C \u0442\u044B \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0448\u044C \u0440\u0435\u0448\u0435\u043D\u0438\u044F. \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u0447\u0435\u0441\u0442\u043D\u043E, \u0437\u0434\u0435\u0441\u044C \u043D\u0435\u043A\u043E\u043C\u0443 \u043F\u043E\u043D\u0440\u0430\u0432\u0438\u0442\u044C\u0441\u044F.",
+      questionsAnswered: (total, dataDriven) => `${total} ${pluralRu(total, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432")}${dataDriven > 0 ? `, \u0438\u0437 \u043D\u0438\u0445 ${dataDriven} \u2014 \u043F\u043E \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430\u043C \u0438\u0437 \u0436\u0443\u0440\u043D\u0430\u043B\u0430` : ""}`,
+      startHere: "\u041D\u0430\u0447\u043D\u0438 \u0441 \u044D\u0442\u043E\u0433\u043E",
+      alsoWorthNoting: "\u0415\u0449\u0451 \u0441\u0442\u043E\u0438\u0442 \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
+      looksFine: "\u0422\u0443\u0442 \u0432\u0440\u043E\u0434\u0435 \u043F\u043E\u0440\u044F\u0434\u043E\u043A",
+      disclaimer: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u0447\u0435\u0441\u043A\u0438\u0435, \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0435 \u2014 \u043E\u043D\u0438 \u043D\u0435 \u043F\u0440\u043E \u0442\u043E, \u0447\u0442\u043E \u0442\u043E\u0440\u0433\u043E\u0432\u0430\u0442\u044C, \u0430 \u043F\u0440\u043E \u0442\u043E, \u043A\u0430\u043A \u0442\u044B \u044D\u0442\u043E \u0434\u0435\u043B\u0430\u0435\u0448\u044C.",
+      done: "\u0413\u043E\u0442\u043E\u0432\u043E"
+    },
+    sim: {
+      heading: "\u0421\u0418\u041C\u0423\u041B\u042F\u0422\u041E\u0420 \u0420\u042B\u041D\u041A\u0410",
+      subtitle: "\u0418\u0441\u043A\u0443\u0441\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0439 \u0440\u044B\u043D\u043E\u043A. \u0420\u0435\u0430\u043B\u044C\u043D\u044B\u0435 \u0440\u0435\u0448\u0435\u043D\u0438\u044F.",
+      terminal: "\u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B",
+      beta: "Beta",
+      introText: "\u0420\u0430\u0434\u0430\u0440 \u043A\u0440\u0443\u043F\u043D\u044B\u0445 \u0437\u0430\u044F\u0432\u043E\u043A, \u0441\u043B\u0443\u0447\u0430\u0439\u043D\u044B\u0435 \u043D\u043E\u0432\u043E\u0441\u0442\u0438 \u0438 \u043F\u043B\u0435\u0447\u043E \u0434\u043E x50. \u0420\u044B\u043D\u043E\u043A \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0443\u0436\u0435 \xAB\u0432 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435\xBB \u2014 \u0441 \u0438\u0441\u0442\u043E\u0440\u0438\u0435\u0439 \u043D\u0430 \u0433\u0440\u0430\u0444\u0438\u043A\u0435 \u2014 \u0438 \u0432\u0435\u0434\u0451\u0442 \u0441\u0435\u0431\u044F \u043D\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043C\u043E \u043E\u0442 \u0432\u0430\u0448\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A.",
+      startSession: "\u041D\u0430\u0447\u0430\u0442\u044C \u0441\u0435\u0441\u0441\u0438\u044E",
+      capital: "\u041A\u0430\u043F\u0438\u0442\u0430\u043B",
+      price: "\u0426\u0435\u043D\u0430",
+      reacting: "\u0440\u0435\u0430\u043A\u0446\u0438\u044F\u2026",
+      positionLiquidated: "\u041F\u043E\u0437\u0438\u0446\u0438\u044F \u043B\u0438\u043A\u0432\u0438\u0434\u0438\u0440\u043E\u0432\u0430\u043D\u0430",
+      takeProfitHit: "Take-profit \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B",
+      stopLossHit: "Stop-loss \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B",
+      long: "\u041B\u043E\u043D\u0433",
+      short: "\u0428\u043E\u0440\u0442",
+      entry: "\u0432\u0445\u043E\u0434",
+      margin: "\u041C\u0430\u0440\u0436\u0430",
+      liq: "\u043B\u0438\u043A\u0432.",
+      add: "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C",
+      closePosition: "\u0417\u0430\u043A\u0440\u044B\u0442\u044C \u043F\u043E\u0437\u0438\u0446\u0438\u044E",
+      volume: "\u043E\u0431\u044A\u0451\u043C",
+      sessionOver: "\u0421\u0415\u0421\u0421\u0418\u042F \u0417\u0410\u0412\u0415\u0420\u0428\u0415\u041D\u0410",
+      finalCapital: "\u041A\u0430\u043F\u0438\u0442\u0430\u043B",
+      beatMarket: "\u041F\u043E\u0431\u0435\u0434\u0430 \u043D\u0430\u0434 \u0440\u044B\u043D\u043A\u043E\u043C.",
+      lostToMarket: "\u0420\u044B\u043D\u043E\u043A \u043E\u043A\u0430\u0437\u0430\u043B\u0441\u044F \u0441\u0438\u043B\u044C\u043D\u0435\u0435.",
+      marketReturn: "\u0414\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u044C \u0440\u044B\u043D\u043A\u0430",
+      tradesCount: "\u0421\u0434\u0435\u043B\u043E\u043A",
+      maxDrawdown: "\u041C\u0430\u043A\u0441. \u043F\u0440\u043E\u0441\u0430\u0434\u043A\u0430",
+      liquidations: "\u041B\u0438\u043A\u0432\u0438\u0434\u0430\u0446\u0438\u0438",
+      wasLiquidated: "\u0431\u044B\u043B\u0438",
+      achievements: "\u0414\u043E\u0441\u0442\u0438\u0436\u0435\u043D\u0438\u044F",
+      playAgain: "\u0418\u0433\u0440\u0430\u0442\u044C \u0441\u043D\u043E\u0432\u0430",
+      bigOrders: "\u041A\u0440\u0443\u043F\u043D\u044B\u0435 \u0437\u0430\u044F\u0432\u043A\u0438",
+      bid: "\u0431\u0438\u0434",
+      ask: "\u0430\u0441\u043A",
+      noGuarantee: "\u041D\u0435 \u0433\u0430\u0440\u0430\u043D\u0442\u0438\u044F \u2014 \u043C\u043E\u0433\u0443\u0442 \u0441\u043D\u044F\u0442\u044C, \u0438\u0441\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0438\u043B\u0438 \u0441\u0434\u0432\u0438\u043D\u0443\u0442\u044C \u0432 \u043B\u044E\u0431\u043E\u0439 \u043C\u043E\u043C\u0435\u043D\u0442"
     }
   },
   en: {
@@ -178,7 +311,9 @@ var STRINGS = {
       newEntryTile: "New entry",
       logTile: "Notes",
       patternsTile: "Analytics",
-      market: "Market"
+      market: "Market",
+      streakDays: (n) => `${n} days in a row`,
+      startStreak: "Start a streak"
     },
     newEntry: {
       title: "New entry",
@@ -215,7 +350,137 @@ var STRINGS = {
       language: "App language",
       languageNote: "Changes the interface language. Your journal entries stay exactly as you wrote them.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
-      english: "English"
+      english: "English",
+      account: "Account",
+      logout: "Log out",
+      localAccountNote: "Local test account on this device. Data isn't deleted on logout and will be restored the next time you log in.",
+      operatorName: "Operator name",
+      operatorPlaceholder: "Operator",
+      accentColor: "Accent color",
+      resultUnits: "Result units",
+      rMultiplier: "R-multiple",
+      currencyLabel: "Currency",
+      startingCapital: "Starting capital",
+      weeklyGoalLabel: "Weekly consistency goal",
+      weeklyGoalNote: "How many days a week to journal for the consistency challenge.",
+      daysSuffix: "days",
+      sound: "Sound",
+      soundToggleLabel: "Play a sound when saving an entry",
+      data: "Data",
+      dataNote: "Everything saves automatically on this device (or your account, if signed in). A full backup is for switching devices or just for safety.",
+      fullBackup: "Full backup (.json)",
+      restoreBackup: "Restore from backup (.json)",
+      exportJournalOnly: "Export journal only (.json)",
+      importJournalOnly: "Import journal only (.json)",
+      confirmClearJournal: "Delete all entries permanently?",
+      yes: "Yes",
+      cancel: "Cancel",
+      clearJournal: "Clear journal",
+      fullResetTitle: "Full reset",
+      fullResetNote: "Erases the journal, all settings, custom instruments, calibration result, and MindCoin wallet \u2014 resets the app to its first launch.",
+      confirmFullReset: "Reset absolutely everything?",
+      yesReset: "Yes, reset",
+      fullResetButton: "Reset the whole app",
+      footerNote: "Trade screenshots are kept only for this session and aren't saved between visits. Notifications and broker sync aren't implemented yet."
+    },
+    challenge: {
+      title: "Challenge",
+      daysInARow: "days in a row",
+      weeklyConsistency: "Weekly consistency",
+      weeklyConsistencyDesc: (goal) => `Journal ${goal} out of 7 days this week.`,
+      thisWeek: "This week",
+      footer: "Consistency matters more than any single trade. A streak isn't about winning \u2014 it's about coming back to yourself even after a loss."
+    },
+    calibration: {
+      heading: "CALIBRATION",
+      subtitle: "Check your readiness for a trading session.",
+      intro: "It takes less than 30 seconds. Answer honestly. The system analyzes your state, not the market.",
+      start: "Start",
+      questionOf: (i, total) => `Question ${i} of ${total}`,
+      cancel: "Cancel",
+      mainRiskFactor: "Main risk factor",
+      whatInfluenced: "What influenced the result",
+      restart: "Take it again"
+    },
+    pattern: {
+      yourPattern: "Your pattern",
+      strongSignal: "Strong signal",
+      observedPattern: "Observed pattern",
+      someSigns: "Some signs",
+      trades: (n) => `${n} ${n === 1 ? "trade" : "trades"}`,
+      winShort: "win",
+      avgShort: "avg",
+      breakdown: "Break it down \u2192",
+      strength: "Strength",
+      noClearPattern: "No clear stable pattern yet \u2014 that's a decent sign too. Keep journaling, the app keeps watching for this continuously.",
+      buildingUp: (have, need) => `Still building up \u2014 ${have} / ${need}`,
+      buildingUpDesc: "The app looks for repeating links between your state and your results \u2014 entries need a filled-in emotional point to count.",
+      detailTitle: "Your pattern",
+      tradesLabel: "Trades",
+      winRateLabel: "Win rate",
+      avgRLabel: "Average R",
+      comparison: "Comparison",
+      similarSituations: "Similar situations",
+      otherTrades: "Other trades",
+      whereOnMap: "Where this sits on the emotion map",
+      fearToConfidence: "Fear \u2192 Confidence",
+      nervousToCalm: "On edge \u2192 Calm",
+      tradeExamples: "Trade examples",
+      whyShown: "Why mind.exe is showing this",
+      whyShownText: (n, avgGroup, avgRest) => `${n} ${n === 1 ? "trade falls" : "trades fall"} into this category. This group's average result was ${avgGroup}, versus ${avgRest} for the rest of your trades.`,
+      needMoreEntries: "Add a few more trades from both sides \u2014 winning and losing \u2014 and a pattern will start to show up here.",
+      noPatternYetLong: "No clear stable pattern yet \u2014 winning and losing trades come from similar emotional states. That's worth noticing in itself.",
+      accumulating: (n) => `Still building material for stable conclusions (need ${n} more entries with an emotional point) \u2014 but it's already clear the journal is being kept regularly, and that's what matters.`
+    },
+    review: {
+      heading: "REVIEW",
+      notEnough: "There aren't quite enough entries yet to spot patterns in them. Add a few more trades \u2014 winning and losing \u2014 and the review will become available.",
+      back: "Back",
+      questionsCount: (n) => `${n} ${n === 1 ? "question" : "questions"} based on what's already visible in your journal.`,
+      intro: "This isn't about the market or financial advice \u2014 only about the state you're making decisions in. Answer honestly, there's no one to impress here.",
+      questionsAnswered: (total, dataDriven) => `${total} ${total === 1 ? "question" : "questions"}${dataDriven > 0 ? `, ${dataDriven} of them based on real patterns from your journal` : ""}`,
+      startHere: "Start with this",
+      alsoWorthNoting: "Also worth noting",
+      looksFine: "This looks fine",
+      disclaimer: "The recommendations are psychological, not financial \u2014 they're not about what to trade, but about how you do it.",
+      done: "Done"
+    },
+    sim: {
+      heading: "MARKET SIMULATOR",
+      subtitle: "An artificial market. Real decisions.",
+      terminal: "Terminal",
+      beta: "Beta",
+      introText: 'A radar of large orders, random news, and leverage up to x50. The market opens already "in progress" \u2014 with history on the chart \u2014 and moves independently of your trades.',
+      startSession: "Start session",
+      capital: "Capital",
+      price: "Price",
+      reacting: "reacting\u2026",
+      positionLiquidated: "Position liquidated",
+      takeProfitHit: "Take-profit hit",
+      stopLossHit: "Stop-loss hit",
+      long: "Long",
+      short: "Short",
+      entry: "entry",
+      margin: "Margin",
+      liq: "liq.",
+      add: "Add",
+      closePosition: "Close position",
+      volume: "size",
+      sessionOver: "SESSION OVER",
+      finalCapital: "Capital",
+      beatMarket: "You beat the market.",
+      lostToMarket: "The market was stronger.",
+      marketReturn: "Market return",
+      tradesCount: "Trades",
+      maxDrawdown: "Max drawdown",
+      liquidations: "Liquidations",
+      wasLiquidated: "yes",
+      achievements: "Achievements",
+      playAgain: "Play again",
+      bigOrders: "Large orders",
+      bid: "bid",
+      ask: "ask",
+      noGuarantee: "Not a guarantee \u2014 orders can be pulled, filled, or moved at any moment"
     }
   }
 };
@@ -232,6 +497,14 @@ var FEAR_GREED = { score: 44, label: "\u041D\u0435\u0439\u0442\u0440\u0430\u043B
 var ring = (accent) => `0 0 0 1px ${accent}35`;
 var softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
 var outcomeColor = (o) => o === "Win" ? WIN : o === "Loss" ? LOSS : FLAT;
+function deriveEntryStatus(e) {
+  if (e.status === "open" || e.status === "closed") return e.status;
+  return e.outcome != null ? "closed" : "open";
+}
+function migrateEntry(e) {
+  return { ...e, status: deriveEntryStatus(e), exitDate: e.exitDate ? e.exitDate : null };
+}
+var isEntryClosed = (e) => e.status === "closed";
 var findCurrency = (code) => CURRENCIES.find((c) => c.code === code) || CURRENCIES[0];
 var groupThousands = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 var isToday = (isoDate) => !!isoDate && new Date(isoDate).toDateString() === (/* @__PURE__ */ new Date()).toDateString();
@@ -288,12 +561,13 @@ function useAnimatedNumber(target, duration = 600) {
 function calculateTraderLevel(entriesCount) {
   return Math.min(9, 3 + Math.floor(entriesCount / 3));
 }
-function calculateCalendarStats(dayEntries) {
+function calculateCalendarStats(dayEntries, closedDayEntries) {
   if (!dayEntries.length) return null;
-  const wins = dayEntries.filter((e) => e.outcome === "Win").length;
-  const losses = dayEntries.filter((e) => e.outcome === "Loss").length;
-  const breakevens = dayEntries.filter((e) => e.outcome === "Breakeven").length;
-  const avgR = dayEntries.reduce((s, e) => s + (e.r || 0), 0) / dayEntries.length;
+  const closed = closedDayEntries || dayEntries.filter(isEntryClosed);
+  const wins = closed.filter((e) => e.outcome === "Win").length;
+  const losses = closed.filter((e) => e.outcome === "Loss").length;
+  const breakevens = closed.filter((e) => e.outcome === "Breakeven").length;
+  const avgR = closed.length ? closed.reduce((s, e) => s + (e.r || 0), 0) / closed.length : 0;
   const countBy = (key) => {
     const counts = {};
     dayEntries.forEach((e) => {
@@ -521,6 +795,80 @@ var CALIBRATION_QUESTIONS = [
     ]
   }
 ];
+var CALIBRATION_QUESTIONS_EN = [
+  {
+    id: "sleep",
+    text: "How did you sleep today?",
+    positive: "Good sleep",
+    negative: "Lack of sleep",
+    options: [
+      { label: "Great", score: 2 },
+      { label: "Fine", score: 1 },
+      { label: "Poorly", score: -1 },
+      { label: "Barely slept", score: -2 }
+    ]
+  },
+  {
+    id: "emotion",
+    text: "How's your emotional state?",
+    positive: "Calm state",
+    negative: "Elevated emotions",
+    options: [
+      { label: "Calm", score: 2 },
+      { label: "A bit tense", score: 0 },
+      { label: "Irritated", score: -1 },
+      { label: "Very emotional", score: -2, flag: "emotion" }
+    ]
+  },
+  {
+    id: "motivation",
+    text: "Why are you opening the terminal today?",
+    positive: "Clear plan for the session",
+    negative: "Wanting to win back losses",
+    options: [
+      { label: "To follow the plan", score: 2 },
+      { label: "There are good opportunities", score: 1 },
+      { label: "I want to win back losses", score: -2, flag: "revenge" },
+      { label: "Just feel like trading", score: -1 }
+    ]
+  },
+  {
+    id: "walkaway",
+    text: "If there are no good entries, can you close the terminal without trading?",
+    positive: "Willing to skip the session",
+    negative: "Hard to stop without a trade",
+    options: [
+      { label: "Yes", score: 2 },
+      { label: "Probably yes", score: 1 },
+      { label: "Probably not", score: -1 },
+      { label: "No", score: -2 }
+    ]
+  },
+  {
+    id: "noTradeFeeling",
+    text: "How would you feel if there were no trades at all today?",
+    positive: "Calm about having no trades",
+    negative: "Fear of missing out",
+    options: [
+      { label: "Nothing", score: 2 },
+      { label: "Mild disappointment", score: 1 },
+      { label: "Would feel unpleasant", score: -1 },
+      { label: "Would feel like I missed an opportunity", score: -2, flag: "fomo" }
+    ]
+  },
+  {
+    id: "objectivity",
+    text: "How objectively are you assessing the market right now?",
+    positive: "Sober market assessment",
+    negative: "Emotions are affecting your read on the market",
+    options: [
+      { label: "Completely calm", score: 2 },
+      { label: "Mostly calm", score: 1 },
+      { label: "Some doubts", score: -1 },
+      { label: "Strong emotions or overconfidence", score: -2, flag: "emotion" }
+    ]
+  }
+];
 var CALIBRATION_TIERS = [
   { label: "\u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u0430 \u2014 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043E\u0442\u043B\u0438\u0447\u043D\u043E\u0435.", color: WIN },
   { label: "\u0413\u043E\u0442\u043E\u0432 \u043A \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0435 \u2014 \u043C\u043E\u0436\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \u043F\u043E \u043F\u043B\u0430\u043D\u0443.", color: WIN },
@@ -528,28 +876,43 @@ var CALIBRATION_TIERS = [
   { label: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u0442\u0441\u044F \u043E\u0441\u0442\u043E\u0440\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u2014 \u0441\u043D\u0438\u0437\u0438\u0442\u044C \u0440\u0438\u0441\u043A \u043D\u0430 30\u201350%.", color: LOSS },
   { label: "\u0422\u043E\u0440\u0433\u043E\u0432\u043B\u044F \u043D\u0435 \u0440\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0443\u0435\u0442\u0441\u044F \u2014 \u0432\u044B\u0441\u043E\u043A\u0430\u044F \u0432\u0435\u0440\u043E\u044F\u0442\u043D\u043E\u0441\u0442\u044C \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u044B\u0445 \u0440\u0435\u0448\u0435\u043D\u0438\u0439.", color: LOSS }
 ];
-function scoreCalibration(answers) {
-  const total = CALIBRATION_QUESTIONS.reduce((s, q) => s + (answers[q.id]?.score ?? 0), 0);
+var CALIBRATION_TIERS_EN = [
+  { label: "System stable \u2014 great state.", color: WIN },
+  { label: "Ready to trade \u2014 you can work the plan.", color: WIN },
+  { label: "Elevated risk level \u2014 stick to discipline.", color: WARN },
+  { label: "Caution recommended \u2014 cut risk by 30\u201350%.", color: LOSS },
+  { label: "Trading not recommended \u2014 high chance of emotional decisions.", color: LOSS }
+];
+function scoreCalibration(answers, lang = "ru") {
+  const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
+  const tiers = lang === "en" ? CALIBRATION_TIERS_EN : CALIBRATION_TIERS;
+  const total = questions.reduce((s, q) => s + (answers[q.id]?.score ?? 0), 0);
   const pct = Math.max(0, Math.min(100, Math.round((total + 12) / 24 * 100)));
   let tierIndex = pct >= 85 ? 0 : pct >= 70 ? 1 : pct >= 50 ? 2 : pct >= 30 ? 3 : 4;
   const riskFactors = [];
-  if (answers.motivation?.flag === "revenge") riskFactors.push("\u0416\u0435\u043B\u0430\u043D\u0438\u0435 \u043E\u0442\u0431\u0438\u0442\u044C \u0443\u0431\u044B\u0442\u043A\u0438");
-  if (answers.emotion?.flag === "emotion" || answers.objectivity?.flag === "emotion") riskFactors.push("\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u044C");
+  if (answers.motivation?.flag === "revenge") riskFactors.push(lang === "en" ? "Wanting to win back losses" : "\u0416\u0435\u043B\u0430\u043D\u0438\u0435 \u043E\u0442\u0431\u0438\u0442\u044C \u0443\u0431\u044B\u0442\u043A\u0438");
+  if (answers.emotion?.flag === "emotion" || answers.objectivity?.flag === "emotion") riskFactors.push(lang === "en" ? "Strong emotional involvement" : "\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u044C");
   if (riskFactors.length) tierIndex = Math.max(tierIndex, 2);
-  const factors = CALIBRATION_QUESTIONS.map((q) => {
+  const factors = questions.map((q) => {
     const a = answers[q.id];
     if (!a) return null;
     if (a.score === 2) return { type: "positive", text: q.positive };
     if (a.score === -2) return { type: "warning", text: q.negative };
     return null;
   }).filter(Boolean);
-  return { pct, tier: CALIBRATION_TIERS[tierIndex], riskFactors, factors };
+  return { pct, tier: tiers[tierIndex], riskFactors, factors };
 }
 var REVIEW_LIKERT = [
   { label: "\u041F\u043E\u0447\u0442\u0438 \u043D\u0438\u043A\u043E\u0433\u0434\u0430", score: 0 },
   { label: "\u0418\u043D\u043E\u0433\u0434\u0430", score: 1 },
   { label: "\u0427\u0430\u0441\u0442\u043E", score: 2 },
   { label: "\u041F\u043E\u0447\u0442\u0438 \u0432\u0441\u0435\u0433\u0434\u0430", score: 3 }
+];
+var REVIEW_LIKERT_EN = [
+  { label: "Almost never", score: 0 },
+  { label: "Sometimes", score: 1 },
+  { label: "Often", score: 2 },
+  { label: "Almost always", score: 3 }
 ];
 var REVIEW_MIN_QUESTIONS = 5;
 var REVIEW_MAX_QUESTIONS = 8;
@@ -595,8 +958,51 @@ var GENERIC_REVIEW_QUESTIONS = [
     recommendation: "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u2014 \u043F\u043B\u043E\u0445\u043E\u0439 \u043A\u0430\u043B\u044C\u043A\u0443\u043B\u044F\u0442\u043E\u0440 \u043E\u0431\u044A\u0451\u043C\u0430. \u041E\u043D\u0430 \u043E\u0431\u043C\u0430\u043D\u044B\u0432\u0430\u0435\u0442 \u0447\u0430\u0449\u0435 \u0432\u0441\u0435\u0433\u043E \u0438\u043C\u0435\u043D\u043D\u043E \u043F\u043E\u0441\u043B\u0435 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u0438\u0445 \u043F\u043E\u0431\u0435\u0434 \u043F\u043E\u0434\u0440\u044F\u0434."
   }
 ];
-function analyzeJournalForQuiz(entries) {
+var GENERIC_REVIEW_QUESTIONS_EN = [
+  {
+    id: "g_plan",
+    dataDriven: false,
+    title: "Trading without a plan",
+    evidence: "General question \u2014 the journal can't check this directly against numbers yet.",
+    question: "How often do you open a trade without a plan written down in advance \u2014 entry, stop, and target?",
+    recommendation: "Before entering, write down three numbers: entry, stop, target. If you can't \u2014 the trade isn't ready yet, that's not about the market."
+  },
+  {
+    id: "g_overconf",
+    dataDriven: false,
+    title: "Risk after a winning streak",
+    evidence: "General question \u2014 the journal can't check this directly against numbers yet.",
+    question: "After a couple of winning trades in a row, do you feel like increasing position size?",
+    recommendation: "A winning streak doesn't cancel your risk plan. If anything should increase, it's caution \u2014 not size."
+  },
+  {
+    id: "g_honesty",
+    dataDriven: false,
+    title: "Journal honesty",
+    evidence: "General question \u2014 the journal can't check this directly against numbers yet.",
+    question: "Do you ever skip logging a bad trade so you don't have to admit it?",
+    recommendation: "A journal only works if it includes the things you're embarrassed to write. A skipped entry is still a lesson \u2014 just a postponed one."
+  },
+  {
+    id: "g_carryover",
+    dataDriven: false,
+    title: "Carrying emotions between trades",
+    evidence: "General question \u2014 the journal can't check this directly against numbers yet.",
+    question: "Do you carry irritation or euphoria from one trade into decisions on the next?",
+    recommendation: "A reset ritual between trades helps \u2014 even 60 seconds of pause and one breath, so the state doesn't carry forward."
+  },
+  {
+    id: "g_size",
+    dataDriven: false,
+    title: "Sizing by mood",
+    evidence: "General question \u2014 the journal can't check this directly against numbers yet.",
+    question: "Do you change position size based on how confident you feel in the moment, rather than a pre-set risk?",
+    recommendation: "Confidence is a bad size calculator. It fools you most often right after a few wins in a row."
+  }
+];
+function analyzeJournalForQuiz(entries, lang = "ru") {
   if (entries.length < 3) return [];
+  const questions = lang === "en" ? GENERIC_REVIEW_QUESTIONS_EN : GENERIC_REVIEW_QUESTIONS;
   const wins = entries.filter((e) => e.outcome === "Win");
   const losses = entries.filter((e) => e.outcome === "Loss");
   const avg = (arr, k) => arr.reduce((s, e) => s + (e[k] || 0), 0) / arr.length;
@@ -606,7 +1012,14 @@ function analyzeJournalForQuiz(entries) {
   if (wEmo.length >= 2 && lEmo.length >= 2) {
     const wX = avg(wEmo, "x"), lX = avg(lEmo, "x");
     if (lX < wX - 8) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "fear",
+        dataDriven: true,
+        title: "Entering out of fear",
+        evidence: 'Losing trades in the journal started, on average, from a more anxious state ("Fear") than winning ones.',
+        question: "Do you notice yourself opening a trade out of fear of missing something, rather than because it matched your plan?",
+        recommendation: `Before you hit "enter," say your reason for the trade out loud in one sentence. If the only reason is "what if it moves without me" \u2014 that's fear, not a plan.`
+      } : {
         id: "fear",
         dataDriven: true,
         title: "\u0412\u0445\u043E\u0434 \u0438\u0437 \u0441\u0442\u0440\u0430\u0445\u0430",
@@ -620,7 +1033,14 @@ function analyzeJournalForQuiz(entries) {
   if (wYEmo.length >= 2 && lYEmo.length >= 2) {
     const wY = avg(wYEmo, "y"), lY = avg(lYEmo, "y");
     if (lY < wY - 8) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "nerves",
+        dataDriven: true,
+        title: 'Being "on edge"',
+        evidence: 'Losing trades noticeably more often happened while "on edge" than winning ones.',
+        question: "Before your losing trades, did you feel a sense of rushing or being wound up?",
+        recommendation: "Rushing almost never comes from the market \u2014 it comes from you. If you feel wound up, that's a signal to pause, not a signal to enter faster."
+      } : {
         id: "nerves",
         dataDriven: true,
         title: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \xAB\u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445\xBB",
@@ -638,7 +1058,14 @@ function analyzeJournalForQuiz(entries) {
     }
   }
   if (revengeCount >= 1) {
-    issues.push({
+    issues.push(lang === "en" ? {
+      id: "revenge",
+      dataDriven: true,
+      title: "Revenge trading",
+      evidence: `The journal has ${revengeCount} ${revengeCount === 1 ? "case" : "cases"} of a new trade opening within half an hour of a loss.`,
+      question: "After a losing trade, do you want to win it back with a new one as fast as possible?",
+      recommendation: "Set a mandatory pause after a loss \u2014 at least 20-30 minutes away from the terminal. This isn't about the market, it's about getting control back over yourself, not the price."
+    } : {
       id: "revenge",
       dataDriven: true,
       title: "\u0420\u0435\u0432\u0430\u043D\u0448-\u0442\u0440\u0435\u0439\u0434\u0438\u043D\u0433",
@@ -653,7 +1080,14 @@ function analyzeJournalForQuiz(entries) {
   });
   const repeated = Object.entries(lessonCounts).find(([, c]) => c >= 2);
   if (repeated) {
-    issues.push({
+    issues.push(lang === "en" ? {
+      id: "repeat",
+      dataDriven: true,
+      title: "A repeating lesson",
+      evidence: `The lesson "${repeated[0]}" appears in the journal ${repeated[1]} times \u2014 it seems the takeaway hasn't become a habit yet.`,
+      question: "Do you ever write down a lesson but still repeat the same mistake next time?",
+      recommendation: `Rewrite the lesson as a specific action, not an observation \u2014 not "don't rush," but "wait for the candle to close before entering." Abstract conclusions get forgotten, instructions don't.`
+    } : {
       id: "repeat",
       dataDriven: true,
       title: "\u041F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0439\u0441\u044F \u0443\u0440\u043E\u043A",
@@ -668,7 +1102,14 @@ function analyzeJournalForQuiz(entries) {
     const avgAbs = rs.reduce((s, r) => s + Math.abs(r), 0) / rs.length;
     const maxLoss = Math.min(...rs);
     if (maxLoss < -avgAbs * 2.5 && maxLoss <= -1) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "outlier",
+        dataDriven: true,
+        title: "Unstable risk size",
+        evidence: `There's a trade with a result of ${maxLoss.toFixed(1)}, noticeably bigger than your usual risk per trade.`,
+        question: "Do you set your risk size before entering a trade, rather than adjusting it as you go?",
+        recommendation: "A spread in loss size usually says more about unstable in-the-moment decisions than about the market. Fix your risk in R or % before you enter \u2014 that should be decided before the terminal is even open."
+      } : {
         id: "outlier",
         dataDriven: true,
         title: "\u041D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439 \u0440\u0430\u0437\u043C\u0435\u0440 \u0440\u0438\u0441\u043A\u0430",
@@ -687,7 +1128,14 @@ function analyzeJournalForQuiz(entries) {
   const maxDay = Math.max(...dayCountValues);
   const avgDay = dayCountValues.reduce((s, c) => s + c, 0) / dayCountValues.length;
   if (maxDay >= 4 && maxDay > avgDay * 1.8) {
-    issues.push({
+    issues.push(lang === "en" ? {
+      id: "overtrade",
+      dataDriven: true,
+      title: "Overtrading",
+      evidence: `On one day, the journal shows ${maxDay} trades \u2014 noticeably more than the average (${avgDay.toFixed(1)} per day).`,
+      question: "Do you notice that on some days you open way more trades than you planned that morning?",
+      recommendation: "Set a daily trade limit in advance and physically stop once you hit it \u2014 regardless of whether you're up or down."
+    } : {
       id: "overtrade",
       dataDriven: true,
       title: "\u041F\u0435\u0440\u0435\u0442\u0440\u0435\u0439\u0434\u0438\u043D\u0433",
@@ -704,7 +1152,14 @@ function analyzeJournalForQuiz(entries) {
     } else streak = 0;
   });
   if (maxStreak >= 3) {
-    issues.push({
+    issues.push(lang === "en" ? {
+      id: "streak",
+      dataDriven: true,
+      title: "A streak of consecutive losses",
+      evidence: `The journal has a streak of ${maxStreak} consecutive losing trades with no winning trade in between.`,
+      question: "Do you keep trading the same way even after several losses in a row?",
+      recommendation: "After the second loss in a row \u2014 that's already a signal to stop and figure out why, not a signal to add size on the next one."
+    } : {
       id: "streak",
       dataDriven: true,
       title: "\u0421\u0435\u0440\u0438\u044F \u0443\u0431\u044B\u0442\u043A\u043E\u0432 \u043F\u043E\u0434\u0440\u044F\u0434",
@@ -724,7 +1179,14 @@ function analyzeJournalForQuiz(entries) {
     const avgAfterWin = lossesAfterWin.reduce((s, r) => s + r, 0) / lossesAfterWin.length;
     const avgAfterLoss = lossesAfterLoss.reduce((s, r) => s + r, 0) / lossesAfterLoss.length;
     if (avgAfterWin < avgAfterLoss - 0.3) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "overconfidence",
+        dataDriven: true,
+        title: "Risk grows after wins",
+        evidence: "Losses that happened right after a winning trade are, on average, bigger than losses after another loss.",
+        question: "After a winning trade, do you feel more comfortable risking more on the next one?",
+        recommendation: "A win doesn't make the next setup any more valid. Keep your risk size constant regardless of what happened on the last trade."
+      } : {
         id: "overconfidence",
         dataDriven: true,
         title: "\u0420\u0438\u0441\u043A \u0440\u0430\u0441\u0442\u0451\u0442 \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0431\u0435\u0434",
@@ -737,7 +1199,14 @@ function analyzeJournalForQuiz(entries) {
   if (losses.length >= 3) {
     const lossesNoShot = losses.filter((e) => !e.screenshots || e.screenshots.length === 0).length;
     if (lossesNoShot / losses.length > 0.75) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "noshot",
+        dataDriven: true,
+        title: "Avoiding loss review",
+        evidence: `${lossesNoShot} of ${losses.length} losing trades in the journal have no chart screenshot.`,
+        question: "Do you feel uncomfortable revisiting the chart after a losing trade?",
+        recommendation: "A screenshot of a losing trade is the most useful material in the journal, not the most pleasant. Make a habit of saving exactly what you don't want to revisit."
+      } : {
         id: "noshot",
         dataDriven: true,
         title: "\u0418\u0437\u0431\u0435\u0433\u0430\u043D\u0438\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0443\u0431\u044B\u0442\u043A\u043E\u0432",
@@ -750,7 +1219,14 @@ function analyzeJournalForQuiz(entries) {
   if (losses.length >= 3) {
     const shallow = losses.filter((e) => !e.lesson || e.lesson === "\u2014" || e.lesson.trim().length < 15).length;
     if (shallow / losses.length > 0.6) {
-      issues.push({
+      issues.push(lang === "en" ? {
+        id: "shallow",
+        dataDriven: true,
+        title: "Shallow reflection",
+        evidence: "Most losing trades in the journal are described without a real takeaway.",
+        question: "After a loss, do you want to close the subject quickly rather than dig into the reason?",
+        recommendation: `One line of "bad luck" doesn't count as a lesson. Try finishing the sentence "Next time I'll do it differently if..." \u2014 and write it honestly.`
+      } : {
         id: "shallow",
         dataDriven: true,
         title: "\u041F\u043E\u0432\u0435\u0440\u0445\u043D\u043E\u0441\u0442\u043D\u0430\u044F \u0440\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F",
@@ -763,7 +1239,7 @@ function analyzeJournalForQuiz(entries) {
   let selected = issues.slice(0, REVIEW_MAX_QUESTIONS);
   if (selected.length < REVIEW_MIN_QUESTIONS) {
     const usedIds = new Set(selected.map((i) => i.id));
-    for (const g of GENERIC_REVIEW_QUESTIONS) {
+    for (const g of questions) {
       if (selected.length >= REVIEW_MIN_QUESTIONS) break;
       if (!usedIds.has(g.id)) selected.push(g);
     }
@@ -783,46 +1259,73 @@ var PATTERN_QUIZ_MAP = {
   avoid_loss_review: { question: "\u0422\u0435\u0431\u0435 \u043D\u0435\u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E \u043F\u0435\u0440\u0435\u0441\u043C\u0430\u0442\u0440\u0438\u0432\u0430\u0442\u044C \u0433\u0440\u0430\u0444\u0438\u043A \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438?" },
   shallow_reflection: { question: "\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0445\u043E\u0447\u0435\u0442\u0441\u044F \u043F\u043E\u0431\u044B\u0441\u0442\u0440\u0435\u0435 \u0437\u0430\u043A\u0440\u044B\u0442\u044C \u0442\u0435\u043C\u0443, \u0430 \u043D\u0435 \u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0442\u044C\u0441\u044F \u0432 \u043F\u0440\u0438\u0447\u0438\u043D\u0435?" }
 };
-function buildReviewIssuesFromPatterns(patternsResult) {
+var PATTERN_QUIZ_MAP_EN = {
+  fear: { question: "Do you notice yourself opening a trade out of fear of missing something, rather than because it matched your plan?" },
+  too_calm: { question: "Does being calm sometimes mean you watch risk less closely than usual?" },
+  confidence_tension: { question: "Does confidence in a trade sometimes come with inner tension rather than calm?" },
+  revenge: { question: "After a losing trade, do you want to win it back with a new one as fast as possible?" },
+  lesson_not_learned: { question: "Do you ever write down a lesson but still repeat the same mistake next time?" },
+  unstable_risk: { question: "Does your risk size vary from trade to trade noticeably more than you actually plan?" },
+  overtrading: { question: "Do you notice that on some days you open way more trades than you planned that morning?" },
+  loss_streak: { question: "Do you keep trading the same way even after several losses in a row?" },
+  risk_after_win: { question: "After a winning trade, do you feel more comfortable risking more on the next one?" },
+  avoid_loss_review: { question: "Do you feel uncomfortable revisiting the chart after a losing trade?" },
+  shallow_reflection: { question: "After a loss, do you want to close the subject quickly rather than dig into the reason?" }
+};
+function buildReviewIssuesFromPatterns(patternsResult, lang = "ru") {
+  const map = lang === "en" ? PATTERN_QUIZ_MAP_EN : PATTERN_QUIZ_MAP;
   return (patternsResult.patterns || []).map((p) => {
-    const meta = PATTERN_QUIZ_MAP[p.id];
+    const meta = map[p.id];
     if (!meta) return null;
     return { id: p.id, dataDriven: true, title: p.title, evidence: p.description, question: meta.question, recommendation: p.recommendation };
   }).filter(Boolean);
 }
-function buildReviewQuiz(entries) {
+function buildReviewQuiz(entries, lang = "ru") {
   if (entries.length < 3) return [];
-  const patternsResult = patternEngineV2(entries);
-  if (!patternsResult.available) return analyzeJournalForQuiz(entries);
-  let selected = buildReviewIssuesFromPatterns(patternsResult).slice(0, REVIEW_MAX_QUESTIONS);
+  const patternsResult = patternEngineV2(entries, lang);
+  if (!patternsResult.available) return analyzeJournalForQuiz(entries, lang);
+  const questions = lang === "en" ? GENERIC_REVIEW_QUESTIONS_EN : GENERIC_REVIEW_QUESTIONS;
+  let selected = buildReviewIssuesFromPatterns(patternsResult, lang).slice(0, REVIEW_MAX_QUESTIONS);
   if (selected.length < REVIEW_MIN_QUESTIONS) {
     const usedIds = new Set(selected.map((i) => i.id));
-    for (const g of GENERIC_REVIEW_QUESTIONS) {
+    for (const g of questions) {
       if (selected.length >= REVIEW_MIN_QUESTIONS) break;
       if (!usedIds.has(g.id)) selected.push(g);
     }
   }
   return selected;
 }
-function scoreJournalReview(issues, answers) {
+function scoreJournalReview(issues, answers, lang = "ru") {
   const answered = issues.filter((q) => answers[q.id] != null);
   const total = answered.reduce((s, q) => s + answers[q.id].score, 0);
   const maxTotal = answered.length * 3;
   const pct = maxTotal > 0 ? Math.round(total / maxTotal * 100) : 0;
-  const tier = pct >= 66 ? { label: "\u042D\u043C\u043E\u0446\u0438\u0438 \u0441\u0435\u0439\u0447\u0430\u0441 \u0443\u043F\u0440\u0430\u0432\u043B\u044F\u044E\u0442 \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u0438 \u0431\u043E\u043B\u044C\u0448\u0435, \u0447\u0435\u043C \u043F\u043B\u0430\u043D.", color: LOSS } : pct >= 33 ? { label: "\u0415\u0441\u0442\u044C \u043D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435, \u043D\u043E \u043D\u0435 \u043A\u0440\u0438\u0442\u0438\u0447\u043D\u043E.", color: WARN } : { label: "\u0414\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430 \u0432\u044B\u0433\u043B\u044F\u0434\u0438\u0442 \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E.", color: WIN };
+  const tier = lang === "en" ? pct >= 66 ? { label: "Emotions are currently steering your trades more than your plan.", color: LOSS } : pct >= 33 ? { label: "There's something worth watching, but it's not critical.", color: WARN } : { label: "Discipline looks solid.", color: WIN } : pct >= 66 ? { label: "\u042D\u043C\u043E\u0446\u0438\u0438 \u0441\u0435\u0439\u0447\u0430\u0441 \u0443\u043F\u0440\u0430\u0432\u043B\u044F\u044E\u0442 \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u0438 \u0431\u043E\u043B\u044C\u0448\u0435, \u0447\u0435\u043C \u043F\u043B\u0430\u043D.", color: LOSS } : pct >= 33 ? { label: "\u0415\u0441\u0442\u044C \u043D\u0430 \u0447\u0442\u043E \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435, \u043D\u043E \u043D\u0435 \u043A\u0440\u0438\u0442\u0438\u0447\u043D\u043E.", color: WARN } : { label: "\u0414\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430 \u0432\u044B\u0433\u043B\u044F\u0434\u0438\u0442 \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E.", color: WIN };
   const confirmed = issues.filter((q) => (answers[q.id]?.score ?? 0) >= 2).sort((a, b) => (answers[b.id]?.score ?? 0) - (answers[a.id]?.score ?? 0));
   const clear = issues.filter((q) => (answers[q.id]?.score ?? 0) <= 1);
   const priority = confirmed[0] || null;
   const rest = confirmed.slice(1);
   const crossValidated = confirmed.filter((q) => q.dataDriven);
   let narrative;
-  if (confirmed.length === 0) {
-    narrative = "\u041F\u043E \u0442\u0432\u043E\u0438\u043C \u043E\u0442\u0432\u0435\u0442\u0430\u043C \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u044B\u0445 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u043D\u044B\u0445 \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u043E\u0432 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u044D\u0442\u043E \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442, \u043D\u043E \u043D\u0435 \u043F\u043E\u0432\u043E\u0434 \u0442\u0435\u0440\u044F\u0442\u044C \u0431\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C: \u043F\u0440\u043E\u0439\u0434\u0438 \u0440\u0430\u0437\u0431\u043E\u0440 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0447\u0435\u0440\u0435\u0437 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0441\u0434\u0435\u043B\u043E\u043A.";
+  if (lang === "en") {
+    if (confirmed.length === 0) {
+      narrative = "Based on your answers, no strong problem patterns stand out \u2014 that's a good result, but not a reason to drop your guard: take the review again after a few more trades.";
+    } else {
+      const titles = confirmed.map((q) => q.title.toLowerCase());
+      narrative = titles.length === 1 ? `Right now, the biggest influence on your decisions is: ${titles[0]}.` : `Right now, the biggest influence on your decisions is: ${titles.slice(0, -1).join(", ")}, and ${titles[titles.length - 1]}.`;
+      if (crossValidated.length > 0) {
+        narrative += crossValidated.length === confirmed.length ? " This shows up not just in your answers, but in the journal's own numbers too \u2014 it matches your actual trades, not just how it feels." : ` Some of this (${crossValidated.map((q) => q.title.toLowerCase()).join(", ")}) also shows up in the journal's own numbers, not just in your answers.`;
+      }
+    }
   } else {
-    const titles = confirmed.map((q) => q.title.toLowerCase());
-    narrative = titles.length === 1 ? `\u0421\u0438\u043B\u044C\u043D\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u043D\u0430 \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0441\u0435\u0439\u0447\u0430\u0441 \u0432\u043B\u0438\u044F\u0435\u0442: ${titles[0]}.` : `\u0421\u0438\u043B\u044C\u043D\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u043D\u0430 \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0441\u0435\u0439\u0447\u0430\u0441 \u0432\u043B\u0438\u044F\u0435\u0442: ${titles.slice(0, -1).join(", ")} \u0438 ${titles[titles.length - 1]}.`;
-    if (crossValidated.length > 0) {
-      narrative += crossValidated.length === confirmed.length ? " \u042D\u0442\u043E \u0432\u0438\u0434\u043D\u043E \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E \u043E\u0442\u0432\u0435\u0442\u0430\u043C, \u043D\u043E \u0438 \u0432 \u0441\u0430\u043C\u0438\u0445 \u0446\u0438\u0444\u0440\u0430\u0445 \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u2014 \u0441\u043E\u0432\u043F\u0430\u0434\u0435\u043D\u0438\u0435 \u0441 \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u043C\u0438 \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u0438, \u0430 \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0441 \u043E\u0449\u0443\u0449\u0435\u043D\u0438\u0435\u043C." : ` \u0427\u0430\u0441\u0442\u044C \u044D\u0442\u043E\u0433\u043E (${crossValidated.map((q) => q.title.toLowerCase()).join(", ")}) \u0432\u0438\u0434\u043D\u043E \u0438 \u0432 \u0441\u0430\u043C\u0438\u0445 \u0446\u0438\u0444\u0440\u0430\u0445 \u0436\u0443\u0440\u043D\u0430\u043B\u0430, \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u043E\u0442\u0432\u0435\u0442\u0430\u0445.`;
+    if (confirmed.length === 0) {
+      narrative = "\u041F\u043E \u0442\u0432\u043E\u0438\u043C \u043E\u0442\u0432\u0435\u0442\u0430\u043C \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u044B\u0445 \u043F\u0440\u043E\u0431\u043B\u0435\u043C\u043D\u044B\u0445 \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u043E\u0432 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u044D\u0442\u043E \u0445\u043E\u0440\u043E\u0448\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442, \u043D\u043E \u043D\u0435 \u043F\u043E\u0432\u043E\u0434 \u0442\u0435\u0440\u044F\u0442\u044C \u0431\u0434\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C: \u043F\u0440\u043E\u0439\u0434\u0438 \u0440\u0430\u0437\u0431\u043E\u0440 \u0435\u0449\u0451 \u0440\u0430\u0437 \u0447\u0435\u0440\u0435\u0437 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0441\u0434\u0435\u043B\u043E\u043A.";
+    } else {
+      const titles = confirmed.map((q) => q.title.toLowerCase());
+      narrative = titles.length === 1 ? `\u0421\u0438\u043B\u044C\u043D\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u043D\u0430 \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0441\u0435\u0439\u0447\u0430\u0441 \u0432\u043B\u0438\u044F\u0435\u0442: ${titles[0]}.` : `\u0421\u0438\u043B\u044C\u043D\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u043D\u0430 \u0440\u0435\u0448\u0435\u043D\u0438\u044F \u0441\u0435\u0439\u0447\u0430\u0441 \u0432\u043B\u0438\u044F\u0435\u0442: ${titles.slice(0, -1).join(", ")} \u0438 ${titles[titles.length - 1]}.`;
+      if (crossValidated.length > 0) {
+        narrative += crossValidated.length === confirmed.length ? " \u042D\u0442\u043E \u0432\u0438\u0434\u043D\u043E \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E \u043E\u0442\u0432\u0435\u0442\u0430\u043C, \u043D\u043E \u0438 \u0432 \u0441\u0430\u043C\u0438\u0445 \u0446\u0438\u0444\u0440\u0430\u0445 \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u2014 \u0441\u043E\u0432\u043F\u0430\u0434\u0435\u043D\u0438\u0435 \u0441 \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u043C\u0438 \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u0438, \u0430 \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0441 \u043E\u0449\u0443\u0449\u0435\u043D\u0438\u0435\u043C." : ` \u0427\u0430\u0441\u0442\u044C \u044D\u0442\u043E\u0433\u043E (${crossValidated.map((q) => q.title.toLowerCase()).join(", ")}) \u0432\u0438\u0434\u043D\u043E \u0438 \u0432 \u0441\u0430\u043C\u0438\u0445 \u0446\u0438\u0444\u0440\u0430\u0445 \u0436\u0443\u0440\u043D\u0430\u043B\u0430, \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u043E\u0442\u0432\u0435\u0442\u0430\u0445.`;
+      }
     }
   }
   return { pct, tier, narrative, priority, rest, confirmed, clear };
@@ -1097,12 +1600,13 @@ var AWARENESS_WEIGHTS = {
   patternRecognition: 0.15,
   processDiscipline: 0.15
 };
-function awarenessAnalysis(entries, reflection, risk, discipline) {
+function awarenessAnalysis(entries, closedEntries, reflection, risk, discipline) {
   const n = entries.length;
   if (!n) return { score: ta_metric(55, 0), components: null };
-  const selfObservation = entries.filter(
+  const closedN = (closedEntries || []).length;
+  const selfObservation = closedN ? closedEntries.filter(
     (e) => e.x != null && e.y != null && e.pull && e.pull !== "\u2014" && e.lesson && e.lesson !== "\u2014"
-  ).length / n * 100;
+  ).length / closedN * 100 : 50;
   const emotionalAwareness = entries.filter((e) => e.x != null && e.y != null).length / n * 100;
   const behavioralConsistency = risk.stability.value != null ? risk.stability.value : 50;
   const reflectionQuality = reflection.score.value != null ? reflection.score.value : 50;
@@ -1115,7 +1619,7 @@ function awarenessAnalysis(entries, reflection, risk, discipline) {
   const score = Math.round(Math.max(0, Math.min(100, raw)));
   return { score: ta_metric(score, n), components };
 }
-function calibrationAnalysis(sortedEntries, lastCalibration) {
+function calibrationAnalysis(sortedEntries, lastCalibration, lang = "ru") {
   if (!lastCalibration || !lastCalibration.date) {
     return { available: false, confidence: "insufficient" };
   }
@@ -1143,14 +1647,26 @@ function calibrationAnalysis(sortedEntries, lastCalibration) {
   const statedRiskFactors = lastCalibration.riskFactors || [];
   const statedCalm = statedRiskFactors.length === 0;
   let divergenceNote = null;
-  if (statedCalm && (revengeCount > 0 || riskGrew || dayEntries.length >= 8)) {
-    const signals = [];
-    if (revengeCount > 0) signals.push(`${revengeCount} ${pluralRu(revengeCount, "\u0441\u0434\u0435\u043B\u043A\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A")} \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 30 \u043C\u0438\u043D\u0443\u0442 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430`);
-    if (riskGrew) signals.push("\u0440\u0438\u0441\u043A \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0432\u044B\u0440\u043E\u0441 \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u0434\u043D\u044F");
-    if (dayEntries.length >= 8) signals.push(`${dayEntries.length} \u0441\u0434\u0435\u043B\u043E\u043A \u0437\u0430 \u0434\u0435\u043D\u044C`);
-    divergenceNote = `\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439 \u043D\u0435 \u043E\u0442\u043C\u0435\u0442\u0438\u043B\u0430 \u0444\u0430\u043A\u0442\u043E\u0440\u043E\u0432 \u0440\u0438\u0441\u043A\u0430, \u043D\u043E \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u0434\u043D\u044F: ${signals.join(", ")}. \u041C\u0435\u0436\u0434\u0443 \u0437\u0430\u044F\u0432\u043B\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C \u0438 \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u043C \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435\u043C \u0431\u044B\u043B\u043E \u0440\u0430\u0441\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435.`;
-  } else if (!statedCalm && revengeCount === 0 && !riskGrew && dayEntries.length < 8) {
-    divergenceNote = "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u043E\u0442\u043C\u0435\u0442\u0438\u043B\u0430 \u0444\u0430\u043A\u0442\u043E\u0440\u044B \u0440\u0438\u0441\u043A\u0430 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439, \u0438 \u0434\u0435\u043D\u044C \u043F\u0440\u043E\u0448\u0451\u043B \u0431\u0435\u0437 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u044B\u0445 \u043F\u0440\u0438\u0437\u043D\u0430\u043A\u043E\u0432 \u0440\u0435\u0432\u0430\u043D\u0448\u0430, \u0440\u043E\u0441\u0442\u0430 \u0440\u0438\u0441\u043A\u0430 \u0438\u043B\u0438 \u0431\u043E\u043B\u044C\u0448\u043E\u0433\u043E \u0447\u0438\u0441\u043B\u0430 \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u0437\u0430\u044F\u0432\u043B\u0435\u043D\u043D\u0430\u044F \u043E\u0441\u0442\u043E\u0440\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043B\u0430\u0441\u044C \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435\u043C.";
+  if (lang === "en") {
+    if (statedCalm && (revengeCount > 0 || riskGrew || dayEntries.length >= 8)) {
+      const signals = [];
+      if (revengeCount > 0) signals.push(`${revengeCount} ${revengeCount === 1 ? "trade" : "trades"} within 30 minutes of a loss`);
+      if (riskGrew) signals.push("risk noticeably grew during the day");
+      if (dayEntries.length >= 8) signals.push(`${dayEntries.length} trades in one day`);
+      divergenceNote = `Your pre-session calibration didn't flag any risk factors, but during the day: ${signals.join(", ")}. There was a gap between the stated state and actual behavior.`;
+    } else if (!statedCalm && revengeCount === 0 && !riskGrew && dayEntries.length < 8) {
+      divergenceNote = "Calibration flagged risk factors before the session, and the day went without clear signs of revenge trading, growing risk, or a high trade count \u2014 the stated caution held up in behavior.";
+    }
+  } else {
+    if (statedCalm && (revengeCount > 0 || riskGrew || dayEntries.length >= 8)) {
+      const signals = [];
+      if (revengeCount > 0) signals.push(`${revengeCount} ${pluralRu(revengeCount, "\u0441\u0434\u0435\u043B\u043A\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A")} \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 30 \u043C\u0438\u043D\u0443\u0442 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430`);
+      if (riskGrew) signals.push("\u0440\u0438\u0441\u043A \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0432\u044B\u0440\u043E\u0441 \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u0434\u043D\u044F");
+      if (dayEntries.length >= 8) signals.push(`${dayEntries.length} \u0441\u0434\u0435\u043B\u043E\u043A \u0437\u0430 \u0434\u0435\u043D\u044C`);
+      divergenceNote = `\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439 \u043D\u0435 \u043E\u0442\u043C\u0435\u0442\u0438\u043B\u0430 \u0444\u0430\u043A\u0442\u043E\u0440\u043E\u0432 \u0440\u0438\u0441\u043A\u0430, \u043D\u043E \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u0434\u043D\u044F: ${signals.join(", ")}. \u041C\u0435\u0436\u0434\u0443 \u0437\u0430\u044F\u0432\u043B\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C \u0438 \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u043C \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435\u043C \u0431\u044B\u043B\u043E \u0440\u0430\u0441\u0445\u043E\u0436\u0434\u0435\u043D\u0438\u0435.`;
+    } else if (!statedCalm && revengeCount === 0 && !riskGrew && dayEntries.length < 8) {
+      divergenceNote = "\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u043E\u0442\u043C\u0435\u0442\u0438\u043B\u0430 \u0444\u0430\u043A\u0442\u043E\u0440\u044B \u0440\u0438\u0441\u043A\u0430 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439, \u0438 \u0434\u0435\u043D\u044C \u043F\u0440\u043E\u0448\u0451\u043B \u0431\u0435\u0437 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u044B\u0445 \u043F\u0440\u0438\u0437\u043D\u0430\u043A\u043E\u0432 \u0440\u0435\u0432\u0430\u043D\u0448\u0430, \u0440\u043E\u0441\u0442\u0430 \u0440\u0438\u0441\u043A\u0430 \u0438\u043B\u0438 \u0431\u043E\u043B\u044C\u0448\u043E\u0433\u043E \u0447\u0438\u0441\u043B\u0430 \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u0437\u0430\u044F\u0432\u043B\u0435\u043D\u043D\u0430\u044F \u043E\u0441\u0442\u043E\u0440\u043E\u0436\u043D\u043E\u0441\u0442\u044C \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u043B\u0430\u0441\u044C \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435\u043C.";
+    }
   }
   return {
     available: true,
@@ -1160,7 +1676,7 @@ function calibrationAnalysis(sortedEntries, lastCalibration) {
     actualSignals: { revengeCount, riskGrew, tradeCount: dayEntries.length },
     divergenceNote,
     confidence: ta_confidence(dayEntries.length, { low: 3, moderate: 6, high: 10 }),
-    limitation: "\u0423\u0447\u0438\u0442\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043D\u0430\u044F \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0437\u0430 \u0434\u0435\u043D\u044C \u2014 \u0438\u0441\u0442\u043E\u0440\u0438\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043E\u043A \u043F\u043E \u0441\u0435\u0441\u0441\u0438\u044F\u043C \u043F\u043E\u043A\u0430 \u043D\u0435\u0442, \u0434\u043E\u043B\u0433\u043E\u0441\u0440\u043E\u0447\u043D\u0430\u044F \u0442\u043E\u0447\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0438 \u043D\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F."
+    limitation: lang === "en" ? "Only the last calibration completed that day is considered \u2014 there's no per-session calibration history yet, so long-term calibration accuracy isn't calculated." : "\u0423\u0447\u0438\u0442\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u044F\u044F \u043F\u0440\u043E\u0439\u0434\u0435\u043D\u043D\u0430\u044F \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0437\u0430 \u0434\u0435\u043D\u044C \u2014 \u0438\u0441\u0442\u043E\u0440\u0438\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043E\u043A \u043F\u043E \u0441\u0435\u0441\u0441\u0438\u044F\u043C \u043F\u043E\u043A\u0430 \u043D\u0435\u0442, \u0434\u043E\u043B\u0433\u043E\u0441\u0440\u043E\u0447\u043D\u0430\u044F \u0442\u043E\u0447\u043D\u043E\u0441\u0442\u044C \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0438 \u043D\u0435 \u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F."
   };
 }
 var PATTERN_MIN_SAMPLE = 20;
@@ -1256,11 +1772,18 @@ function pe_lessonSimilarity(aWords, bWords) {
   const union = (/* @__PURE__ */ new Set([...a, ...b])).size;
   return union ? intersection / union : 0;
 }
-function pd_confidenceTension(complete) {
+function pd_confidenceTension(complete, lang = "ru") {
   const group = complete.filter((t) => t.x >= 80 && t.y <= 20);
   if (group.length < PATTERN_MIN_GROUP) return null;
   const rest = complete.filter((t) => !(t.x >= 80 && t.y <= 20));
-  return {
+  return lang === "en" ? {
+    id: "confidence_tension",
+    title: "Confidence + tension",
+    description: "Your worst-performing trades don't come from fear \u2014 they come when confidence is high but tension is high too.",
+    healthyDescription: "When confidence and tension are both high, your result is noticeably better than in other trades.",
+    group,
+    rest
+  } : {
     id: "confidence_tension",
     title: "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C + \u043D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u0435",
     description: "\u0422\u0432\u043E\u0438 \u043D\u0430\u0438\u0431\u043E\u043B\u0435\u0435 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u0432\u043E\u0437\u043D\u0438\u043A\u0430\u044E\u0442 \u043D\u0435 \u0432 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0438 \u0441\u0442\u0440\u0430\u0445\u0430, \u0430 \u043A\u043E\u0433\u0434\u0430 \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u0432\u044B\u0441\u043E\u043A\u0430\u044F, \u043D\u043E \u0443\u0440\u043E\u0432\u0435\u043D\u044C \u043D\u0430\u043F\u0440\u044F\u0436\u0435\u043D\u0438\u044F \u0442\u043E\u0436\u0435 \u0432\u044B\u0441\u043E\u043A\u0438\u0439.",
@@ -1269,11 +1792,18 @@ function pd_confidenceTension(complete) {
     rest
   };
 }
-function pd_fear(complete) {
+function pd_fear(complete, lang = "ru") {
   const group = complete.filter((t) => t.x <= 20);
   if (group.length < PATTERN_MIN_GROUP) return null;
   const rest = complete.filter((t) => t.x > 20);
-  return {
+  return lang === "en" ? {
+    id: "fear",
+    title: "Entering out of fear",
+    description: "Trades started from a strong fear of missing the move are, on average, noticeably worse than the rest.",
+    healthyDescription: "Even your fear-driven entries aren't worse than your other trades on average \u2014 that's unusual and worth knowing.",
+    group,
+    rest
+  } : {
     id: "fear",
     title: "\u0412\u0445\u043E\u0434 \u0438\u0437 \u0441\u0442\u0440\u0430\u0445\u0430",
     description: "\u0421\u0434\u0435\u043B\u043A\u0438, \u043D\u0430\u0447\u0430\u0442\u044B\u0435 \u0438\u0437 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u043E\u0433\u043E \u0441\u0442\u0440\u0430\u0445\u0430 \u0443\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0435, \u0432 \u0441\u0440\u0435\u0434\u043D\u0435\u043C \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0445\u0443\u0436\u0435 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0445.",
@@ -1282,11 +1812,20 @@ function pd_fear(complete) {
     rest
   };
 }
-function pd_tooCalm(complete) {
+function pd_tooCalm(complete, lang = "ru") {
   const group = complete.filter((t) => t.y >= 80);
   if (group.length < PATTERN_MIN_GROUP) return null;
   const rest = complete.filter((t) => t.y < 80);
-  return {
+  return lang === "en" ? {
+    id: "too_calm",
+    title: "Too calm",
+    description: "In a state of pronounced calm, your result is noticeably worse than in other trades \u2014 maybe it's not calm, but a lack of attention to risk.",
+    healthyDescription: "Calm",
+    healthyTitle: "Calm works in your favor",
+    healthyDescriptionFull: "Trades made in a state of pronounced calm are noticeably better than your other trades \u2014 that's a strength, not something to fix.",
+    group,
+    rest
+  } : {
     id: "too_calm",
     title: "\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u0441\u043F\u043E\u043A\u043E\u0439\u043D\u044B\u0439",
     description: "\u0412 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0438 \u0432\u044B\u0440\u0430\u0436\u0435\u043D\u043D\u043E\u0433\u043E \u0441\u043F\u043E\u043A\u043E\u0439\u0441\u0442\u0432\u0438\u044F \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0445\u0443\u0436\u0435, \u0447\u0435\u043C \u0432 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043A\u0430\u0445 \u2014 \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u043E, \u044D\u0442\u043E \u043D\u0435 \u0441\u043F\u043E\u043A\u043E\u0439\u0441\u0442\u0432\u0438\u0435, \u0430 \u043D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u043A \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u044F \u043A \u0440\u0438\u0441\u043A\u0443.",
@@ -1297,7 +1836,7 @@ function pd_tooCalm(complete) {
     rest
   };
 }
-function pd_revenge(allSorted) {
+function pd_revenge(allSorted, lang = "ru") {
   const revengeTrades = [];
   const normalNextTrades = [];
   for (let i = 1; i < allSorted.length; i++) {
@@ -1309,7 +1848,15 @@ function pd_revenge(allSorted) {
   }
   if (revengeTrades.length < PATTERN_MIN_REVENGE) return null;
   const rest = normalNextTrades.length ? normalNextTrades : allSorted.filter((t) => !revengeTrades.includes(t));
-  return {
+  return lang === "en" ? {
+    id: "revenge",
+    title: "Revenge through confidence",
+    description: "After a losing trade you often re-enter within a short window, and the quality of the result in those re-entries is noticeably worse.",
+    group: revengeTrades,
+    rest,
+    minDiffR: 0.15,
+    sampleNorm: 10
+  } : {
     id: "revenge",
     title: "\u0420\u0435\u0432\u0430\u043D\u0448 \u0447\u0435\u0440\u0435\u0437 \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C",
     description: "\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u0442\u044B \u0447\u0430\u0441\u0442\u043E \u0432\u0445\u043E\u0434\u0438\u0448\u044C \u0441\u043D\u043E\u0432\u0430 \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u043A\u043E\u0440\u043E\u0442\u043A\u043E\u0433\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0438, \u0438 \u043A\u0430\u0447\u0435\u0441\u0442\u0432\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430 \u0432 \u044D\u0442\u0438\u0445 \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u044B\u0445 \u0432\u0445\u043E\u0434\u0430\u0445 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0445\u0443\u0436\u0435.",
@@ -1320,7 +1867,7 @@ function pd_revenge(allSorted) {
     // revenge has its own, lower, spec'd minimum (5) — score against that scale, not the general one
   };
 }
-function pd_lessonNotLearned(all) {
+function pd_lessonNotLearned(all, lang = "ru") {
   const withLessons = all.filter((t) => t.lesson && t.lesson !== "\u2014" && t.lesson.trim().length > 3);
   if (withLessons.length < 3) return null;
   const words = withLessons.map((t) => pe_normalizeLesson(t.lesson));
@@ -1345,8 +1892,8 @@ function pd_lessonNotLearned(all) {
   const rest = all.filter((t) => !groupIds.has(t.id));
   return {
     id: "lesson_not_learned",
-    title: "\u0423\u0440\u043E\u043A \u043D\u0435 \u0443\u0441\u0432\u043E\u0435\u043D",
-    description: `\u041F\u043E\u0445\u043E\u0436\u0438\u0439 \u0443\u0440\u043E\u043A \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u0435\u0442\u0441\u044F \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 ${group.length} \u0440\u0430\u0437 (\xAB${group[0].lesson}\xBB) \u2014 \u0430 \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435, \u0441\u0443\u0434\u044F \u043F\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0443, \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0436\u043D\u0438\u043C.`,
+    title: lang === "en" ? "Lesson not learned" : "\u0423\u0440\u043E\u043A \u043D\u0435 \u0443\u0441\u0432\u043E\u0435\u043D",
+    description: lang === "en" ? `A similar lesson repeats in the journal ${group.length} times ("${group[0].lesson}") \u2014 but based on the results, the behavior itself hasn't changed.` : `\u041F\u043E\u0445\u043E\u0436\u0438\u0439 \u0443\u0440\u043E\u043A \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u0435\u0442\u0441\u044F \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 ${group.length} \u0440\u0430\u0437 (\xAB${group[0].lesson}\xBB) \u2014 \u0430 \u043F\u043E\u0432\u0435\u0434\u0435\u043D\u0438\u0435, \u0441\u0443\u0434\u044F \u043F\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0443, \u043F\u0440\u043E\u0434\u043E\u043B\u0436\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0435\u0436\u043D\u0438\u043C.`,
     group,
     rest,
     minDiffR: 0.1,
@@ -1354,7 +1901,7 @@ function pd_lessonNotLearned(all) {
     sampleNorm: 6
   };
 }
-function pd_unstableRisk(all) {
+function pd_unstableRisk(all, lang = "ru") {
   const withR = all.filter((t) => typeof t.r === "number" && !isNaN(t.r));
   if (withR.length < 10) return null;
   const mags = withR.map((t) => Math.abs(t.r));
@@ -1367,14 +1914,14 @@ function pd_unstableRisk(all) {
   const rest = withR.filter((t) => !spikes.includes(t));
   return {
     id: "unstable_risk",
-    title: "\u041D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439 \u0440\u0438\u0441\u043A",
-    description: `\u0420\u0430\u0437\u043C\u0435\u0440 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430 \u043F\u043E R \u0441\u0438\u043B\u044C\u043D\u043E \u043A\u043E\u043B\u0435\u0431\u043B\u0435\u0442\u0441\u044F (\u0432 \u0441\u0440\u0435\u0434\u043D\u0435\u043C ${meanMag.toFixed(2)}R, \u0440\u0430\u0437\u0431\u0440\u043E\u0441 \xB1${stdev.toFixed(2)}R) \u2014 \u0447\u0430\u0441\u0442\u044C \u0441\u0434\u0435\u043B\u043E\u043A \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043A\u0440\u0443\u043F\u043D\u0435\u0435 \u0442\u0438\u043F\u0438\u0447\u043D\u043E\u0439, \u0447\u0442\u043E \u043E\u0431\u044B\u0447\u043D\u043E \u0433\u043E\u0432\u043E\u0440\u0438\u0442 \u043E \u043D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u043C \u0440\u0438\u0441\u043A\u0435, \u0430 \u043D\u0435 \u043E \u0440\u044B\u043D\u043A\u0435.`,
+    title: lang === "en" ? "Unstable risk" : "\u041D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u044B\u0439 \u0440\u0438\u0441\u043A",
+    description: lang === "en" ? `Your R result swings a lot (average ${meanMag.toFixed(2)}R, spread \xB1${stdev.toFixed(2)}R) \u2014 some trades are noticeably bigger than typical, which usually points to unstable risk, not the market.` : `\u0420\u0430\u0437\u043C\u0435\u0440 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430 \u043F\u043E R \u0441\u0438\u043B\u044C\u043D\u043E \u043A\u043E\u043B\u0435\u0431\u043B\u0435\u0442\u0441\u044F (\u0432 \u0441\u0440\u0435\u0434\u043D\u0435\u043C ${meanMag.toFixed(2)}R, \u0440\u0430\u0437\u0431\u0440\u043E\u0441 \xB1${stdev.toFixed(2)}R) \u2014 \u0447\u0430\u0441\u0442\u044C \u0441\u0434\u0435\u043B\u043E\u043A \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043A\u0440\u0443\u043F\u043D\u0435\u0435 \u0442\u0438\u043F\u0438\u0447\u043D\u043E\u0439, \u0447\u0442\u043E \u043E\u0431\u044B\u0447\u043D\u043E \u0433\u043E\u0432\u043E\u0440\u0438\u0442 \u043E \u043D\u0435\u0441\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u043C \u0440\u0438\u0441\u043A\u0435, \u0430 \u043D\u0435 \u043E \u0440\u044B\u043D\u043A\u0435.`,
     group: spikes,
     rest,
     minDiffR: 0.1
   };
 }
-function pd_overtrading(all) {
+function pd_overtrading(all, lang = "ru") {
   const byDay = /* @__PURE__ */ new Map();
   all.forEach((t) => {
     const k = t.date.toDateString();
@@ -1395,13 +1942,13 @@ function pd_overtrading(all) {
   if (group.length < PATTERN_MIN_GROUP) return null;
   return {
     id: "overtrading",
-    title: "\u041F\u0435\u0440\u0435\u0442\u0440\u0435\u0439\u0434\u0438\u043D\u0433",
-    description: `\u041E\u0431\u044B\u0447\u043D\u043E \u0443 \u0442\u0435\u0431\u044F ${baseline} ${baseline === 1 ? "\u0441\u0434\u0435\u043B\u043A\u0430" : "\u0441\u0434\u0435\u043B\u043A\u0438"} \u0432 \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0439 \u0434\u0435\u043D\u044C. \u0412 \u0434\u043D\u0438 \u043E\u0442 ${anomalyThreshold} \u0441\u0434\u0435\u043B\u043E\u043A \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043E\u0442\u043B\u0438\u0447\u0430\u0435\u0442\u0441\u044F \u043E\u0442 \u0442\u0438\u043F\u0438\u0447\u043D\u043E\u0433\u043E \u0434\u043D\u044F.`,
+    title: lang === "en" ? "Overtrading" : "\u041F\u0435\u0440\u0435\u0442\u0440\u0435\u0439\u0434\u0438\u043D\u0433",
+    description: lang === "en" ? `You typically make ${baseline} ${baseline === 1 ? "trade" : "trades"} on an active day. On days with ${anomalyThreshold}+ trades, the result looks noticeably different from a typical day.` : `\u041E\u0431\u044B\u0447\u043D\u043E \u0443 \u0442\u0435\u0431\u044F ${baseline} ${baseline === 1 ? "\u0441\u0434\u0435\u043B\u043A\u0430" : "\u0441\u0434\u0435\u043B\u043A\u0438"} \u0432 \u0430\u043A\u0442\u0438\u0432\u043D\u044B\u0439 \u0434\u0435\u043D\u044C. \u0412 \u0434\u043D\u0438 \u043E\u0442 ${anomalyThreshold} \u0441\u0434\u0435\u043B\u043E\u043A \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043E\u0442\u043B\u0438\u0447\u0430\u0435\u0442\u0441\u044F \u043E\u0442 \u0442\u0438\u043F\u0438\u0447\u043D\u043E\u0433\u043E \u0434\u043D\u044F.`,
     group,
     rest
   };
 }
-function pd_lossStreak(allSorted) {
+function pd_lossStreak(allSorted, lang = "ru") {
   const afterStreak = [], normal = [];
   let streak = 0;
   for (let i = 0; i < allSorted.length; i++) {
@@ -1417,14 +1964,14 @@ function pd_lossStreak(allSorted) {
   if (afterStreak.length < PATTERN_MIN_GROUP) return null;
   return {
     id: "loss_streak",
-    title: "\u0421\u0435\u0440\u0438\u044F \u0443\u0431\u044B\u0442\u043A\u043E\u0432",
-    description: "\u0421\u0434\u0435\u043B\u043A\u0438 \u0441\u0440\u0430\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u0441\u0435\u0440\u0438\u0438 \u0438\u0437 \u0434\u0432\u0443\u0445 \u0438 \u0431\u043E\u043B\u0435\u0435 \u0443\u0431\u044B\u0442\u043A\u043E\u0432 \u043F\u043E\u0434\u0440\u044F\u0434 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043E\u0442\u043B\u0438\u0447\u0430\u044E\u0442\u0441\u044F \u043E\u0442 \u043E\u0431\u044B\u0447\u043D\u044B\u0445 \u043F\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0443.",
+    title: lang === "en" ? "Loss streak" : "\u0421\u0435\u0440\u0438\u044F \u0443\u0431\u044B\u0442\u043A\u043E\u0432",
+    description: lang === "en" ? "Trades right after a streak of two or more losses in a row look noticeably different from your usual result." : "\u0421\u0434\u0435\u043B\u043A\u0438 \u0441\u0440\u0430\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u0441\u0435\u0440\u0438\u0438 \u0438\u0437 \u0434\u0432\u0443\u0445 \u0438 \u0431\u043E\u043B\u0435\u0435 \u0443\u0431\u044B\u0442\u043A\u043E\u0432 \u043F\u043E\u0434\u0440\u044F\u0434 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u043E\u0442\u043B\u0438\u0447\u0430\u044E\u0442\u0441\u044F \u043E\u0442 \u043E\u0431\u044B\u0447\u043D\u044B\u0445 \u043F\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0443.",
     group: afterStreak,
     rest: normal.length ? normal : allSorted.filter((t) => !afterStreak.includes(t)),
     minDiffR: 0.15
   };
 }
-function pd_riskAfterWin(allSorted) {
+function pd_riskAfterWin(allSorted, lang = "ru") {
   const withR = allSorted.filter((t) => typeof t.r === "number" && !isNaN(t.r));
   const group = [], rest = [];
   for (let i = 1; i < allSorted.length; i++) {
@@ -1437,14 +1984,14 @@ function pd_riskAfterWin(allSorted) {
   if (group.length < PATTERN_MIN_GROUP) return null;
   return {
     id: "risk_after_win",
-    title: "\u0420\u043E\u0441\u0442 \u0440\u0438\u0441\u043A\u0430 \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0431\u0435\u0434\u044B",
-    description: "\u041F\u043E\u0441\u043B\u0435 \u0432\u044B\u0438\u0433\u0440\u044B\u0448\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u0440\u0430\u0437\u043C\u0435\u0440 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E R \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0432\u044B\u0440\u0430\u0441\u0442\u0430\u0435\u0442 \u2014 \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0442\u0430\u043A\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u0445\u0443\u0436\u0435.",
+    title: lang === "en" ? "Risk growth after a win" : "\u0420\u043E\u0441\u0442 \u0440\u0438\u0441\u043A\u0430 \u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u0431\u0435\u0434\u044B",
+    description: lang === "en" ? "After a winning trade, the size of your next trade in R noticeably grows \u2014 and the result of those trades is worse." : "\u041F\u043E\u0441\u043B\u0435 \u0432\u044B\u0438\u0433\u0440\u044B\u0448\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u0440\u0430\u0437\u043C\u0435\u0440 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E R \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0432\u044B\u0440\u0430\u0441\u0442\u0430\u0435\u0442 \u2014 \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0442\u0430\u043A\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u0445\u0443\u0436\u0435.",
     group,
     rest: rest.length ? rest : allSorted,
     minDiffR: 0.15
   };
 }
-function pd_avoidLossReview(all) {
+function pd_avoidLossReview(all, lang = "ru") {
   const wins = all.filter((t) => t.outcome === "Win");
   const losses = all.filter((t) => t.outcome === "Loss");
   if (losses.length < PATTERN_MIN_GROUP || wins.length < 3) return null;
@@ -1453,15 +2000,15 @@ function pd_avoidLossReview(all) {
   if (winShotRate - lossShotRate < 0.25) return null;
   return {
     id: "avoid_loss_review",
-    title: "\u0418\u0437\u0431\u0435\u0433\u0430\u043D\u0438\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0443\u0431\u044B\u0442\u043A\u043E\u0432",
-    description: `\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u0441\u043E \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u043E\u043C: ${Math.round(winShotRate * 100)}%. \u0423\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435: ${Math.round(lossShotRate * 100)}%. \u0422\u044B \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0440\u0435\u0436\u0435 \u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0435\u0448\u044C \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u0432\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u043E.`,
+    title: lang === "en" ? "Avoiding loss review" : "\u0418\u0437\u0431\u0435\u0433\u0430\u043D\u0438\u0435 \u0440\u0430\u0437\u0431\u043E\u0440\u0430 \u0443\u0431\u044B\u0442\u043A\u043E\u0432",
+    description: lang === "en" ? `Winning trades with a screenshot: ${Math.round(winShotRate * 100)}%. Losing trades: ${Math.round(lossShotRate * 100)}%. You visually review losing trades noticeably less often.` : `\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u0441\u043E \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u043E\u043C: ${Math.round(winShotRate * 100)}%. \u0423\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435: ${Math.round(lossShotRate * 100)}%. \u0422\u044B \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0440\u0435\u0436\u0435 \u0440\u0430\u0437\u0431\u0438\u0440\u0430\u0435\u0448\u044C \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u0432\u0438\u0437\u0443\u0430\u043B\u044C\u043D\u043E.`,
     group: losses,
     rest: wins,
     skipDiffCheck: true
     // this pattern's evidence is the screenshot rate, not avgR — always show if the gap is real
   };
 }
-function pd_shallowReflection(all) {
+function pd_shallowReflection(all, lang = "ru") {
   const losses = all.filter((t) => t.outcome === "Loss");
   if (losses.length < PATTERN_MIN_GROUP) return null;
   const isShallow = (t) => {
@@ -1475,14 +2022,14 @@ function pd_shallowReflection(all) {
   const rest = all.filter((t) => !shallow.includes(t));
   return {
     id: "shallow_reflection",
-    title: "\u041F\u043E\u0432\u0435\u0440\u0445\u043D\u043E\u0441\u0442\u043D\u0430\u044F \u0440\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F",
-    description: `${shallow.length} \u0438\u0437 ${losses.length} \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u043E\u043F\u0438\u0441\u0430\u043D\u044B \u0431\u0435\u0437 \u0440\u0430\u0437\u0432\u0451\u0440\u043D\u0443\u0442\u043E\u0433\u043E \u0432\u044B\u0432\u043E\u0434\u0430 \u2014 \u043A\u043E\u0440\u043E\u0442\u043A\u043E \u0438\u043B\u0438 \u0432\u043E\u043E\u0431\u0449\u0435 \u0431\u0435\u0437 \u043D\u0435\u0433\u043E.`,
+    title: lang === "en" ? "Shallow reflection" : "\u041F\u043E\u0432\u0435\u0440\u0445\u043D\u043E\u0441\u0442\u043D\u0430\u044F \u0440\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F",
+    description: lang === "en" ? `${shallow.length} of ${losses.length} losing trades are described without a real takeaway \u2014 briefly or not at all.` : `${shallow.length} \u0438\u0437 ${losses.length} \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u043E\u043F\u0438\u0441\u0430\u043D\u044B \u0431\u0435\u0437 \u0440\u0430\u0437\u0432\u0451\u0440\u043D\u0443\u0442\u043E\u0433\u043E \u0432\u044B\u0432\u043E\u0434\u0430 \u2014 \u043A\u043E\u0440\u043E\u0442\u043A\u043E \u0438\u043B\u0438 \u0432\u043E\u043E\u0431\u0449\u0435 \u0431\u0435\u0437 \u043D\u0435\u0433\u043E.`,
     group: shallow,
     rest: rest.length ? rest : losses,
     minDiffR: 0.1
   };
 }
-function analyzeTraderPatterns(trades) {
+function analyzeTraderPatterns(trades, lang = "ru") {
   const all = (trades || []).filter((t) => t && t.date instanceof Date && !isNaN(t.date.getTime()));
   const complete = all.filter(pe_isEmotionallyComplete);
   if (complete.length < PATTERN_MIN_SAMPLE) {
@@ -1490,17 +2037,17 @@ function analyzeTraderPatterns(trades) {
   }
   const sorted = [...all].sort((a, b) => a.date - b.date);
   const raw = [
-    pd_confidenceTension(complete),
-    pd_fear(complete),
-    pd_tooCalm(complete),
-    pd_revenge(sorted),
-    pd_lessonNotLearned(all),
-    pd_unstableRisk(all),
-    pd_overtrading(all),
-    pd_lossStreak(sorted),
-    pd_riskAfterWin(sorted),
-    pd_avoidLossReview(all),
-    pd_shallowReflection(all)
+    pd_confidenceTension(complete, lang),
+    pd_fear(complete, lang),
+    pd_tooCalm(complete, lang),
+    pd_revenge(sorted, lang),
+    pd_lessonNotLearned(all, lang),
+    pd_unstableRisk(all, lang),
+    pd_overtrading(all, lang),
+    pd_lossStreak(sorted, lang),
+    pd_riskAfterWin(sorted, lang),
+    pd_avoidLossReview(all, lang),
+    pd_shallowReflection(all, lang)
   ].filter(Boolean);
   const scored = [];
   const healthy = [];
@@ -1527,7 +2074,7 @@ function analyzeTraderPatterns(trades) {
       evidenceCount: c.group.length
     };
     if (!c.skipDiffCheck && result.diff > 0 && c.healthyDescription) {
-      healthy.push({ ...entry, title: c.healthyTitle || `${c.title} (\u0441\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430)` });
+      healthy.push({ ...entry, title: c.healthyTitle || (lang === "en" ? `${c.title} (strength)` : `${c.title} (\u0441\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430)`) });
     } else if (result.score >= PATTERN_SCORE_FLOOR) {
       scored.push(entry);
     }
@@ -1567,27 +2114,41 @@ var PATTERN_RECOMMENDATIONS = {
   avoid_loss_review: "\u0412\u043E\u0437\u044C\u043C\u0438 \u0437\u0430 \u043F\u0440\u0438\u0432\u044B\u0447\u043A\u0443 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0442\u044C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0438\u043C\u0435\u043D\u043D\u043E \u0442\u0435\u0445 \u0441\u0434\u0435\u043B\u043E\u043A, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u043D\u0435 \u0445\u043E\u0447\u0435\u0442\u0441\u044F \u043F\u0435\u0440\u0435\u0441\u043C\u0430\u0442\u0440\u0438\u0432\u0430\u0442\u044C \u2014 \u044D\u0442\u043E \u0441\u0430\u043C\u044B\u0439 \u043F\u043E\u043B\u0435\u0437\u043D\u044B\u0439 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435.",
   shallow_reflection: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0444\u0440\u0430\u0437\u0443 \xAB\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u044F \u0441\u0434\u0435\u043B\u0430\u044E \u0438\u043D\u0430\u0447\u0435, \u0435\u0441\u043B\u0438...\xBB \u0438 \u0434\u043E\u043F\u0438\u0448\u0438 \u0435\u0451 \u0447\u0435\u0441\u0442\u043D\u043E."
 };
+var PATTERN_RECOMMENDATIONS_EN = {
+  confidence_tension: 'Before entering while feeling "confident but on edge" \u2014 take a 60-second pause and check the trade against your plan, not just against the moment.',
+  fear: `Before you hit "enter," state your reason for the trade in one sentence. If the only reason is "what if it moves without me," that's fear, not a plan.`,
+  too_calm: 'In a state of strong calm, double-check your risk separately \u2014 "calm" can sometimes mean "not watching," not "in control."',
+  revenge: "Set a mandatory pause after a loss \u2014 at least 20-30 minutes away from the terminal.",
+  lesson_not_learned: `Rewrite the lesson as a specific action, not an observation \u2014 not "don't rush," but "wait for the candle to close before entering."`,
+  unstable_risk: "Fix a constant % risk per trade and stick to it regardless of how confident you feel in the moment.",
+  overtrading: "Set a daily trade limit in advance and physically stop once you hit it.",
+  loss_streak: "After the second loss in a row \u2014 that's a signal to pause and figure out why, not to trade more.",
+  risk_after_win: "A win doesn't make the next setup any more valid \u2014 keep your risk size constant regardless of the previous result.",
+  avoid_loss_review: "Make a habit of saving a screenshot of exactly the trades you don't want to revisit \u2014 that's the most useful material in the journal.",
+  shallow_reflection: `After a loss, finish the sentence "Next time I'll do it differently if..." and write it honestly.`
+};
 function ta_severity(score, diff) {
   const mag = Math.abs(diff ?? 0);
   if (score >= 0.55 && mag >= 0.4) return "high";
   if (score >= 0.35) return "medium";
   return "low";
 }
-function ta_buildPatternRecord(c, result, isHealthy) {
+function ta_buildPatternRecord(c, result, isHealthy, lang = "ru") {
+  const recs = lang === "en" ? PATTERN_RECOMMENDATIONS_EN : PATTERN_RECOMMENDATIONS;
   return {
     id: c.id,
     type: PATTERN_TYPE_MAP[c.id] || "behavioral",
     severity: isHealthy ? "info" : ta_severity(result.score, result.diff),
     confidence: result.confidenceLabel,
     sampleSize: c.group.length,
-    title: isHealthy ? c.healthyTitle || `${c.title} (\u0441\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430)` : c.title,
+    title: isHealthy ? c.healthyTitle || (lang === "en" ? `${c.title} (strength)` : `${c.title} (\u0441\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430)`) : c.title,
     description: isHealthy ? c.healthyDescriptionFull || c.healthyDescription || c.description : c.description,
     evidence: pe_pickExamples(c.group, 3).map((t) => ({ id: t.id, date: t.date, outcome: t.outcome, r: t.r, instrument: t.instrument, tag: t.tag })),
     metrics: { group: result.gStats, rest: result.rStats, diff: st_round2(result.diff), uniqueDays: result.uniqueDays, confidenceScore: st_round2(result.score) },
-    recommendation: isHealthy ? null : PATTERN_RECOMMENDATIONS[c.id] || null
+    recommendation: isHealthy ? null : recs[c.id] || null
   };
 }
-function patternEngineV2(trades) {
+function patternEngineV2(trades, lang = "ru") {
   const all = (trades || []).filter((t) => t && t.date instanceof Date && !isNaN(t.date.getTime()));
   const complete = all.filter(pe_isEmotionallyComplete);
   if (complete.length < PATTERN_MIN_SAMPLE) {
@@ -1595,17 +2156,17 @@ function patternEngineV2(trades) {
   }
   const sorted = [...all].sort((a, b) => a.date - b.date);
   const raw = [
-    pd_confidenceTension(complete),
-    pd_fear(complete),
-    pd_tooCalm(complete),
-    pd_revenge(sorted),
-    pd_lessonNotLearned(all),
-    pd_unstableRisk(all),
-    pd_overtrading(all),
-    pd_lossStreak(sorted),
-    pd_riskAfterWin(sorted),
-    pd_avoidLossReview(all),
-    pd_shallowReflection(all)
+    pd_confidenceTension(complete, lang),
+    pd_fear(complete, lang),
+    pd_tooCalm(complete, lang),
+    pd_revenge(sorted, lang),
+    pd_lessonNotLearned(all, lang),
+    pd_unstableRisk(all, lang),
+    pd_overtrading(all, lang),
+    pd_lossStreak(sorted, lang),
+    pd_riskAfterWin(sorted, lang),
+    pd_avoidLossReview(all, lang),
+    pd_shallowReflection(all, lang)
   ].filter(Boolean);
   const patterns = [], healthy = [];
   for (const c of raw) {
@@ -1619,15 +2180,15 @@ function patternEngineV2(trades) {
     })() : pe_scoreCandidate(c.group, c.rest, { minDiffR: c.minDiffR, sampleNorm: c.sampleNorm });
     if (!result) continue;
     if (!c.skipDiffCheck && result.diff > 0 && c.healthyDescription) {
-      healthy.push(ta_buildPatternRecord(c, result, true));
+      healthy.push(ta_buildPatternRecord(c, result, true, lang));
     } else if (result.score >= PATTERN_SCORE_FLOOR) {
-      patterns.push(ta_buildPatternRecord(c, result, false));
+      patterns.push(ta_buildPatternRecord(c, result, false, lang));
     }
   }
   patterns.sort((a, b) => b.metrics.confidenceScore - a.metrics.confidenceScore);
   return { available: true, sampleSize: complete.length, patterns, healthyPatterns: healthy };
 }
-function buildInsights(patternsResult, calibration, discipline) {
+function buildInsights(patternsResult, calibration, discipline, lang = "ru") {
   const insights = [];
   (patternsResult.patterns || []).slice(0, 3).forEach((p) => {
     insights.push({ id: `pattern_${p.id}`, basis: "pattern", confidence: p.confidence, sampleSize: p.sampleSize, text: p.description });
@@ -1637,7 +2198,12 @@ function buildInsights(patternsResult, calibration, discipline) {
   }
   if (discipline.violations && discipline.violations.length) {
     const top = discipline.violations[0];
-    const text = {
+    const text = lang === "en" ? {
+      revenge_rate: `You re-enter a new trade within half an hour of a loss about ${top.value}% of the time.`,
+      overtrading_days: `About ${top.value}% of your trades fall on days with abnormally high activity.`,
+      risk_after_loss: `After a loss, your average risk increases by about ${top.value}%.`,
+      risk_after_win: `After a win, your average risk increases by about ${top.value}%.`
+    }[top.id] : {
       revenge_rate: `\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0442\u044B \u0432\u0445\u043E\u0434\u0438\u0448\u044C \u0432 \u043D\u043E\u0432\u0443\u044E \u0441\u0434\u0435\u043B\u043A\u0443 \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u0443\u0447\u0430\u0441\u0430 \u043F\u0440\u0438\u043C\u0435\u0440\u043D\u043E \u0432 ${top.value}% \u0441\u043B\u0443\u0447\u0430\u0435\u0432.`,
       overtrading_days: `\u041F\u0440\u0438\u043C\u0435\u0440\u043D\u043E ${top.value}% \u0442\u0432\u043E\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u043F\u0440\u0438\u0445\u043E\u0434\u0438\u0442\u0441\u044F \u043D\u0430 \u0434\u043D\u0438 \u0441 \u0430\u043D\u043E\u043C\u0430\u043B\u044C\u043D\u043E \u0432\u044B\u0441\u043E\u043A\u043E\u0439 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C\u044E.`,
       risk_after_loss: `\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0442\u0432\u043E\u0439 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0438\u0441\u043A \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0438\u043C\u0435\u0440\u043D\u043E \u043D\u0430 ${top.value}%.`,
@@ -1647,17 +2213,18 @@ function buildInsights(patternsResult, calibration, discipline) {
   }
   return insights;
 }
-function calculateTraderAnalytics(entries, lastCalibration) {
+function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
   const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
-  const sorted = [...validEntries].sort((a, b) => a.date - b.date);
+  const closedEntries = validEntries.filter(isEntryClosed);
+  const sorted = [...closedEntries].sort((a, b) => a.date - b.date);
   const seq = sequenceAnalysis(sorted);
   const risk = riskAnalysis(sorted);
   const reflection = reflectionAnalysis(validEntries);
   const discipline = disciplineAnalysis(sorted, seq, risk);
   const emotional = emotionalAnalysis(validEntries);
-  const awareness = awarenessAnalysis(validEntries, reflection, risk, discipline);
-  const patternsResult = patternEngineV2(validEntries);
-  const calibration = calibrationAnalysis(sorted, lastCalibration);
+  const awareness = awarenessAnalysis(validEntries, closedEntries, reflection, risk, discipline);
+  const patternsResult = patternEngineV2(closedEntries, lang);
+  const calibration = calibrationAnalysis(sorted, lastCalibration, lang);
   const { recent, previous } = ta_splitRecent(sorted);
   let trend = { awareness: "insufficient_data", discipline: "insufficient_data", riskStability: "insufficient_data", reflectionQuality: "insufficient_data" };
   if (recent.length >= 5 && previous.length >= 5) {
@@ -1665,8 +2232,8 @@ function calculateTraderAnalytics(entries, lastCalibration) {
     const rReflection = reflectionAnalysis(recent), pReflection = reflectionAnalysis(previous);
     const rDiscipline = disciplineAnalysis(recent, sequenceAnalysis(recent), rRisk);
     const pDiscipline = disciplineAnalysis(previous, sequenceAnalysis(previous), pRisk);
-    const rAwareness = awarenessAnalysis(recent, rReflection, rRisk, rDiscipline);
-    const pAwareness = awarenessAnalysis(previous, pReflection, pRisk, pDiscipline);
+    const rAwareness = awarenessAnalysis(recent, recent, rReflection, rRisk, rDiscipline);
+    const pAwareness = awarenessAnalysis(previous, previous, pReflection, pRisk, pDiscipline);
     trend = {
       awareness: ta_trend(rAwareness.score.value, pAwareness.score.value, 3, true),
       discipline: ta_trend(rDiscipline.score.value, pDiscipline.score.value, 3, true),
@@ -1682,7 +2249,7 @@ function calculateTraderAnalytics(entries, lastCalibration) {
     missingRisk: validEntries.filter((e) => typeof e.r !== "number" || isNaN(e.r)).length,
     missingScreenshots: validEntries.filter((e) => !Array.isArray(e.screenshots) || e.screenshots.length === 0).length
   };
-  const insights = buildInsights(patternsResult, calibration, discipline);
+  const insights = buildInsights(patternsResult, calibration, discipline, lang);
   return {
     awareness: { ...awareness, trend: trend.awareness },
     emotionalState: emotional,
@@ -1743,11 +2310,43 @@ var NEWS_HEADLINES = [
   "\u0418\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u0438 \u0441\u043E\u043E\u0431\u0449\u0430\u044E\u0442 \u043E \u043F\u0435\u0440\u0435\u0433\u043E\u0432\u043E\u0440\u0430\u0445 \u043C\u0435\u0436\u0434\u0443 \u043A\u0440\u0443\u043F\u043D\u044B\u043C\u0438 \u0438\u0433\u0440\u043E\u043A\u0430\u043C\u0438",
   "\u0417\u0430\u043C\u0435\u0447\u0435\u043D\u0430 \u0430\u043D\u043E\u043C\u0430\u043B\u044C\u043D\u0430\u044F \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0432 \u0434\u0435\u0440\u0438\u0432\u0430\u0442\u0438\u0432\u0430\u0445"
 ];
+var NEWS_HEADLINES_EN = [
+  "Regulator announces review of derivatives venues",
+  "Major market maker reports strategy shift",
+  "Macro data released \u2014 markets weigh the impact",
+  "Technical outage at a rival exchange",
+  "Delisting rumors surface on one platform",
+  "Central bank doesn't rule out an emergency meeting",
+  "Analysts split on the next move",
+  "Large fund changes its open position size",
+  "Media reports possible regulatory changes",
+  "On-chain data shows funds flowing to exchanges",
+  "Market liquidity report published",
+  "Word of a large OTC deal surfaces",
+  "Protocol upgrade completed without incident",
+  "Outage at a major liquidity provider",
+  "Rating agency revises its outlook",
+  "Rumors of a new major market player",
+  "Trader survey shows rising uncertainty",
+  "Exchange announces scheduled maintenance",
+  "Article critical of the current market model published",
+  "A large wallet moves a significant sum",
+  "Regulator approves a new product for institutions",
+  "Developers announce a roadmap update",
+  "Sources report talks between major players",
+  "Unusual activity spotted in derivatives"
+];
 var SIM_ACHIEVEMENTS = {
   lowRisk: "\u041D\u0438\u0437\u043A\u0438\u0439 \u0440\u0438\u0441\u043A",
   noImpulsive: "\u041D\u0438 \u043E\u0434\u043D\u043E\u0439 \u0438\u043C\u043F\u0443\u043B\u044C\u0441\u0438\u0432\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438",
   tightDrawdown: "\u041C\u0430\u043A\u0441\u0438\u043C\u0430\u043B\u044C\u043D\u0430\u044F \u043F\u0440\u043E\u0441\u0430\u0434\u043A\u0430 \u043C\u0435\u043D\u0435\u0435 5%",
   survivedVol: "\u041F\u0435\u0440\u0435\u0436\u0438\u043B \u0432\u044B\u0441\u043E\u043A\u0443\u044E \u0432\u043E\u043B\u0430\u0442\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0431\u0435\u0437 \u043B\u0438\u043A\u0432\u0438\u0434\u0430\u0446\u0438\u0438"
+};
+var SIM_ACHIEVEMENTS_EN = {
+  lowRisk: "Low risk",
+  noImpulsive: "No impulsive trades",
+  tightDrawdown: "Max drawdown under 5%",
+  survivedVol: "Survived high volatility without liquidation"
 };
 var REGIMES = {
   accumulation: { drift: 0, vol: 0.11, revert: 0.09 },
@@ -1787,13 +2386,14 @@ function instantiateRegime(rand, name) {
     // 0.5x - 1.5x
   };
 }
-function createMarketEngine(seed, startPrice = 100) {
+function createMarketEngine(seed, startPrice = 100, lang = "ru") {
   const rand = mulberry32(seed);
   const regime = "accumulation";
   const inst = instantiateRegime(rand, regime);
   const startCandle = { open: startPrice, high: startPrice, low: startPrice, close: startPrice, t: 0 };
   const eng = {
     rand,
+    lang,
     price: startPrice,
     anchor: startPrice,
     emaFast: startPrice,
@@ -1975,13 +2575,14 @@ function updateRadarOrders(eng, dtSec) {
   eng.radarOrders = eng.radarOrders.filter((o) => o.state === "active" || o.animMs < 550);
 }
 function spawnNewsEvent(eng) {
+  const headlines = eng.lang === "en" ? NEWS_HEADLINES_EN : NEWS_HEADLINES;
   const hasEffect = eng.rand() < 0.6;
   const direction = eng.rand() < 0.5 ? 1 : -1;
   const tierRoll = eng.rand();
   const magnitudePct = !hasEffect ? 0 : tierRoll < 0.5 ? 3e-3 + eng.rand() * 6e-3 : tierRoll < 0.85 ? 0.01 + eng.rand() * 0.014 : 0.026 + eng.rand() * 0.03;
   return {
     id: `news_${Math.floor(eng.elapsedMs)}`,
-    headline: NEWS_HEADLINES[Math.floor(eng.rand() * NEWS_HEADLINES.length)],
+    headline: headlines[Math.floor(eng.rand() * headlines.length)],
     hasEffect,
     targetPct: direction * magnitudePct,
     spawnMs: eng.elapsedMs,
@@ -2212,7 +2813,8 @@ function WalletSheet({ open, onClose, balance, ledger, accent }) {
   );
 }
 var RU_WEEKDAY_SHORT = ["\u0412\u0441", "\u041F\u043D", "\u0412\u0442", "\u0421\u0440", "\u0427\u0442", "\u041F\u0442", "\u0421\u0431"];
-function useStreak(entries) {
+var EN_WEEKDAY_SHORT = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+function useStreak(entries, lang = "ru") {
   return useMemo(() => {
     const dateSet = new Set(entries.map((e) => e.date.toDateString()));
     const cursor = /* @__PURE__ */ new Date();
@@ -2226,16 +2828,17 @@ function useStreak(entries) {
     const mondayOffset = (today.getDay() + 6) % 7;
     const monday = new Date(today);
     monday.setDate(today.getDate() - mondayOffset);
+    const weekdayLabels = lang === "en" ? EN_WEEKDAY_SHORT : RU_WEEKDAY_SHORT;
     const week = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
-      week.push({ label: RU_WEEKDAY_SHORT[d.getDay()], filled: dateSet.has(d.toDateString()) });
+      week.push({ label: weekdayLabels[d.getDay()], filled: dateSet.has(d.toDateString()) });
     }
     return { streak, week };
-  }, [entries]);
+  }, [entries, lang]);
 }
-function calculateChallengeProgress(entries) {
+function calculateChallengeProgress(entries, lang = "ru") {
   const sortedDesc = [...entries].sort((a, b) => b.date - a.date);
   let noRevenge = 0;
   for (const e of sortedDesc) {
@@ -2250,6 +2853,13 @@ function calculateChallengeProgress(entries) {
     if (e.r === null || e.r === void 0 || e.r <= 0) break;
     winStreak++;
     if (winStreak >= 3) break;
+  }
+  if (lang === "en") {
+    return [
+      { id: "revenge", title: "No revenge trades", desc: '5 trades in a row without the "Revenge" tag.', progress: noRevenge, goal: 5 },
+      { id: "reflect", title: "Full reflection", desc: "Fill in both reflection fields \u2014 in your last 5 trades.", progress: reflected, goal: 5 },
+      { id: "winstreak", title: "Positive streak", desc: "3 trades in a row with a positive result.", progress: winStreak, goal: 3 }
+    ];
   }
   return [
     { id: "revenge", title: "\u0411\u0435\u0437 \u0440\u0435\u0432\u0430\u043D\u0448-\u0442\u0440\u0435\u0439\u0434\u043E\u0432", desc: "5 \u0441\u0434\u0435\u043B\u043E\u043A \u043F\u043E\u0434\u0440\u044F\u0434 \u0431\u0435\u0437 \u0442\u0435\u0433\u0430 \xAB\u0420\u0435\u0432\u0430\u043D\u0448\xBB.", progress: noRevenge, goal: 5 },
@@ -2272,17 +2882,18 @@ function Sparkline({ points, color, width = 68, height = 26 }) {
   const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
   return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
 }
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t }) {
+function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
-  const traderPatterns = useMemo(() => analyzeTraderPatterns(entries), [entries]);
+  const closedEntries = useMemo(() => entries.filter(isEntryClosed), [entries]);
+  const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const calibratedToday = lastCalibration && isToday(lastCalibration.date);
   const consciousScoreTarget = analytics.awareness.score.value ?? 55;
   const reflectionScore = analytics.reflection.score.value;
   const disciplineScore = analytics.discipline.score.value;
   const riskStabilityScore = analytics.risk.stability.value;
   const level = calculateTraderLevel(total);
-  const { streak, week } = useStreak(entries);
+  const { streak, week } = useStreak(entries, lang);
   const moodKey = consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive;
   const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
   const cumResult = withR.reduce((s, e) => s + e.r, 0);
@@ -2404,71 +3015,62 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between pt-3 mt-3", style: { borderTop: `1px solid ${BASE.line}` }, children: [
         /* @__PURE__ */ jsxs("button", { onClick: () => goTo("challenge"), className: "flex items-center gap-1.5 text-xs transition-transform duration-150 active:scale-95", style: { color: BASE.inkDim }, children: [
           /* @__PURE__ */ jsx(Flame, { size: 13, className: streak > 0 ? "flame-flicker" : "", style: { color: streak > 0 ? "#D98A4A" : BASE.inkFaint } }),
-          streak > 0 ? `${animatedStreak} \u0434\u043D. \u043F\u043E\u0434\u0440\u044F\u0434` : "\u041D\u0430\u0447\u043D\u0438 \u0441\u0435\u0440\u0438\u044E"
+          streak > 0 ? t.home.streakDays(animatedStreak) : t.home.startStreak
         ] }),
         /* @__PURE__ */ jsx(WeekDots, { week, accent })
       ] })
     ] }),
     traderPatterns.available ? traderPatterns.primaryPattern ? /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" }),
-        /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: traderPatterns.primaryPattern.confidence === "high" ? "\u0421\u0438\u043B\u044C\u043D\u044B\u0439 \u0441\u0438\u0433\u043D\u0430\u043B" : traderPatterns.primaryPattern.confidence === "medium" ? "\u041D\u0430\u0431\u043B\u044E\u0434\u0430\u0435\u043C\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" : "\u0415\u0441\u0442\u044C \u043F\u0440\u0438\u0437\u043D\u0430\u043A\u0438" })
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
+        /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: traderPatterns.primaryPattern.confidence === "high" ? t.pattern.strongSignal : traderPatterns.primaryPattern.confidence === "medium" ? t.pattern.observedPattern : t.pattern.someSigns })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.primaryPattern.title }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
-        /* @__PURE__ */ jsxs("span", { children: [
-          traderPatterns.primaryPattern.stats.trades,
-          " ",
-          pluralRu(traderPatterns.primaryPattern.stats.trades, "\u0441\u0434\u0435\u043B\u043A\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A")
-        ] }),
+        /* @__PURE__ */ jsx("span", { children: t.pattern.trades(traderPatterns.primaryPattern.stats.trades) }),
         /* @__PURE__ */ jsxs("span", { children: [
           traderPatterns.primaryPattern.stats.winRate,
-          "% win"
+          "% ",
+          t.pattern.winShort
         ] }),
         /* @__PURE__ */ jsxs("span", { style: { color: traderPatterns.primaryPattern.stats.avgR >= 0 ? WIN : LOSS }, children: [
           formatResult(traderPatterns.primaryPattern.stats.avgR ?? 0, "R", currency),
-          " \u0441\u0440."
+          " ",
+          t.pattern.avgShort
         ] })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-3", style: { color: BASE.inkDim }, children: traderPatterns.primaryPattern.description }),
-      /* @__PURE__ */ jsx("button", { onClick: () => setPatternOpen(true), className: "text-sm transition-transform duration-150 active:scale-95", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: "\u0420\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C \u2192" })
+      /* @__PURE__ */ jsx("button", { onClick: () => setPatternOpen(true), className: "text-sm transition-transform duration-150 active:scale-95", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: t.pattern.breakdown })
     ] }) : traderPatterns.healthyPatterns.length > 0 ? /* @__PURE__ */ jsxs(Card, { accent, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" }),
-        /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: WIN, border: `1px solid ${WIN}40` }, children: "\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u0441\u0442\u043E\u0440\u043E\u043D\u0430" })
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
+        /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: WIN, border: `1px solid ${WIN}40` }, children: t.pattern.strength })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.healthyPatterns[0].title }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
-        /* @__PURE__ */ jsxs("span", { children: [
-          traderPatterns.healthyPatterns[0].stats.trades,
-          " ",
-          pluralRu(traderPatterns.healthyPatterns[0].stats.trades, "\u0441\u0434\u0435\u043B\u043A\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A")
-        ] }),
+        /* @__PURE__ */ jsx("span", { children: t.pattern.trades(traderPatterns.healthyPatterns[0].stats.trades) }),
         /* @__PURE__ */ jsxs("span", { children: [
           traderPatterns.healthyPatterns[0].stats.winRate,
-          "% win"
+          "% ",
+          t.pattern.winShort
         ] }),
         /* @__PURE__ */ jsxs("span", { style: { color: WIN }, children: [
           formatResult(traderPatterns.healthyPatterns[0].stats.avgR ?? 0, "R", currency),
-          " \u0441\u0440."
+          " ",
+          t.pattern.avgShort
         ] })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: traderPatterns.healthyPatterns[0].description })
     ] }) : /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-1.5", style: { color: BASE.inkFaint }, children: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: "\u042F\u0432\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E\u0433\u043E \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u044D\u0442\u043E \u0442\u043E\u0436\u0435 \u043D\u0435\u043F\u043B\u043E\u0445\u043E\u0439 \u0437\u043D\u0430\u043A. \u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0430\u0439 \u0432\u0435\u0441\u0442\u0438 \u0436\u0443\u0440\u043D\u0430\u043B, \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0441\u043B\u0435\u0434\u0438\u0442 \u0437\u0430 \u044D\u0442\u0438\u043C \u043F\u043E\u0441\u0442\u043E\u044F\u043D\u043D\u043E." })
+      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-1.5", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: t.pattern.noClearPattern })
     ] }) : /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-1.5", style: { color: BASE.inkFaint }, children: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" }),
-      /* @__PURE__ */ jsxs("p", { className: "text-sm mb-2", style: { color: BASE.ink }, children: [
-        "\u041F\u043E\u043A\u0430 \u0444\u043E\u0440\u043C\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u2014 ",
-        traderPatterns.sampleSize,
-        " / ",
-        traderPatterns.needed
-      ] }),
+      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-1.5", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-2", style: { color: BASE.ink }, children: t.pattern.buildingUp(traderPatterns.sampleSize, traderPatterns.needed) }),
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-2", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-700 ease-out", style: { width: `${Math.min(100, traderPatterns.sampleSize / traderPatterns.needed * 100)}%`, background: accent } }) }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: "\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0438\u0449\u0435\u0442 \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0435\u0441\u044F \u0441\u0432\u044F\u0437\u0438 \u043C\u0435\u0436\u0434\u0443 \u0442\u0432\u043E\u0438\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C \u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u043C \u2014 \u0443\u0447\u0438\u0442\u044B\u0432\u0430\u044E\u0442\u0441\u044F \u0437\u0430\u043F\u0438\u0441\u0438 \u0441 \u0437\u0430\u043F\u043E\u043B\u043D\u0435\u043D\u043D\u043E\u0439 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0439 \u0442\u043E\u0447\u043A\u043E\u0439." })
+      /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: t.pattern.buildingUpDesc })
     ] }),
-    patternOpen && traderPatterns.primaryPattern && /* @__PURE__ */ jsx(TraderPatternDetail, { pattern: traderPatterns.primaryPattern, accent, currency, onClose: () => setPatternOpen(false) }),
+    patternOpen && traderPatterns.primaryPattern && /* @__PURE__ */ jsx(TraderPatternDetail, { pattern: traderPatterns.primaryPattern, accent, currency, onClose: () => setPatternOpen(false), t, lang }),
     /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-3", children: tiles.map((tile) => /* @__PURE__ */ jsxs(
       "button",
       {
@@ -2510,7 +3112,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     ] })
   ] });
 }
-function TraderPatternDetail({ pattern, accent, currency, onClose }) {
+function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
   return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 z-50 flex items-end justify-center", onClick: onClose, style: { background: "rgba(0,0,0,0.6)", backdropFilter: "blur(2px)" }, children: /* @__PURE__ */ jsxs(
     "div",
     {
@@ -2520,40 +3122,40 @@ function TraderPatternDetail({ pattern, accent, currency, onClose }) {
       children: [
         /* @__PURE__ */ jsx("div", { className: "mx-auto mb-4", style: { width: 36, height: 4, borderRadius: 2, background: BASE.line } }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: "\u0422\u0432\u043E\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D" }),
+          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.detailTitle }),
           /* @__PURE__ */ jsx("button", { onClick: onClose, className: "p-1 -m-1", children: /* @__PURE__ */ jsx(XIcon, { size: 16, style: { color: BASE.inkFaint } }) })
         ] }),
         /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: pattern.title }),
         /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-4", style: { color: BASE.inkDim }, children: pattern.description }),
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
-            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "\u0421\u0434\u0435\u043B\u043E\u043A" }),
+            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.tradesLabel }),
             /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: pattern.stats.trades })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
-            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "Win rate" }),
+            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.winRateLabel }),
             /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
               pattern.stats.winRate,
               "%"
             ] })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
-            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 R" }),
+            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.avgRLabel }),
             /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
           ] })
         ] }),
         /* @__PURE__ */ jsxs(Card, { className: "mb-4", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0421\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435" }),
+          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.comparison }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-1", children: [
-            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: "\u041F\u043E\u0445\u043E\u0436\u0438\u0435 \u0441\u0438\u0442\u0443\u0430\u0446\u0438\u0438" }),
+            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: t.pattern.similarSituations }),
             /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-1", children: [
-            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u041E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438" }),
+            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.pattern.otherTrades }),
             /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.comparisonStats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.comparisonStats.avgR ?? 0, "R", currency) })
           ] })
         ] }),
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0413\u0434\u0435 \u044D\u0442\u043E \u043D\u0430 \u043A\u0430\u0440\u0442\u0435 \u044D\u043C\u043E\u0446\u0438\u0439" }),
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.whereOnMap }),
         /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 220 }, className: "mb-4", children: /* @__PURE__ */ jsx(ResponsiveContainer, { children: /* @__PURE__ */ jsxs(ScatterChart, { margin: { top: 10, right: 10, bottom: 20, left: 0 }, children: [
           /* @__PURE__ */ jsx(CartesianGrid, { stroke: BASE.line }),
           /* @__PURE__ */ jsx(
@@ -2564,7 +3166,7 @@ function TraderPatternDetail({ pattern, accent, currency, onClose }) {
               domain: [0, 100],
               tick: { fill: BASE.inkFaint, fontSize: 10 },
               stroke: BASE.line,
-              label: { value: "\u0421\u0442\u0440\u0430\u0445 \u2192 \u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C", position: "insideBottom", offset: -10, fill: BASE.inkFaint, fontSize: 10 }
+              label: { value: t.pattern.fearToConfidence, position: "insideBottom", offset: -10, fill: BASE.inkFaint, fontSize: 10 }
             }
           ),
           /* @__PURE__ */ jsx(
@@ -2576,38 +3178,29 @@ function TraderPatternDetail({ pattern, accent, currency, onClose }) {
               reversed: true,
               tick: { fill: BASE.inkFaint, fontSize: 10 },
               stroke: BASE.line,
-              label: { value: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445 \u2192 \u0421\u043F\u043E\u043A\u043E\u0435\u043D", angle: -90, position: "insideLeft", fill: BASE.inkFaint, fontSize: 10 }
+              label: { value: t.pattern.nervousToCalm, angle: -90, position: "insideLeft", fill: BASE.inkFaint, fontSize: 10 }
             }
           ),
           /* @__PURE__ */ jsx(ZAxis, { range: [70, 70] }),
           /* @__PURE__ */ jsx(Scatter, { data: pattern.comparisonStats._trades || [], fill: BASE.line, isAnimationActive: false }),
-          /* @__PURE__ */ jsx(Scatter, { data: pattern.stats._trades || [], isAnimationActive: false, children: (pattern.stats._trades || []).map((t) => /* @__PURE__ */ jsx(Cell, { fill: accent }, t.id)) })
+          /* @__PURE__ */ jsx(Scatter, { data: pattern.stats._trades || [], isAnimationActive: false, children: (pattern.stats._trades || []).map((t2) => /* @__PURE__ */ jsx(Cell, { fill: accent }, t2.id)) })
         ] }) }) }),
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u041F\u0440\u0438\u043C\u0435\u0440\u044B \u0441\u0434\u0435\u043B\u043E\u043A" }),
-        /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-4", children: pattern.sampleTrades.map((t) => /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm py-1.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(t.outcome) } }),
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, className: "text-xs shrink-0", children: t.date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }) }),
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, className: "shrink-0", children: t.instrument }),
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.tradeExamples }),
+        /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-4", children: pattern.sampleTrades.map((tr) => /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm py-1.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(tr.outcome) } }),
+          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, className: "text-xs shrink-0", children: tr.date.toLocaleDateString(lang === "en" ? "en-US" : "ru-RU", { day: "2-digit", month: "2-digit" }) }),
+          /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, className: "shrink-0", children: tr.instrument }),
           /* @__PURE__ */ jsxs("span", { className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: [
             "x",
-            Math.round(t.x),
+            Math.round(tr.x),
             " y",
-            Math.round(t.y)
+            Math.round(tr.y)
           ] }),
-          t.r !== null && t.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(t.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(t.r, "R", currency) })
-        ] }, t.id)) }),
+          tr.r !== null && tr.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(tr.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(tr.r, "R", currency) })
+        ] }, tr.id)) }),
         /* @__PURE__ */ jsxs(Card, { className: "mb-2", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u0447\u0435\u043C\u0443 mind.exe \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u044D\u0442\u043E" }),
-          /* @__PURE__ */ jsxs("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: [
-            pattern.evidenceCount,
-            " ",
-            pluralRu(pattern.evidenceCount, "\u0441\u0434\u0435\u043B\u043A\u0430 \u043F\u043E\u043F\u0430\u043B\u0430", "\u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043F\u0430\u043B\u0438", "\u0441\u0434\u0435\u043B\u043E\u043A \u043F\u043E\u043F\u0430\u043B\u043E"),
-            " \u0432 \u044D\u0442\u0443 \u043A\u0430\u0442\u0435\u0433\u043E\u0440\u0438\u044E. \u0412 \u044D\u0442\u043E\u0439 \u0433\u0440\u0443\u043F\u043F\u0435 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0441\u043E\u0441\u0442\u0430\u0432\u0438\u043B ",
-            formatResult(pattern.stats.avgR ?? 0, "R", currency),
-            ", \u043F\u0440\u043E\u0442\u0438\u0432 ",
-            formatResult(pattern.comparisonStats.avgR ?? 0, "R", currency),
-            " \u0443 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A."
-          ] })
+          /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.whyShown }),
+          /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: t.pattern.whyShownText(pattern.evidenceCount, formatResult(pattern.stats.avgR ?? 0, "R", currency), formatResult(pattern.comparisonStats.avgR ?? 0, "R", currency)) })
         ] })
       ]
     }
@@ -2739,18 +3332,13 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     ] }, g.category)) })
   ] }) });
 }
-function NewEntry({ onSave, accent, measureMode, currency, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify, t }) {
+function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify, t }) {
   const [instrument, setInstrument] = useState("");
   const [direction, setDirection] = useState("Long");
-  const [outcome, setOutcome] = useState("Win");
-  const [resultR, setResultR] = useState("");
   const [entryPrice, setEntryPrice] = useState("");
-  const [exitPrice, setExitPrice] = useState("");
-  const [rr, setRr] = useState("");
   const [tag, setTag] = useState("");
   const [point, setPoint] = useState({ x: null, y: null });
   const [pull, setPull] = useState("");
-  const [lesson, setLesson] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const fileInputRef = useRef(null);
   const canSave = instrument.trim() && point.x !== null;
@@ -2783,33 +3371,30 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
     const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
     onSave({
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      status: "open",
       instrument: instrument.trim(),
       direction,
-      outcome,
-      r: num(resultR),
+      outcome: null,
+      r: null,
       tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
       x: point.x,
       y: point.y,
       pull: pull.trim() || "\u2014",
-      lesson: lesson.trim() || "\u2014",
+      lesson: "\u2014",
       date: /* @__PURE__ */ new Date(),
+      exitDate: null,
       screenshots,
       entryPrice: num(entryPrice),
-      exitPrice: num(exitPrice),
-      rr: num(rr)
+      exitPrice: null,
+      rr: null
     });
     setInstrument("");
     setDirection("Long");
-    setOutcome("Win");
-    setResultR("");
     setTag("");
     setPoint({ x: null, y: null });
     setPull("");
-    setLesson("");
     setScreenshots([]);
     setEntryPrice("");
-    setExitPrice("");
-    setRr("");
   };
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
   return /* @__PURE__ */ jsxs("div", { children: [
@@ -2828,17 +3413,18 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
         /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
       ] })
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
-      /* @__PURE__ */ jsxs("div", { className: "w-[38%] shrink-0", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.entry }),
         /* @__PURE__ */ jsx(
           "input",
           {
-            value: resultR,
-            onChange: (e) => setResultR(e.target.value),
-            placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
+            value: entryPrice,
+            onChange: (e) => setEntryPrice(e.target.value),
+            placeholder: "67 230",
             type: "number",
-            step: "0.1",
+            step: "any",
+            inputMode: "decimal",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
             style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
           }
@@ -2858,18 +3444,113 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
         )) })
       ] })
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.entry }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
+      /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+        screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+          /* @__PURE__ */ jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => setScreenshots((prev) => prev.filter((_, idx) => idx !== i)),
+              className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90",
+              style: { background: "rgba(0,0,0,0.55)" },
+              children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" })
+            }
+          )
+        ] }, i)),
+        screenshots.length < MAX_SHOTS && /* @__PURE__ */ jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => fileInputRef.current?.click(),
+            className: "w-20 h-20 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-150",
+            style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim },
+            children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 })
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+      /* @__PURE__ */ jsx(
+        "textarea",
+        {
+          value: pull,
+          onChange: (e) => setPull(e.target.value),
+          rows: 2,
+          placeholder: t.newEntry.pullPlaceholder,
+          className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none",
+          style: { borderColor: BASE.line, color: BASE.ink }
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
+    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
+    /* @__PURE__ */ jsx(
+      "button",
+      {
+        onClick: submit,
+        disabled: !canSave,
+        className: "w-full mt-6 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+        style: {
+          background: accent,
+          color: "#06120F",
+          opacity: canSave ? 1 : 0.3,
+          cursor: canSave ? "pointer" : "not-allowed",
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontWeight: 600,
+          boxShadow: canSave ? softLift(accent) : "none"
+        },
+        children: t.newEntry.save
+      }
+    )
+  ] });
+}
+function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, t }) {
+  const [outcome, setOutcome] = useState("Win");
+  const [resultR, setResultR] = useState("");
+  const [exitPrice, setExitPrice] = useState("");
+  const [rr, setRr] = useState("");
+  const [lesson, setLesson] = useState("");
+  const canSave = resultR !== "" && !isNaN(parseFloat(resultR));
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  const submit = () => {
+    if (!canSave) return;
+    const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
+    onSave({
+      status: "closed",
+      outcome,
+      r: num(resultR),
+      exitPrice: num(exitPrice),
+      rr: num(rr),
+      lesson: lesson.trim() || "\u2014",
+      exitDate: /* @__PURE__ */ new Date()
+    });
+  };
+  if (!entry) return null;
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+      /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
+      " \u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-sm mb-4", style: { color: BASE.inkFaint }, children: [
+      entry.instrument, " \xB7 ", DIRECTION_LABEL[entry.direction],
+      entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : ""
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
+      /* @__PURE__ */ jsxs("div", { className: "w-[38%] shrink-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
         /* @__PURE__ */ jsx(
           "input",
           {
-            value: entryPrice,
-            onChange: (e) => setEntryPrice(e.target.value),
-            placeholder: "67 230",
+            value: resultR,
+            onChange: (e) => setResultR(e.target.value),
+            placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
             type: "number",
-            step: "any",
-            inputMode: "decimal",
+            step: "0.1",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
             style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
           }
@@ -2922,49 +3603,6 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
       )) })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
-      /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
-        screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
-          /* @__PURE__ */ jsx(
-            "button",
-            {
-              type: "button",
-              onClick: () => setScreenshots((prev) => prev.filter((_, idx) => idx !== i)),
-              className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90",
-              style: { background: "rgba(0,0,0,0.55)" },
-              children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" })
-            }
-          )
-        ] }, i)),
-        screenshots.length < MAX_SHOTS && /* @__PURE__ */ jsx(
-          "button",
-          {
-            type: "button",
-            onClick: () => fileInputRef.current?.click(),
-            className: "w-20 h-20 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-150",
-            style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim },
-            children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 })
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
-    ] }),
-    /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
-      /* @__PURE__ */ jsx(
-        "textarea",
-        {
-          value: pull,
-          onChange: (e) => setPull(e.target.value),
-          rows: 2,
-          placeholder: t.newEntry.pullPlaceholder,
-          className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none",
-          style: { borderColor: BASE.line, color: BASE.ink }
-        }
-      )
-    ] }),
-    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
       /* @__PURE__ */ jsx(
         "textarea",
@@ -2978,26 +3616,35 @@ function NewEntry({ onSave, accent, measureMode, currency, customInstruments, cu
         }
       )
     ] }),
-    /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
-    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
-    /* @__PURE__ */ jsx(
-      "button",
-      {
-        onClick: submit,
-        disabled: !canSave,
-        className: "w-full mt-6 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
-        style: {
-          background: accent,
-          color: "#06120F",
-          opacity: canSave ? 1 : 0.3,
-          cursor: canSave ? "pointer" : "not-allowed",
-          fontFamily: "'Space Grotesk', sans-serif",
-          fontWeight: 600,
-          boxShadow: canSave ? softLift(accent) : "none"
-        },
-        children: t.newEntry.save
-      }
-    )
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: onCancel,
+          className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" },
+          children: "\u041E\u0442\u043C\u0435\u043D\u0430"
+        }
+      ),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: submit,
+          disabled: !canSave,
+          className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          style: {
+            background: accent,
+            color: "#06120F",
+            opacity: canSave ? 1 : 0.3,
+            cursor: canSave ? "pointer" : "not-allowed",
+            fontFamily: "'Space Grotesk', sans-serif",
+            fontWeight: 600,
+            boxShadow: canSave ? softLift(accent) : "none"
+          },
+          children: "\u0417\u0430\u043A\u0440\u044B\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443"
+        }
+      )
+    ] })
   ] });
 }
 function LogMiniStat({ label, value, color }) {
@@ -3006,25 +3653,27 @@ function LogMiniStat({ label, value, color }) {
     /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: value })
   ] });
 }
-function Log({ entries, onDelete, accent, measureMode, currency, t }) {
+function Log({ entries, onDelete, onCloseTrade, accent, measureMode, currency, t }) {
   const [openId, setOpenId] = useState(null);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [confirmId, setConfirmId] = useState(null);
   const logFilters = [
     { id: "All", label: t.log.filters.All },
+    { id: "Open", label: "\u041E\u0442\u043A\u0440\u044B\u0442\u044B\u0435" },
     { id: "Win", label: t.log.filters.Win },
     { id: "Loss", label: t.log.filters.Loss },
     { id: "Long", label: t.log.filters.Long },
     { id: "Short", label: t.log.filters.Short }
   ];
   const filtered = entries.filter((e) => {
-    const matchesFilter = filter === "All" ? true : filter === "Win" || filter === "Loss" ? e.outcome === filter : e.direction === filter;
+    const matchesFilter = filter === "All" ? true : filter === "Open" ? !isEntryClosed(e) : filter === "Win" || filter === "Loss" ? e.outcome === filter : e.direction === filter;
     const matchesQuery = e.instrument.toLowerCase().includes(query.toLowerCase());
     return matchesFilter && matchesQuery;
   });
-  const winRate = entries.length ? Math.round(entries.filter((e) => e.outcome === "Win").length / entries.length * 100) : 0;
-  const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
+  const closedEntries = entries.filter(isEntryClosed);
+  const winRate = closedEntries.length ? Math.round(closedEntries.filter((e) => e.outcome === "Win").length / closedEntries.length * 100) : 0;
+  const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const netR = withR.reduce((s, e) => s + e.r, 0);
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
@@ -3049,7 +3698,8 @@ function Log({ entries, onDelete, accent, measureMode, currency, t }) {
           /* @__PURE__ */ jsx("span", { className: "text-sm truncate", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: e.instrument }),
           /* @__PURE__ */ jsx("span", { className: "text-xs shrink-0", style: { color: BASE.inkDim }, children: DIRECTION_LABEL[e.direction] }),
           e.screenshots?.length > 0 && /* @__PURE__ */ jsx(ImagePlus, { size: 11, className: "shrink-0", style: { color: BASE.inkFaint } }),
-          e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "text-sm ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }, children: formatResult(e.r, measureMode, currency) }),
+          !isEntryClosed(e) && /* @__PURE__ */ jsx("span", { className: "text-[10px] ml-auto shrink-0 px-1.5 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: "\u041E\u0442\u043A\u0440\u044B\u0442\u0430" }),
+          isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "text-sm ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }, children: formatResult(e.r, measureMode, currency) }),
           /* @__PURE__ */ jsx("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint }, children: relTime(e.date) })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-4 gap-2 px-4 pb-3", children: [
@@ -3066,10 +3716,19 @@ function Log({ entries, onDelete, accent, measureMode, currency, t }) {
           /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0417\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u2014 " }),
           e.pull
         ] }),
-        /* @__PURE__ */ jsxs("p", { children: [
+        isEntryClosed(e) && /* @__PURE__ */ jsxs("p", { children: [
           /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u2014 " }),
           e.lesson
         ] }),
+        !isEntryClosed(e) && /* @__PURE__ */ jsxs(
+          "button",
+          {
+            onClick: () => onCloseTrade(e.id),
+            className: "flex items-center gap-1.5 text-xs pt-1",
+            style: { color: accent },
+            children: [/* @__PURE__ */ jsx(ChevronRight, { size: 12 }), " \u0417\u0430\u043A\u0440\u044B\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443"]
+          }
+        ),
         confirmId === e.id ? /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 pt-1", children: [
           /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: BASE.inkFaint }, children: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0431\u0435\u0437\u0432\u043E\u0437\u0432\u0440\u0430\u0442\u043D\u043E?" }),
           /* @__PURE__ */ jsx("button", { onClick: () => {
@@ -3146,7 +3805,7 @@ function CalendarView({ entries, accent, measureMode, currency }) {
   };
   const selectedEntries = selectedDate ? entriesByDate[selectedDate.toDateString()] || [] : [];
   const selectedNet = selectedEntries.reduce((s, e) => s + (e.r || 0), 0);
-  const daySummary = useMemo(() => calculateCalendarStats(selectedEntries), [selectedEntries]);
+  const daySummary = useMemo(() => calculateCalendarStats(selectedEntries, selectedEntries.filter(isEntryClosed)), [selectedEntries]);
   const monthLabel = viewMonth.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
   const weekdayLabels = ["\u041F\u043D", "\u0412\u0442", "\u0421\u0440", "\u0427\u0442", "\u041F\u0442", "\u0421\u0431", "\u0412\u0441"];
   const changeMonth = (delta) => {
@@ -3239,7 +3898,8 @@ function CalendarView({ entries, accent, measureMode, currency }) {
             /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
             /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: e.instrument }),
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkDim }, children: DIRECTION_LABEL[e.direction] }),
-            e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(e.r, measureMode, currency) })
+            !isEntryClosed(e) && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0 text-[10px]", style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043A\u0440\u044B\u0442\u0430" }),
+            isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(e.r, measureMode, currency) })
           ] }),
           e.lesson && e.lesson !== "\u2014" && /* @__PURE__ */ jsx("p", { className: "text-xs pl-3.5 mt-0.5", style: { color: BASE.inkFaint }, children: e.lesson })
         ] }, e.id)) })
@@ -3247,24 +3907,25 @@ function CalendarView({ entries, accent, measureMode, currency }) {
     ] }) : /* @__PURE__ */ jsx("p", { className: "text-sm text-center", style: { color: BASE.inkFaint }, children: "\u041D\u0430\u0436\u043C\u0438 \u043D\u0430 \u0447\u0438\u0441\u043B\u043E, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u0441\u0432\u043E\u0434\u043A\u0443 \u0437\u0430 \u0434\u0435\u043D\u044C." })
   ] });
 }
-function Patterns({ entries, accent, measureMode, currency, analytics }) {
+function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }) {
   const [view, setView] = useState("emotions");
   const [reviewOpen, setReviewOpen] = useState(false);
+  const closedEntries = useMemo(() => entries.filter(isEntryClosed), [entries]);
   const grouped = useMemo(() => {
     const g = { Win: [], Loss: [], Breakeven: [] };
-    entries.forEach((e) => g[e.outcome]?.push(e));
+    closedEntries.forEach((e) => g[e.outcome]?.push(e));
     return g;
-  }, [entries]);
-  const winRate = entries.length ? Math.round(grouped.Win.length / entries.length * 100) : 0;
-  const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
+  }, [closedEntries]);
+  const winRate = closedEntries.length ? Math.round(grouped.Win.length / closedEntries.length * 100) : 0;
+  const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const avgR = withR.length ? withR.reduce((s, e) => s + e.r, 0) / withR.length : null;
-  const traderPatterns = useMemo(() => analyzeTraderPatterns(entries), [entries]);
+  const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const insight = useMemo(() => {
-    if (grouped.Win.length < 2 || grouped.Loss.length < 2) return "\u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A \u0441 \u043E\u0431\u0435\u0438\u0445 \u0441\u0442\u043E\u0440\u043E\u043D \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u2014 \u0438 \u0437\u0434\u0435\u0441\u044C \u043D\u0430\u0447\u043D\u0451\u0442 \u043F\u0440\u043E\u044F\u0432\u043B\u044F\u0442\u044C\u0441\u044F \u043F\u0430\u0442\u0442\u0435\u0440\u043D.";
+    if (grouped.Win.length < 2 || grouped.Loss.length < 2) return t.pattern.needMoreEntries;
     if (analytics.insights.length) return analytics.insights[0].text;
-    if (traderPatterns.available) return "\u042F\u0432\u043D\u043E\u0433\u043E \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E\u0433\u043E \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430 \u043F\u043E\u043A\u0430 \u043D\u0435 \u0432\u0438\u0434\u043D\u043E \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u0440\u0438\u0445\u043E\u0434\u044F\u0442 \u0438\u0437 \u043F\u043E\u0445\u043E\u0436\u0438\u0445 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u044B\u0445 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0439. \u042D\u0442\u043E \u0441\u0430\u043C\u043E \u043F\u043E \u0441\u0435\u0431\u0435 \u0432\u0430\u0436\u043D\u043E \u0437\u0430\u043C\u0435\u0442\u0438\u0442\u044C.";
-    return `\u041F\u043E\u043A\u0430 \u043D\u0430\u043A\u0430\u043F\u043B\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B \u0434\u043B\u044F \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u044B\u0445 \u0432\u044B\u0432\u043E\u0434\u043E\u0432 (\u043D\u0443\u0436\u043D\u043E \u0435\u0449\u0451 ${traderPatterns.needed - traderPatterns.sampleSize} \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0441 \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u043E\u0439 \u0442\u043E\u0447\u043A\u043E\u0439) \u2014 \u043D\u043E \u0443\u0436\u0435 \u0432\u0438\u0434\u043D\u043E, \u0447\u0442\u043E \u0436\u0443\u0440\u043D\u0430\u043B \u0432\u0435\u0434\u0451\u0442\u0441\u044F \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E, \u0438 \u044D\u0442\u043E \u0433\u043B\u0430\u0432\u043D\u043E\u0435.`;
-  }, [grouped, traderPatterns, analytics]);
+    if (traderPatterns.available) return t.pattern.noPatternYetLong;
+    return t.pattern.accumulating(traderPatterns.needed - traderPatterns.sampleSize);
+  }, [grouped, traderPatterns, analytics, t]);
   const equityCurve = useMemo(() => {
     const sorted = [...withR].sort((a, b) => a.date - b.date);
     let cum = 0;
@@ -3313,7 +3974,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics }) {
     ] });
   };
   if (reviewOpen) {
-    return /* @__PURE__ */ jsx(JournalReview, { entries, accent, onClose: () => setReviewOpen(false) });
+    return /* @__PURE__ */ jsx(JournalReview, { entries: closedEntries, accent, onClose: () => setReviewOpen(false), t, lang });
   }
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
@@ -3352,25 +4013,32 @@ function Patterns({ entries, accent, measureMode, currency, analytics }) {
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 flex-wrap text-[10px] mb-6", style: { color: BASE.inkFaint }, children: [
         analytics.awareness.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\u041E\u0441\u043E\u0437\u043D\u0430\u043D\u043D\u043E\u0441\u0442\u044C ",
+          t.home.awareness,
+          " ",
           analytics.awareness.score.value,
           "%",
           TREND_ARROW[analytics.awareness.trend] || ""
         ] }),
         analytics.discipline.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 \u0414\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430 ",
+          "\xB7 ",
+          t.home.discipline,
+          " ",
           analytics.discipline.score.value,
           "%",
           TREND_ARROW[analytics.discipline.trend] || ""
         ] }),
         analytics.risk.stability.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 \u0421\u0442\u0430\u0431\u0438\u043B\u044C\u043D\u043E\u0441\u0442\u044C \u0440\u0438\u0441\u043A\u0430 ",
+          "\xB7 ",
+          t.home.riskStability,
+          " ",
           analytics.risk.stability.value,
           "%",
           TREND_ARROW[analytics.risk.stability.trend] || ""
         ] }),
         analytics.reflection.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 \u0420\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F ",
+          "\xB7 ",
+          t.home.reflection,
+          " ",
           analytics.reflection.score.value,
           "%",
           TREND_ARROW[analytics.reflection.trend] || ""
@@ -3456,27 +4124,28 @@ function ChallengeCard({ icon: Icon, title, desc, progress, goal, accent }) {
     ] })
   ] });
 }
-function Challenge({ entries, accent, weeklyGoal }) {
-  const { streak, week } = useStreak(entries);
+function Challenge({ entries, accent, weeklyGoal, t, lang }) {
+  const { streak, week } = useStreak(entries, lang);
   const daysThisWeek = week.filter((d) => d.filled).length;
   const pct = Math.min(100, Math.round(daysThisWeek / weeklyGoal * 100));
   const animatedStreak = Math.round(useAnimatedNumber(streak));
   const CHALLENGE_ICONS = { revenge: ShieldCheck, reflect: PenLine, winstreak: TrendingUp };
-  const challenges = useMemo(() => calculateChallengeProgress(entries), [entries]);
+  const challenges = useMemo(() => calculateChallengeProgress(entries, lang), [entries, lang]);
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(Flame, { size: 17, style: { color: "#D98A4A" } }),
-      " \u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436"
+      " ",
+      t.challenge.title
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-4 text-center py-6", children: [
       /* @__PURE__ */ jsx("div", { className: "text-4xl mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: animatedStreak }),
-      /* @__PURE__ */ jsx("div", { className: "text-xs uppercase tracking-wide", style: { color: BASE.inkFaint }, children: "\u0434\u043D\u0435\u0439 \u043F\u043E\u0434\u0440\u044F\u0434" })
+      /* @__PURE__ */ jsx("div", { className: "text-xs uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.challenge.daysInARow })
     ] }),
-    /* @__PURE__ */ jsx(ChallengeCard, { icon: CalendarCheck, title: "\u041D\u0435\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u044C", desc: `\u0412\u0435\u0434\u0438 \u0436\u0443\u0440\u043D\u0430\u043B ${weeklyGoal} \u0438\u0437 7 \u0434\u043D\u0435\u0439 \u044D\u0442\u043E\u0439 \u043D\u0435\u0434\u0435\u043B\u0438.`, progress: daysThisWeek, goal: weeklyGoal, accent }),
+    /* @__PURE__ */ jsx(ChallengeCard, { icon: CalendarCheck, title: t.challenge.weeklyConsistency, desc: t.challenge.weeklyConsistencyDesc(weeklyGoal), progress: daysThisWeek, goal: weeklyGoal, accent }),
     challenges.map((c) => /* @__PURE__ */ jsx(ChallengeCard, { icon: CHALLENGE_ICONS[c.id], title: c.title, desc: c.desc, progress: c.progress, goal: c.goal, accent }, c.id)),
     /* @__PURE__ */ jsxs(Card, { className: "mt-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-3", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u042D\u0442\u0430 \u043D\u0435\u0434\u0435\u043B\u044F" }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: t.challenge.thisWeek }),
         /* @__PURE__ */ jsxs("span", { className: "text-xs", style: { color: BASE.inkFaint }, children: [
           daysThisWeek,
           "/",
@@ -3486,7 +4155,7 @@ function Challenge({ entries, accent, weeklyGoal }) {
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-4", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-700 ease-out", style: { width: `${pct}%`, background: accent } }) }),
       /* @__PURE__ */ jsx(WeekDots, { week, accent })
     ] }),
-    /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkFaint }, children: "\u0420\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u044C \u0432\u0430\u0436\u043D\u0435\u0435 \u043B\u044E\u0431\u043E\u0439 \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438. \u0421\u0435\u0440\u0438\u044F \u2014 \u044D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E \u043F\u043E\u0431\u0435\u0434\u044B, \u0430 \u043F\u0440\u043E \u0442\u043E, \u0447\u0442\u043E\u0431\u044B \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u0442\u044C\u0441\u044F \u043A \u0441\u0435\u0431\u0435 \u0434\u0430\u0436\u0435 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430." })
+    /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkFaint }, children: t.challenge.footer })
   ] });
 }
 function CalibrationRing({ pct, color, size = 172 }) {
@@ -3517,20 +4186,21 @@ function CalibrationRing({ pct, color, size = 172 }) {
     ] })
   ] });
 }
-function Calibration({ accent, onComplete }) {
+function Calibration({ accent, onComplete, lang, t }) {
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
-  const q = CALIBRATION_QUESTIONS[qIndex];
+  const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
+  const q = questions[qIndex];
   const selectAnswer = (option) => {
     const next = { ...answers, [q.id]: option };
     setAnswers(next);
     setTimeout(() => {
-      if (qIndex + 1 < CALIBRATION_QUESTIONS.length) {
+      if (qIndex + 1 < questions.length) {
         setQIndex(qIndex + 1);
       } else {
-        const r = scoreCalibration(next);
+        const r = scoreCalibration(next, lang);
         setResult(r);
         onComplete({ pct: r.pct, tierColor: r.tier.color, date: (/* @__PURE__ */ new Date()).toISOString(), riskFactors: r.riskFactors });
         setStage("result");
@@ -3546,16 +4216,16 @@ function Calibration({ accent, onComplete }) {
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Gauge, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "\u041A\u0410\u041B\u0418\u0411\u0420\u041E\u0412\u041A\u0410" }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u044C \u0433\u043E\u0442\u043E\u0432\u043D\u043E\u0441\u0442\u044C \u043A \u0442\u043E\u0440\u0433\u043E\u0432\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438." }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: "\u042D\u0442\u043E \u0437\u0430\u0439\u043C\u0451\u0442 \u043C\u0435\u043D\u0435\u0435 30 \u0441\u0435\u043A\u0443\u043D\u0434. \u041E\u0442\u0432\u0435\u0447\u0430\u0439\u0442\u0435 \u0447\u0435\u0441\u0442\u043D\u043E. \u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u043D\u0435 \u0440\u044B\u043D\u043E\u043A, \u0430 \u0432\u0430\u0448\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435." }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.calibration.heading }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.calibration.subtitle }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: t.calibration.intro }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: () => setStage("quiz"),
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
-          children: "\u041D\u0430\u0447\u0430\u0442\u044C"
+          children: t.calibration.start
         }
       )
     ] });
@@ -3563,15 +4233,10 @@ function Calibration({ accent, onComplete }) {
   if (stage === "quiz") {
     return /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2 text-xs", style: { color: BASE.inkFaint }, children: [
-        /* @__PURE__ */ jsxs("span", { children: [
-          "\u0412\u043E\u043F\u0440\u043E\u0441 ",
-          qIndex + 1,
-          " \u0438\u0437 ",
-          CALIBRATION_QUESTIONS.length
-        ] }),
-        /* @__PURE__ */ jsx("button", { onClick: restart, style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" })
+        /* @__PURE__ */ jsx("span", { children: t.calibration.questionOf(qIndex + 1, questions.length) }),
+        /* @__PURE__ */ jsx("button", { onClick: restart, style: { color: BASE.inkFaint }, children: t.calibration.cancel })
       ] }),
-      /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-6", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${qIndex / CALIBRATION_QUESTIONS.length * 100}%`, background: accent } }) }),
+      /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-6", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${qIndex / questions.length * 100}%`, background: accent } }) }),
       /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: q.text }),
       /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: q.options.map((opt) => /* @__PURE__ */ jsx(
         "button",
@@ -3591,22 +4256,23 @@ function Calibration({ accent, onComplete }) {
     result.riskFactors.length > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1.5", children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 14, style: { color: LOSS } }),
-        /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide", style: { color: LOSS }, children: "\u0413\u043B\u0430\u0432\u043D\u044B\u0439 \u0444\u0430\u043A\u0442\u043E\u0440 \u0440\u0438\u0441\u043A\u0430" })
+        /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide", style: { color: LOSS }, children: t.calibration.mainRiskFactor })
       ] }),
       result.riskFactors.map((f, i) => /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.ink }, children: f }, i))
     ] }),
     result.factors.length > 0 && /* @__PURE__ */ jsxs(Card, { className: "text-left mb-4", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0427\u0442\u043E \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E \u043D\u0430 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442" }),
+      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.calibration.whatInfluenced }),
       result.factors.map((f, i) => /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-2 text-sm py-1", children: [
         /* @__PURE__ */ jsx("span", { style: { color: f.type === "positive" ? WIN : WARN }, children: f.type === "positive" ? "\u2713" : "\u26A0" }),
         /* @__PURE__ */ jsx("span", { style: { color: BASE.ink }, children: f.text })
       ] }, i))
     ] }),
-    /* @__PURE__ */ jsx("button", { onClick: restart, className: "text-sm transition-opacity duration-150", style: { color: BASE.inkFaint }, children: "\u041F\u0440\u043E\u0439\u0442\u0438 \u0437\u0430\u043D\u043E\u0432\u043E" })
+    /* @__PURE__ */ jsx("button", { onClick: restart, className: "text-sm transition-opacity duration-150", style: { color: BASE.inkFaint }, children: t.calibration.restart })
   ] });
 }
-function JournalReview({ entries, accent, onClose }) {
-  const issues = useMemo(() => buildReviewQuiz(entries), [entries]);
+function JournalReview({ entries, accent, onClose, t, lang }) {
+  const issues = useMemo(() => buildReviewQuiz(entries, lang), [entries, lang]);
+  const likert = lang === "en" ? REVIEW_LIKERT_EN : REVIEW_LIKERT;
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -3619,7 +4285,7 @@ function JournalReview({ entries, accent, onClose }) {
       if (qIndex + 1 < issues.length) {
         setQIndex(qIndex + 1);
       } else {
-        setResult(scoreJournalReview(issues, next));
+        setResult(scoreJournalReview(issues, next, lang));
         setStage("result");
       }
     }, 200);
@@ -3633,15 +4299,15 @@ function JournalReview({ entries, accent, onClose }) {
   if (issues.length === 0) {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "\u0420\u0410\u0417\u0411\u041E\u0420" }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm mb-8 px-4 leading-relaxed", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043A\u0430 \u043C\u0430\u043B\u043E\u0432\u0430\u0442\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439, \u0447\u0442\u043E\u0431\u044B \u0432\u044B\u0434\u0435\u043B\u0438\u0442\u044C \u0432 \u043D\u0438\u0445 \u0437\u0430\u043A\u043E\u043D\u043E\u043C\u0435\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u2014 \u0438 \u0440\u0430\u0437\u0431\u043E\u0440 \u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D." }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-8 px-4 leading-relaxed", style: { color: BASE.inkFaint }, children: t.review.notEnough }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: onClose,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
-          children: "\u041D\u0430\u0437\u0430\u0434"
+          children: t.review.back
         }
       )
     ] });
@@ -3649,42 +4315,32 @@ function JournalReview({ entries, accent, onClose }) {
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "\u0420\u0410\u0417\u0411\u041E\u0420" }),
-      /* @__PURE__ */ jsxs("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: [
-        issues.length,
-        " ",
-        pluralRu(issues.length, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432"),
-        " \u043F\u043E \u0442\u043E\u043C\u0443, \u0447\u0442\u043E \u0443\u0436\u0435 \u0432\u0438\u0434\u043D\u043E \u0432 \u0442\u0432\u043E\u0451\u043C \u0436\u0443\u0440\u043D\u0430\u043B\u0435."
-      ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: "\u042D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E \u0440\u044B\u043D\u043E\u043A \u0438 \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0439 \u0441\u043E\u0432\u0435\u0442 \u2014 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u0440\u043E \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435, \u0432 \u043A\u043E\u0442\u043E\u0440\u043E\u043C \u0442\u044B \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0448\u044C \u0440\u0435\u0448\u0435\u043D\u0438\u044F. \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u0447\u0435\u0441\u0442\u043D\u043E, \u0437\u0434\u0435\u0441\u044C \u043D\u0435\u043A\u043E\u043C\u0443 \u043F\u043E\u043D\u0440\u0430\u0432\u0438\u0442\u044C\u0441\u044F." }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.review.questionsCount(issues.length) }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: t.review.intro }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: () => setStage("quiz"),
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
-          children: "\u041D\u0430\u0447\u0430\u0442\u044C"
+          children: t.calibration.start
         }
       ),
-      /* @__PURE__ */ jsx("button", { onClick: onClose, className: "block mx-auto mt-4 text-sm", style: { color: BASE.inkFaint }, children: "\u041D\u0430\u0437\u0430\u0434" })
+      /* @__PURE__ */ jsx("button", { onClick: onClose, className: "block mx-auto mt-4 text-sm", style: { color: BASE.inkFaint }, children: t.review.back })
     ] });
   }
   if (stage === "quiz") {
     return /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2 text-xs", style: { color: BASE.inkFaint }, children: [
-        /* @__PURE__ */ jsxs("span", { children: [
-          "\u0412\u043E\u043F\u0440\u043E\u0441 ",
-          qIndex + 1,
-          " \u0438\u0437 ",
-          issues.length
-        ] }),
-        /* @__PURE__ */ jsx("button", { onClick: onClose, style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" })
+        /* @__PURE__ */ jsx("span", { children: t.calibration.questionOf(qIndex + 1, issues.length) }),
+        /* @__PURE__ */ jsx("button", { onClick: onClose, style: { color: BASE.inkFaint }, children: t.calibration.cancel })
       ] }),
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-6", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${qIndex / issues.length * 100}%`, background: accent } }) }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: q.title }),
       /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-4", style: { color: BASE.inkDim }, children: q.evidence }),
       /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: q.question }),
-      /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: REVIEW_LIKERT.map((opt) => /* @__PURE__ */ jsx(
+      /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: likert.map((opt) => /* @__PURE__ */ jsx(
         "button",
         {
           onClick: () => selectAnswer(opt),
@@ -3701,46 +4357,41 @@ function JournalReview({ entries, accent, onClose }) {
   return /* @__PURE__ */ jsxs("div", { className: "text-center stagger", children: [
     /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-4", children: /* @__PURE__ */ jsx(CalibrationRing, { pct: result.pct, color: result.tier.color }) }),
     /* @__PURE__ */ jsx("p", { className: "text-base mb-1 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: result.tier.label }),
-    /* @__PURE__ */ jsxs("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: [
-      totalAnswered,
-      " ",
-      pluralRu(totalAnswered, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432"),
-      dataDrivenAnswered > 0 ? `, \u0438\u0437 \u043D\u0438\u0445 ${dataDrivenAnswered} \u2014 \u043F\u043E \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430\u043C \u0438\u0437 \u0436\u0443\u0440\u043D\u0430\u043B\u0430` : ""
-    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: t.review.questionsAnswered(totalAnswered, dataDrivenAnswered) }),
     /* @__PURE__ */ jsx(Card, { className: "text-left mb-4", children: /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: result.narrative }) }),
     result.priority && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 14, style: { color: LOSS } }),
-        /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide", style: { color: LOSS }, children: "\u041D\u0430\u0447\u043D\u0438 \u0441 \u044D\u0442\u043E\u0433\u043E" })
+        /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide", style: { color: LOSS }, children: t.review.startHere })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-1", style: { color: BASE.ink, fontWeight: 600 }, children: result.priority.title }),
       /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-2", style: { color: BASE.inkDim }, children: result.priority.evidence }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: result.priority.recommendation })
     ] }),
     result.rest.length > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0415\u0449\u0451 \u0441\u0442\u043E\u0438\u0442 \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435" }),
+      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.review.alsoWorthNoting }),
       result.rest.map((f) => /* @__PURE__ */ jsxs("div", { className: "mb-3 last:mb-0", children: [
         /* @__PURE__ */ jsx("p", { className: "text-sm mb-1", style: { color: BASE.ink, fontWeight: 500 }, children: f.title }),
         /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkDim }, children: f.recommendation })
       ] }, f.id))
     ] }),
     result.clear.length > 0 && /* @__PURE__ */ jsxs(Card, { className: "text-left mb-4", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0422\u0443\u0442 \u0432\u0440\u043E\u0434\u0435 \u043F\u043E\u0440\u044F\u0434\u043E\u043A" }),
+      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.review.looksFine }),
       result.clear.map((f) => /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-2 text-sm py-1", children: [
         /* @__PURE__ */ jsx(Check, { size: 13, style: { color: WIN, marginTop: 2, flexShrink: 0 } }),
         /* @__PURE__ */ jsx("span", { style: { color: BASE.ink }, children: f.title })
       ] }, f.id))
     ] }),
-    /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u0447\u0435\u0441\u043A\u0438\u0435, \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0435 \u2014 \u043E\u043D\u0438 \u043D\u0435 \u043F\u0440\u043E \u0442\u043E, \u0447\u0442\u043E \u0442\u043E\u0440\u0433\u043E\u0432\u0430\u0442\u044C, \u0430 \u043F\u0440\u043E \u0442\u043E, \u043A\u0430\u043A \u0442\u044B \u044D\u0442\u043E \u0434\u0435\u043B\u0430\u0435\u0448\u044C." }),
+    /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: t.review.disclaimer }),
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-4", children: [
-      /* @__PURE__ */ jsx("button", { onClick: restart, className: "text-sm", style: { color: BASE.inkFaint }, children: "\u041F\u0440\u043E\u0439\u0442\u0438 \u0437\u0430\u043D\u043E\u0432\u043E" }),
+      /* @__PURE__ */ jsx("button", { onClick: restart, className: "text-sm", style: { color: BASE.inkFaint }, children: t.calibration.restart }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: onClose,
           className: "px-8 py-2.5 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 },
-          children: "\u0413\u043E\u0442\u043E\u0432\u043E"
+          children: t.review.done
         }
       )
     ] })
@@ -3847,7 +4498,7 @@ function drawChart(canvas, eng, opts) {
     ctx.fillText(label, w - padR + 8, y);
   };
   if (entryPrice != null) drawDashed(entryPrice, direction === "long" ? WIN : LOSS, formatPrice(entryPrice));
-  if (liqPrice != null) drawDashed(liqPrice, WARN, "\u043B\u0438\u043A\u0432.");
+  if (liqPrice != null) drawDashed(liqPrice, WARN, opts.lang === "en" ? "liq." : "\u043B\u0438\u043A\u0432.");
   if (tpPrice != null) drawDashed(tpPrice, WIN, "TP");
   if (slPrice != null) drawDashed(slPrice, LOSS, "SL");
   const last = eng.price;
@@ -3875,13 +4526,13 @@ function drawChart(canvas, eng, opts) {
   ctx.fillText(formatPrice(last), w - padR + 8, tagY);
   ctx.textAlign = "left";
 }
-function CandleChart({ engineRef, accent, entryPrice, liqPrice, tpPrice, slPrice, direction, groupFactor = 1 }) {
+function CandleChart({ engineRef, accent, entryPrice, liqPrice, tpPrice, slPrice, direction, groupFactor = 1, lang = "ru" }) {
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   useEffect(() => {
     const loop = () => {
       if (canvasRef.current) {
-        drawChart(canvasRef.current, engineRef.current, { accent, entryPrice, liqPrice, tpPrice, slPrice, direction, groupFactor });
+        drawChart(canvasRef.current, engineRef.current, { accent, entryPrice, liqPrice, tpPrice, slPrice, direction, groupFactor, lang });
       }
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -3974,7 +4625,7 @@ function drawRadar(canvas, eng, opts) {
   }
   ctx.globalAlpha = 1;
 }
-function OrderRadar({ engineRef, accent }) {
+function OrderRadar({ engineRef, accent, t }) {
   const canvasRef = useRef(null);
   const rafRef = useRef(null);
   useEffect(() => {
@@ -3987,16 +4638,18 @@ function OrderRadar({ engineRef, accent }) {
   }, [accent]);
   return /* @__PURE__ */ jsxs(Card, { className: "mb-2.5", children: [
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1.5", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: "\u041A\u0440\u0443\u043F\u043D\u044B\u0435 \u0437\u0430\u044F\u0432\u043A\u0438" }),
+      /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.sim.bigOrders }),
       /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1 text-[9px]", style: { color: BASE.inkFaint }, children: [
         /* @__PURE__ */ jsx("span", { style: { width: 5, height: 5, borderRadius: 999, background: WIN, display: "inline-block" } }),
-        " \u0431\u0438\u0434",
+        " ",
+        t.sim.bid,
         /* @__PURE__ */ jsx("span", { style: { width: 5, height: 5, borderRadius: 999, background: LOSS, display: "inline-block", marginLeft: 4 } }),
-        " \u0430\u0441\u043A"
+        " ",
+        t.sim.ask
       ] })
     ] }),
     /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 118 }, children: /* @__PURE__ */ jsx("canvas", { ref: canvasRef, style: { width: "100%", height: "100%", display: "block" } }) }),
-    /* @__PURE__ */ jsx("p", { className: "text-[10px] text-center mt-1.5", style: { color: BASE.inkFaint }, children: "\u041D\u0435 \u0433\u0430\u0440\u0430\u043D\u0442\u0438\u044F \u2014 \u043C\u043E\u0433\u0443\u0442 \u0441\u043D\u044F\u0442\u044C, \u0438\u0441\u043F\u043E\u043B\u043D\u0438\u0442\u044C \u0438\u043B\u0438 \u0441\u0434\u0432\u0438\u043D\u0443\u0442\u044C \u0432 \u043B\u044E\u0431\u043E\u0439 \u043C\u043E\u043C\u0435\u043D\u0442" })
+    /* @__PURE__ */ jsx("p", { className: "text-[10px] text-center mt-1.5", style: { color: BASE.inkFaint }, children: t.sim.noGuarantee })
   ] });
 }
 function LeverageBar({ value, onChange, accent, disabled }) {
@@ -4025,7 +4678,7 @@ function LeverageBar({ value, onChange, accent, disabled }) {
     )) })
   ] });
 }
-function Simulator({ accent, onWin }) {
+function Simulator({ accent, onWin, t, lang }) {
   const [stage, setStage] = useState("intro");
   const [leverage, setLeverage] = useState(10);
   const [timeframeSec, setTimeframeSec] = useState(5);
@@ -4074,7 +4727,7 @@ function Simulator({ accent, onWin }) {
     return pos.direction === "long" ? pos.entryPrice * (1 - adverse) : pos.entryPrice * (1 + adverse);
   };
   const finalizeSession = (finalCapital, finalTrades) => {
-    const capitalSeq = [SIM_START_CAPITAL, ...finalTrades.map((t) => t.capitalAfter)];
+    const capitalSeq = [SIM_START_CAPITAL, ...finalTrades.map((t2) => t2.capitalAfter)];
     let peak = SIM_START_CAPITAL, maxDD = 0;
     capitalSeq.forEach((c) => {
       peak = Math.max(peak, c);
@@ -4083,13 +4736,14 @@ function Simulator({ accent, onWin }) {
     const eng = engineRef.current;
     const marketReturn = eng ? (eng.price - 100) / 100 : 0;
     const playerReturn = (finalCapital - SIM_START_CAPITAL) / SIM_START_CAPITAL;
-    const impulsive = finalTrades.filter((t) => t.durationMs < 3e3).length;
-    const anyLiquidated = finalTrades.some((t) => t.liquidated);
+    const impulsive = finalTrades.filter((t2) => t2.durationMs < 3e3).length;
+    const anyLiquidated = finalTrades.some((t2) => t2.liquidated);
+    const achievementLabels = lang === "en" ? SIM_ACHIEVEMENTS_EN : SIM_ACHIEVEMENTS;
     const achievements = [];
-    if (maxDD < 0.15) achievements.push(SIM_ACHIEVEMENTS.lowRisk);
-    if (finalTrades.length > 0 && impulsive === 0) achievements.push(SIM_ACHIEVEMENTS.noImpulsive);
-    if (maxDD < 0.05) achievements.push(SIM_ACHIEVEMENTS.tightDrawdown);
-    if (!anyLiquidated && finalTrades.length > 0) achievements.push(SIM_ACHIEVEMENTS.survivedVol);
+    if (maxDD < 0.15) achievements.push(achievementLabels.lowRisk);
+    if (finalTrades.length > 0 && impulsive === 0) achievements.push(achievementLabels.noImpulsive);
+    if (maxDD < 0.05) achievements.push(achievementLabels.tightDrawdown);
+    if (!anyLiquidated && finalTrades.length > 0) achievements.push(achievementLabels.survivedVol);
     const beatMarket = playerReturn > marketReturn;
     setCapital(finalCapital);
     setTrades(finalTrades);
@@ -4176,12 +4830,12 @@ function Simulator({ accent, onWin }) {
       finalizeSession(finalCapital, finalTrades);
       return;
     }
-    const t = setTimeout(() => setSecondsLeft((s) => s - 1), 1e3);
-    return () => clearTimeout(t);
+    const t2 = setTimeout(() => setSecondsLeft((s) => s - 1), 1e3);
+    return () => clearTimeout(t2);
   }, [stage, secondsLeft]);
   const startSession = () => {
     const seed = Math.floor(Math.random() * 1e9);
-    const eng = createMarketEngine(seed, 100);
+    const eng = createMarketEngine(seed, 100, lang);
     engineRef.current = eng;
     capitalRef.current = SIM_START_CAPITAL;
     tradesRef.current = [];
@@ -4247,14 +4901,14 @@ function Simulator({ accent, onWin }) {
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Swords, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "\u0421\u0418\u041C\u0423\u041B\u042F\u0422\u041E\u0420 \u0420\u042B\u041D\u041A\u0410" }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm mb-8", style: { color: BASE.inkDim }, children: "\u0418\u0441\u043A\u0443\u0441\u0441\u0442\u0432\u0435\u043D\u043D\u044B\u0439 \u0440\u044B\u043D\u043E\u043A. \u0420\u0435\u0430\u043B\u044C\u043D\u044B\u0435 \u0440\u0435\u0448\u0435\u043D\u0438\u044F." }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.sim.heading }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-8", style: { color: BASE.inkDim }, children: t.sim.subtitle }),
       /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "text-left mb-4", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B" }),
-          /* @__PURE__ */ jsx("span", { className: "text-[10px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: "Beta" })
+          /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: t.sim.terminal }),
+          /* @__PURE__ */ jsx("span", { className: "text-[10px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: t.sim.beta })
         ] }),
-        /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: "\u0420\u0430\u0434\u0430\u0440 \u043A\u0440\u0443\u043F\u043D\u044B\u0445 \u0437\u0430\u044F\u0432\u043E\u043A, \u0441\u043B\u0443\u0447\u0430\u0439\u043D\u044B\u0435 \u043D\u043E\u0432\u043E\u0441\u0442\u0438 \u0438 \u043F\u043B\u0435\u0447\u043E \u0434\u043E x50. \u0420\u044B\u043D\u043E\u043A \u043E\u0442\u043A\u0440\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u0443\u0436\u0435 \xAB\u0432 \u043F\u0440\u043E\u0446\u0435\u0441\u0441\u0435\xBB \u2014 \u0441 \u0438\u0441\u0442\u043E\u0440\u0438\u0435\u0439 \u043D\u0430 \u0433\u0440\u0430\u0444\u0438\u043A\u0435 \u2014 \u0438 \u0432\u0435\u0434\u0451\u0442 \u0441\u0435\u0431\u044F \u043D\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043C\u043E \u043E\u0442 \u0432\u0430\u0448\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A." })
+        /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: t.sim.introText })
       ] }),
       /* @__PURE__ */ jsx(
         "button",
@@ -4262,7 +4916,7 @@ function Simulator({ accent, onWin }) {
           onClick: startSession,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
-          children: "\u041D\u0430\u0447\u0430\u0442\u044C \u0441\u0435\u0441\u0441\u0438\u044E"
+          children: t.sim.startSession
         }
       )
     ] });
@@ -4285,7 +4939,7 @@ function Simulator({ accent, onWin }) {
               },
               children: [
                 tf,
-                "\u0441"
+                lang === "en" ? "s" : "\u0441"
               ]
             },
             tf
@@ -4300,7 +4954,7 @@ function Simulator({ accent, onWin }) {
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-1000 ease-linear", style: { width: `${secondsLeft / SIM_DURATION * 100}%`, background: secondsLeft <= 10 ? LOSS : accent } }) }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsxs("div", { children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "\u041A\u0430\u043F\u0438\u0442\u0430\u043B" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.capital }),
           /* @__PURE__ */ jsx("div", { className: "text-[22px] leading-none", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 500 }, children: formatSimMoney(liveEquity) }),
           /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: liveEquity >= SIM_START_CAPITAL ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
             liveEquity >= SIM_START_CAPITAL ? "+" : "",
@@ -4309,7 +4963,7 @@ function Simulator({ accent, onWin }) {
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "text-right", children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "\u0426\u0435\u043D\u0430" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.price }),
           /* @__PURE__ */ jsx("div", { className: "text-[18px] leading-none transition-colors duration-150", style: { fontFamily: "'JetBrains Mono', monospace", color: upTick ? WIN : LOSS, fontWeight: 500 }, children: formatPrice(uiPrice) })
         ] })
       ] }),
@@ -4324,7 +4978,8 @@ function Simulator({ accent, onWin }) {
             tpPrice,
             slPrice,
             direction: position?.direction ?? null,
-            groupFactor
+            groupFactor,
+            lang
           }
         ),
         uiNews && /* @__PURE__ */ jsxs(
@@ -4335,12 +4990,12 @@ function Simulator({ accent, onWin }) {
             children: [
               /* @__PURE__ */ jsx(Newspaper, { size: 11, style: { color: accent, flexShrink: 0 } }),
               /* @__PURE__ */ jsx("span", { className: "text-[10.5px] leading-tight overflow-hidden text-ellipsis whitespace-nowrap", style: { color: BASE.ink }, children: uiNews.headline }),
-              uiNews.ageMs < uiNews.rampMs && /* @__PURE__ */ jsx("span", { className: "text-[9px] shrink-0 ml-auto", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: "\u0440\u0435\u0430\u043A\u0446\u0438\u044F\u2026" })
+              uiNews.ageMs < uiNews.rampMs && /* @__PURE__ */ jsx("span", { className: "text-[9px] shrink-0 ml-auto", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: t.sim.reacting })
             ]
           }
         ),
-        liquidated && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: LOSS, color: "#1A0806", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: "\u041F\u043E\u0437\u0438\u0446\u0438\u044F \u043B\u0438\u043A\u0432\u0438\u0434\u0438\u0440\u043E\u0432\u0430\u043D\u0430" }) }),
-        autoClosedTag && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${autoClosedTag === "tp" ? WIN : LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: autoClosedTag === "tp" ? WIN : LOSS, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: autoClosedTag === "tp" ? "Take-profit \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B" : "Stop-loss \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B" }) })
+        liquidated && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: LOSS, color: "#1A0806", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: t.sim.positionLiquidated }) }),
+        autoClosedTag && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${autoClosedTag === "tp" ? WIN : LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: autoClosedTag === "tp" ? WIN : LOSS, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: autoClosedTag === "tp" ? t.sim.takeProfitHit : t.sim.stopLossHit }) })
       ] }),
       /* @__PURE__ */ jsx(LeverageBar, { value: leverage, onChange: setLeverage, accent, disabled: !!position }),
       /* @__PURE__ */ jsxs("div", { className: "mb-2.5", children: [
@@ -4385,11 +5040,12 @@ function Simulator({ accent, onWin }) {
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
           /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2 text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: [
             /* @__PURE__ */ jsxs("span", { className: "px-2 py-0.5 rounded-full text-[11px]", style: { color: position.direction === "long" ? WIN : LOSS, border: `1px solid ${position.direction === "long" ? WIN : LOSS}40` }, children: [
-              position.direction === "long" ? "\u041B\u043E\u043D\u0433" : "\u0428\u043E\u0440\u0442",
+              position.direction === "long" ? t.sim.long : t.sim.short,
               " x",
               position.leverage
             ] }),
-            "\u0432\u0445\u043E\u0434 ",
+            t.sim.entry,
+            " ",
             formatPrice(position.entryPrice)
           ] }),
           /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: liveFloatingPct >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
@@ -4400,7 +5056,8 @@ function Simulator({ accent, onWin }) {
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-[11px] mb-3", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
           /* @__PURE__ */ jsxs("span", { children: [
-            "\u041C\u0430\u0440\u0436\u0430 ",
+            t.sim.margin,
+            " ",
             formatSimMoney(position.margin)
           ] }),
           /* @__PURE__ */ jsxs("span", { children: [
@@ -4409,39 +5066,45 @@ function Simulator({ accent, onWin }) {
             formatSimMoney(liveFloatingPnl)
           ] }),
           /* @__PURE__ */ jsxs("span", { style: { color: WARN }, children: [
-            "\u043B\u0438\u043A\u0432. ",
+            t.sim.liq,
+            " ",
             formatPrice(liqPrice)
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
           addMarginAmount >= 50 && /* @__PURE__ */ jsxs("button", { onClick: addMargin, className: "flex-1 py-2.5 rounded-full text-[13px] transition-all duration-150 active:scale-95", style: { border: `1px solid ${accent}40`, color: accent, background: `${accent}0D` }, children: [
-            "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C ",
+            t.sim.add,
+            " ",
             formatSimMoney(addMarginAmount)
           ] }),
-          /* @__PURE__ */ jsx("button", { onClick: closePosition, className: "flex-1 py-2.5 rounded-full text-[13px] transition-all duration-150 active:scale-95", style: { border: `1px solid ${BASE.line}`, color: BASE.ink, background: BASE.surface2 }, children: "\u0417\u0430\u043A\u0440\u044B\u0442\u044C \u043F\u043E\u0437\u0438\u0446\u0438\u044E" })
+          /* @__PURE__ */ jsx("button", { onClick: closePosition, className: "flex-1 py-2.5 rounded-full text-[13px] transition-all duration-150 active:scale-95", style: { border: `1px solid ${BASE.line}`, color: BASE.ink, background: BASE.surface2 }, children: t.sim.closePosition })
         ] })
       ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
         /* @__PURE__ */ jsxs("div", { className: "text-[11px] text-center mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
-          "\u041C\u0430\u0440\u0436\u0430 ",
+          t.sim.margin,
+          " ",
           formatSimMoney(capital * MARGIN_FRACTION),
-          " \xB7 \u043E\u0431\u044A\u0451\u043C x",
+          " \xB7 ",
+          t.sim.volume,
+          " x",
           leverage,
           " = ",
           formatSimMoney(capital * MARGIN_FRACTION * leverage)
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2.5", children: [
-          /* @__PURE__ */ jsx("button", { onClick: () => openPosition("long"), className: "flex-1 py-3 rounded-2xl text-sm transition-all duration-150 active:scale-95", style: { border: `1px solid ${WIN}40`, color: WIN, background: `${WIN}0D` }, children: "\u041B\u043E\u043D\u0433" }),
-          /* @__PURE__ */ jsx("button", { onClick: () => openPosition("short"), className: "flex-1 py-3 rounded-2xl text-sm transition-all duration-150 active:scale-95", style: { border: `1px solid ${LOSS}40`, color: LOSS, background: `${LOSS}0D` }, children: "\u0428\u043E\u0440\u0442" })
+          /* @__PURE__ */ jsx("button", { onClick: () => openPosition("long"), className: "flex-1 py-3 rounded-2xl text-sm transition-all duration-150 active:scale-95", style: { border: `1px solid ${WIN}40`, color: WIN, background: `${WIN}0D` }, children: t.sim.long }),
+          /* @__PURE__ */ jsx("button", { onClick: () => openPosition("short"), className: "flex-1 py-3 rounded-2xl text-sm transition-all duration-150 active:scale-95", style: { border: `1px solid ${LOSS}40`, color: LOSS, background: `${LOSS}0D` }, children: t.sim.short })
         ] })
       ] }),
-      /* @__PURE__ */ jsx(OrderRadar, { engineRef, accent })
+      /* @__PURE__ */ jsx(OrderRadar, { engineRef, accent, t })
     ] });
   }
   const r = result;
   return /* @__PURE__ */ jsxs("div", { className: "text-center stagger", children: [
-    /* @__PURE__ */ jsx("h2", { className: "text-lg mb-1 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "\u0421\u0415\u0421\u0421\u0418\u042F \u0417\u0410\u0412\u0415\u0420\u0428\u0415\u041D\u0410" }),
+    /* @__PURE__ */ jsx("h2", { className: "text-lg mb-1 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.sim.sessionOver }),
     /* @__PURE__ */ jsxs("p", { className: "text-xs mb-6", style: { color: BASE.inkFaint }, children: [
-      "\u041A\u0430\u043F\u0438\u0442\u0430\u043B: ",
+      t.sim.finalCapital,
+      ": ",
       formatSimMoney(r.finalCapital)
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "text-[40px] leading-none mb-2", style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, color: r.playerReturn >= 0 ? WIN : LOSS }, children: [
@@ -4449,10 +5112,10 @@ function Simulator({ accent, onWin }) {
       (r.playerReturn * 100).toFixed(1),
       "%"
     ] }),
-    /* @__PURE__ */ jsx("p", { className: "text-base mb-6", style: { color: r.beatMarket ? WIN : LOSS, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: r.beatMarket ? "\u041F\u043E\u0431\u0435\u0434\u0430 \u043D\u0430\u0434 \u0440\u044B\u043D\u043A\u043E\u043C." : "\u0420\u044B\u043D\u043E\u043A \u043E\u043A\u0430\u0437\u0430\u043B\u0441\u044F \u0441\u0438\u043B\u044C\u043D\u0435\u0435." }),
+    /* @__PURE__ */ jsx("p", { className: "text-base mb-6", style: { color: r.beatMarket ? WIN : LOSS, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: r.beatMarket ? t.sim.beatMarket : t.sim.lostToMarket }),
     /* @__PURE__ */ jsxs(Card, { className: "text-left mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
-        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u044C \u0440\u044B\u043D\u043A\u0430" }),
+        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.marketReturn }),
         /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
           r.marketReturn >= 0 ? "+" : "",
           (r.marketReturn * 100).toFixed(1),
@@ -4460,23 +5123,23 @@ function Simulator({ accent, onWin }) {
         ] })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
-        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0421\u0434\u0435\u043B\u043E\u043A" }),
+        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.tradesCount }),
         /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: r.tradesCount })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
-        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u041C\u0430\u043A\u0441. \u043F\u0440\u043E\u0441\u0430\u0434\u043A\u0430" }),
+        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.maxDrawdown }),
         /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
           (r.maxDD * 100).toFixed(1),
           "%"
         ] })
       ] }),
       r.liquidated && /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
-        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u041B\u0438\u043A\u0432\u0438\u0434\u0430\u0446\u0438\u0438" }),
-        /* @__PURE__ */ jsx("span", { style: { color: WARN, fontFamily: "'JetBrains Mono', monospace" }, children: "\u0431\u044B\u043B\u0438" })
+        /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.liquidations }),
+        /* @__PURE__ */ jsx("span", { style: { color: WARN, fontFamily: "'JetBrains Mono', monospace" }, children: t.sim.wasLiquidated })
       ] })
     ] }),
     r.achievements.length > 0 && /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "text-left mb-4", children: [
-      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0441\u0442\u0438\u0436\u0435\u043D\u0438\u044F" }),
+      /* @__PURE__ */ jsx("span", { className: "text-[11px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.sim.achievements }),
       r.achievements.map((a) => /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm py-1", children: [
         /* @__PURE__ */ jsx(Check, { size: 13, style: { color: accent } }),
         /* @__PURE__ */ jsx("span", { style: { color: BASE.ink }, children: a })
@@ -4488,7 +5151,7 @@ function Simulator({ accent, onWin }) {
         onClick: startSession,
         className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
         style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
-        children: "\u0418\u0433\u0440\u0430\u0442\u044C \u0441\u043D\u043E\u0432\u0430"
+        children: t.sim.playAgain
       }
     )
   ] });
@@ -4548,7 +5211,7 @@ function Settings({
       /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.languageNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442" }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.account }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between px-4 py-3 rounded-xl mb-2", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink }, children: [
           /* @__PURE__ */ jsx(User, { size: 15, style: { color: accent } }),
@@ -4559,16 +5222,17 @@ function Settings({
       ] }),
       /* @__PURE__ */ jsxs("button", { onClick: onLogout, className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.inkDim }, children: [
         /* @__PURE__ */ jsx(LogOut, { size: 15 }),
-        " \u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430"
+        " ",
+        t.settings.logout
       ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u0414\u0430\u043D\u043D\u044B\u0435 \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u0432\u044B\u0445\u043E\u0434\u0435 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u044F\u0442\u0441\u044F \u043F\u0440\u0438 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u043C \u0432\u0445\u043E\u0434\u0435." })
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.localAccountNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0418\u043C\u044F \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u0430" }),
-      /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink } })
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.operatorName }),
+      /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: t.settings.operatorPlaceholder, className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink } })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0410\u043A\u0446\u0435\u043D\u0442\u043D\u044B\u0439 \u0446\u0432\u0435\u0442" }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.accentColor }),
       /* @__PURE__ */ jsx("div", { className: "flex gap-3", children: ACCENTS.map((a) => /* @__PURE__ */ jsxs("button", { onClick: () => {
         setAccent(a);
         onThemeChange(a.name);
@@ -4578,8 +5242,8 @@ function Settings({
       ] }, a.name)) })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0415\u0434\u0438\u043D\u0438\u0446\u044B \u0438\u0437\u043C\u0435\u0440\u0435\u043D\u0438\u044F \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430" }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-3", children: [{ id: "R", label: "R-\u043C\u0443\u043B\u044C\u0442\u0438\u043F\u043B\u0438\u043A\u0430\u0442\u043E\u0440" }, { id: "currency", label: "\u0412\u0430\u043B\u044E\u0442\u0430" }].map((m) => /* @__PURE__ */ jsx(
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.resultUnits }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-3", children: [{ id: "R", label: t.settings.rMultiplier }, { id: "currency", label: t.settings.currencyLabel }].map((m) => /* @__PURE__ */ jsx(
         "button",
         {
           onClick: () => setMeasureMode(m.id),
@@ -4604,7 +5268,7 @@ function Settings({
           },
           c.code
         )) }),
-        /* @__PURE__ */ jsx(SectionLabel, { children: "\u041D\u0430\u0447\u0430\u043B\u044C\u043D\u044B\u0439 \u043A\u0430\u043F\u0438\u0442\u0430\u043B" }),
+        /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.startingCapital }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -4618,7 +5282,7 @@ function Settings({
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u041D\u0435\u0434\u0435\u043B\u044C\u043D\u0430\u044F \u0446\u0435\u043B\u044C \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438" }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.weeklyGoalLabel }),
       /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: [3, 5, 7].map((g) => /* @__PURE__ */ jsxs(
         "button",
         {
@@ -4627,33 +5291,36 @@ function Settings({
           style: { background: weeklyGoal === g ? `${accent}12` : "transparent", color: weeklyGoal === g ? accent : BASE.inkDim, border: `1px solid ${weeklyGoal === g ? accent + "40" : BASE.line}` },
           children: [
             g,
-            " \u0434\u043D\u0435\u0439"
+            " ",
+            t.settings.daysSuffix
           ]
         },
         g
       )) }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: "\u0421\u043A\u043E\u043B\u044C\u043A\u043E \u0434\u043D\u0435\u0439 \u0432 \u043D\u0435\u0434\u0435\u043B\u044E \u043D\u0443\u0436\u043D\u043E \u0432\u0435\u0441\u0442\u0438 \u0436\u0443\u0440\u043D\u0430\u043B \u0434\u043B\u044F \u0447\u0435\u043B\u043B\u0435\u043D\u0434\u0436\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438." })
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.weeklyGoalNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0417\u0432\u0443\u043A" }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.sound }),
       /* @__PURE__ */ jsxs("button", { onClick: () => setSoundOn(!soundOn), className: "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink }, children: [
           soundOn ? /* @__PURE__ */ jsx(Volume2, { size: 16, style: { color: accent } }) : /* @__PURE__ */ jsx(VolumeX, { size: 16, style: { color: BASE.inkFaint } }),
-          "\u0417\u0432\u0443\u043A \u043F\u0440\u0438 \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0438\u0438 \u0437\u0430\u043F\u0438\u0441\u0438"
+          t.settings.soundToggleLabel
         ] }),
         /* @__PURE__ */ jsx("span", { className: "w-9 h-5 rounded-full relative transition-all duration-200", style: { background: soundOn ? accent : BASE.line }, children: /* @__PURE__ */ jsx("span", { className: "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200", style: { left: soundOn ? "18px" : "2px" } }) })
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u0414\u0430\u043D\u043D\u044B\u0435" }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mb-2.5", style: { color: BASE.inkFaint }, children: "\u0412\u0441\u0451 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435 (\u0438\u043B\u0438 \u0432 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0435, \u0435\u0441\u043B\u0438 \u0442\u044B \u0432\u043E\u0448\u0451\u043B). \u041F\u043E\u043B\u043D\u044B\u0439 \u0431\u044D\u043A\u0430\u043F \u2014 \u043D\u0430 \u0441\u043B\u0443\u0447\u0430\u0439 \u0441\u043C\u0435\u043D\u044B \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u0438\u043B\u0438 \u043D\u0430 \u0432\u0441\u044F\u043A\u0438\u0439 \u0441\u043B\u0443\u0447\u0430\u0439." }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.data }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mb-2.5", style: { color: BASE.inkFaint }, children: t.settings.dataNote }),
       /* @__PURE__ */ jsxs("button", { onClick: onExportBackup, className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm mb-2 transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${accent}40`, background: `${accent}0D`, color: BASE.ink }, children: [
         /* @__PURE__ */ jsx(Download, { size: 15, style: { color: accent } }),
-        " \u041F\u043E\u043B\u043D\u044B\u0439 \u0431\u044D\u043A\u0430\u043F (.json)"
+        " ",
+        t.settings.fullBackup
       ] }),
       /* @__PURE__ */ jsxs("button", { onClick: () => importBackupInputRef.current?.click(), className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm mb-3 transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${accent}40`, background: `${accent}0D`, color: BASE.ink }, children: [
         /* @__PURE__ */ jsx(Upload, { size: 15, style: { color: accent } }),
-        " \u0412\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0438\u0437 \u0431\u044D\u043A\u0430\u043F\u0430 (.json)"
+        " ",
+        t.settings.restoreBackup
       ] }),
       /* @__PURE__ */ jsx("input", { ref: importBackupInputRef, type: "file", accept: "application/json,.json", className: "hidden", onChange: (e) => {
         const f = e.target.files?.[0];
@@ -4662,11 +5329,13 @@ function Settings({
       } }),
       /* @__PURE__ */ jsxs("button", { onClick: onExport, className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm mb-2 transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.ink }, children: [
         /* @__PURE__ */ jsx(Download, { size: 15, style: { color: accent } }),
-        " \u042D\u043A\u0441\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0436\u0443\u0440\u043D\u0430\u043B (.json)"
+        " ",
+        t.settings.exportJournalOnly
       ] }),
       /* @__PURE__ */ jsxs("button", { onClick: () => importInputRef.current?.click(), className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm mb-2 transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.ink }, children: [
         /* @__PURE__ */ jsx(Upload, { size: 15, style: { color: accent } }),
-        " \u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u043E\u043B\u044C\u043A\u043E \u0436\u0443\u0440\u043D\u0430\u043B (.json)"
+        " ",
+        t.settings.importJournalOnly
       ] }),
       /* @__PURE__ */ jsx("input", { ref: importInputRef, type: "file", accept: "application/json,.json", className: "hidden", onChange: (e) => {
         const f = e.target.files?.[0];
@@ -4675,46 +5344,51 @@ function Settings({
       } }),
       confirmReset ? /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 px-4 py-3 rounded-xl", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 15, style: { color: LOSS } }),
-        /* @__PURE__ */ jsx("span", { className: "text-xs flex-1", style: { color: BASE.ink }, children: "\u0423\u0434\u0430\u043B\u0438\u0442\u044C \u0432\u0441\u0435 \u0437\u0430\u043F\u0438\u0441\u0438 \u0431\u0435\u0437 \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u0438 \u043E\u0442\u043C\u0435\u043D\u044B?" }),
+        /* @__PURE__ */ jsx("span", { className: "text-xs flex-1", style: { color: BASE.ink }, children: t.settings.confirmClearJournal }),
         /* @__PURE__ */ jsx("button", { onClick: () => {
           onReset();
           setConfirmReset(false);
-        }, className: "text-xs shrink-0", style: { color: LOSS }, children: "\u0414\u0430" }),
-        /* @__PURE__ */ jsx("button", { onClick: () => setConfirmReset(false), className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" })
+        }, className: "text-xs shrink-0", style: { color: LOSS }, children: t.settings.yes }),
+        /* @__PURE__ */ jsx("button", { onClick: () => setConfirmReset(false), className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: t.settings.cancel })
       ] }) : /* @__PURE__ */ jsxs("button", { onClick: () => setConfirmReset(true), className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: LOSS }, children: [
         /* @__PURE__ */ jsx(Trash2, { size: 15 }),
-        " \u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C \u0436\u0443\u0440\u043D\u0430\u043B"
+        " ",
+        t.settings.clearJournal
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: "\u041F\u043E\u043B\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441" }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: "\u0421\u0442\u0438\u0440\u0430\u0435\u0442 \u0436\u0443\u0440\u043D\u0430\u043B, \u0432\u0441\u0435 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0441\u0432\u043E\u0438 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u044B, \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0438 \u0438 \u043A\u043E\u0448\u0435\u043B\u0451\u043A MindCoin \u2014 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0430\u0435\u0442 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043A \u043F\u0435\u0440\u0432\u043E\u043C\u0443 \u0437\u0430\u043F\u0443\u0441\u043A\u0443." }),
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.fullResetTitle }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: t.settings.fullResetNote }),
       confirmFullReset ? /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 px-4 py-3 rounded-xl", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 15, style: { color: LOSS } }),
-        /* @__PURE__ */ jsx("span", { className: "text-xs flex-1", style: { color: BASE.ink }, children: "\u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0432\u043E\u043E\u0431\u0449\u0435 \u0432\u0441\u0451?" }),
+        /* @__PURE__ */ jsx("span", { className: "text-xs flex-1", style: { color: BASE.ink }, children: t.settings.confirmFullReset }),
         /* @__PURE__ */ jsx("button", { onClick: () => {
           onFullReset();
           setConfirmFullReset(false);
-        }, className: "text-xs shrink-0", style: { color: LOSS }, children: "\u0414\u0430, \u0441\u0431\u0440\u043E\u0441\u0438\u0442\u044C" }),
-        /* @__PURE__ */ jsx("button", { onClick: () => setConfirmFullReset(false), className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" })
+        }, className: "text-xs shrink-0", style: { color: LOSS }, children: t.settings.yesReset }),
+        /* @__PURE__ */ jsx("button", { onClick: () => setConfirmFullReset(false), className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: t.settings.cancel })
       ] }) : /* @__PURE__ */ jsxs("button", { onClick: () => setConfirmFullReset(true), className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D`, color: LOSS }, children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 15 }),
-        " \u0421\u0431\u0440\u043E\u0441\u0438\u0442\u044C \u0432\u0441\u0451 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435"
+        " ",
+        t.settings.fullResetButton
       ] })
     ] }),
-    /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkFaint }, children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0441\u0434\u0435\u043B\u043E\u043A \u0445\u0440\u0430\u043D\u044F\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u0432 \u044D\u0442\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u0438 \u043D\u0435 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u0442\u0441\u044F \u043C\u0435\u0436\u0434\u0443 \u0432\u0438\u0437\u0438\u0442\u0430\u043C\u0438. \u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F \u0438 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0441 \u0431\u0440\u043E\u043A\u0435\u0440\u043E\u043C \u043F\u043E\u043A\u0430 \u043D\u0435 \u0440\u0435\u0430\u043B\u0438\u0437\u043E\u0432\u0430\u043D\u044B." })
+    /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkFaint }, children: t.settings.footerNote })
   ] });
 }
 function sanitizeImportedEntry(e, fallbackIndex) {
   if (!e || typeof e !== "object") return null;
   const date = new Date(e.date);
   if (isNaN(date.getTime())) return null;
+  const exitDate = e.exitDate ? new Date(e.exitDate) : null;
   const clampCoord = (v) => typeof v === "number" && !isNaN(v) ? Math.max(0, Math.min(100, v)) : null;
-  return {
+  const outcome = ["Win", "Loss", "Breakeven"].includes(e.outcome) ? e.outcome : null;
+  return migrateEntry({
     id: e.id != null ? String(e.id) : `imported_${Date.now()}_${fallbackIndex}_${Math.random().toString(36).slice(2, 6)}`,
+    status: e.status === "open" || e.status === "closed" ? e.status : void 0,
     instrument: typeof e.instrument === "string" && e.instrument ? e.instrument : "\u2014",
     direction: e.direction === "Short" ? "Short" : "Long",
-    outcome: ["Win", "Loss", "Breakeven"].includes(e.outcome) ? e.outcome : "Breakeven",
+    outcome,
     r: typeof e.r === "number" && !isNaN(e.r) ? e.r : null,
     tag: typeof e.tag === "string" && e.tag ? e.tag : "\u041E\u0431\u0449\u0435\u0435",
     x: clampCoord(e.x),
@@ -4722,11 +5396,12 @@ function sanitizeImportedEntry(e, fallbackIndex) {
     pull: typeof e.pull === "string" && e.pull ? e.pull : "\u2014",
     lesson: typeof e.lesson === "string" && e.lesson ? e.lesson : "\u2014",
     date,
+    exitDate: !isNaN(exitDate?.getTime()) ? exitDate : null,
     screenshots: Array.isArray(e.screenshots) ? e.screenshots.filter((s) => typeof s === "string").slice(0, 4) : [],
     entryPrice: typeof e.entryPrice === "number" && !isNaN(e.entryPrice) ? e.entryPrice : null,
     exitPrice: typeof e.exitPrice === "number" && !isNaN(e.exitPrice) ? e.exitPrice : null,
     rr: typeof e.rr === "number" && !isNaN(e.rr) ? e.rr : null
-  };
+  });
 }
 var SCHEMA_VERSION = 2;
 var PROFILE_KEY = "mind-exe-journal-state";
@@ -5227,8 +5902,9 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
   ] });
 }
 function MindExe() {
-  const [entries, setEntries] = useState(seedEntries);
+  const [entries, setEntries] = useState(() => seedEntries.map(migrateEntry));
   const [tab, setTab] = useState("home");
+  const [closingId, setClosingId] = useState(null);
   const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
   const [name, setName] = useState("");
   const [toast, setToast] = useState(null);
@@ -5244,7 +5920,7 @@ function MindExe() {
   const [mindCoins, setMindCoins] = useState(0);
   const [coinLedger, setCoinLedger] = useState([]);
   const [lastDailyReward, setLastDailyReward] = useState(null);
-  const analytics = useMemo(() => calculateTraderAnalytics(entries, lastCalibration), [entries, lastCalibration]);
+  const analytics = useMemo(() => calculateTraderAnalytics(entries, lastCalibration, lang), [entries, lastCalibration, lang]);
   const t = STRINGS[lang] || STRINGS.ru;
   const [walletOpen, setWalletOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -5327,9 +6003,10 @@ function MindExe() {
         if (profile && !cancelled) {
           const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
           const rawEntries = Array.isArray(journal.entries) ? journal.entries : [];
-          const restoredEntries = rawEntries.map((e) => ({
+          const restoredEntries = rawEntries.map((e) => migrateEntry({
             ...e,
             date: new Date(e.date),
+            exitDate: e.exitDate ? new Date(e.exitDate) : null,
             screenshots: Array.isArray(media?.[e.id]) ? media[e.id] : []
           }));
           setEntries(restoredEntries);
@@ -5368,7 +6045,7 @@ function MindExe() {
       version: SCHEMA_VERSION,
       user: { name: src.name, anonId },
       journal: {
-        entries: src.entries.map(({ screenshots, ...rest }) => ({ ...rest, date: rest.date instanceof Date ? rest.date.toISOString() : rest.date }))
+        entries: src.entries.map(({ screenshots, ...rest }) => ({ ...rest, date: rest.date instanceof Date ? rest.date.toISOString() : rest.date, exitDate: rest.exitDate instanceof Date ? rest.exitDate.toISOString() : rest.exitDate }))
       },
       settings: {
         accentIndex: src.accentIndex,
@@ -5469,7 +6146,7 @@ function MindExe() {
   };
   const exportJournal = () => {
     try {
-      const data = entries.map((e) => ({ ...e, date: e.date.toISOString() }));
+      const data = entries.map((e) => ({ ...e, date: e.date.toISOString(), exitDate: e.exitDate instanceof Date ? e.exitDate.toISOString() : e.exitDate }));
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -5504,7 +6181,7 @@ function MindExe() {
   const exportFullBackup = () => {
     try {
       const payload = buildPayload();
-      payload.journal.entries = entries.map((e) => ({ ...e, date: e.date instanceof Date ? e.date.toISOString() : e.date }));
+      payload.journal.entries = entries.map((e) => ({ ...e, date: e.date instanceof Date ? e.date.toISOString() : e.date, exitDate: e.exitDate instanceof Date ? e.exitDate.toISOString() : e.exitDate }));
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -5620,7 +6297,7 @@ function MindExe() {
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
-  const activeIndex = nav.findIndex((n) => n.id === tab);
+  const activeIndex = Math.max(0, nav.findIndex((n) => n.id === tab));
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "'Inter', sans-serif" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -5772,7 +6449,7 @@ function MindExe() {
         ] }),
         /* @__PURE__ */ jsx("div", { className: "mx-auto mb-8", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t }),
+          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
@@ -5795,14 +6472,37 @@ function MindExe() {
               }
             }
           ),
-          tab === "log" && /* @__PURE__ */ jsx(Log, { entries, accent, onDelete: deleteEntry, measureMode, currency, t }),
-          tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics }),
-          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration }),
+          tab === "log" && /* @__PURE__ */ jsx(Log, { entries, accent, onDelete: deleteEntry, onCloseTrade: (id) => {
+            setClosingId(id);
+            setTab("close");
+          }, measureMode, currency, t }),
+          tab === "close" && /* @__PURE__ */ jsx(CloseTrade, {
+            entry: entries.find((e) => e.id === closingId) || null,
+            accent,
+            measureMode,
+            currency,
+            t,
+            onCancel: () => {
+              setClosingId(null);
+              setTab("log");
+            },
+            onSave: (patch) => {
+              const next = entries.map((e) => e.id === closingId ? { ...e, ...patch } : e);
+              setEntries(next);
+              persistNow({ entries: next });
+              showToast("\u0421\u0434\u0435\u043B\u043A\u0430 \u0437\u0430\u043A\u0440\u044B\u0442\u0430");
+              playPing();
+              setClosingId(null);
+              setTab("log");
+            }
+          }),
+          tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics, t, lang }),
+          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t }),
           tab === "simulator" && /* @__PURE__ */ jsx(Simulator, { accent, onWin: () => {
-            awardCoins(5, "\u041F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
-            showToast("+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
-          } }),
-          tab === "challenge" && /* @__PURE__ */ jsx(Challenge, { entries, accent, weeklyGoal }),
+            awardCoins(5, lang === "en" ? "Win in the game" : "\u041F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
+            showToast(lang === "en" ? "+5 MindCoin \u2014 win in the game" : "+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
+          }, t, lang }),
+          tab === "challenge" && /* @__PURE__ */ jsx(Challenge, { entries, accent, weeklyGoal, t, lang }),
           tab === "settings" && /* @__PURE__ */ jsx(
             Settings,
             {
