@@ -1,4 +1,4 @@
-// mind.exe V0.3 — Average RR + Win Rate, expectancy-aware neutral insight
+// mind.exe V0.4 — edit closed trades, Average RR fixed to R (not currency)
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -3877,13 +3877,243 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     ] })
   ] });
 }
+function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, measureMode, currency, notify, t }) {
+  const [instrument, setInstrument] = useState(entry?.instrument || "");
+  const [direction, setDirection] = useState(entry?.direction || "Long");
+  const [tag, setTag] = useState(entry?.tag === "\u041E\u0431\u0449\u0435\u0435" ? "" : entry?.tag || "");
+  const [entryPrice, setEntryPrice] = useState(entry?.entryPrice != null ? String(entry.entryPrice) : "");
+  const [stopLoss, setStopLoss] = useState(entry?.stopLoss != null ? String(entry.stopLoss) : "");
+  const [takeProfit, setTakeProfit] = useState(entry?.takeProfit != null ? String(entry.takeProfit) : "");
+  const [point, setPoint] = useState({ x: entry?.x ?? null, y: entry?.y ?? null });
+  const [pull, setPull] = useState(entry?.pull === "\u2014" ? "" : entry?.pull || "");
+  const [screenshots, setScreenshots] = useState(entry?.screenshots || []);
+  const hadPlan = entry && typeof entry.stopLoss === "number" && typeof entry.takeProfit === "number";
+  const [closeType, setCloseType] = useState(entry?.closeType || "manual");
+  const [manualExit, setManualExit] = useState(entry?.exitPrice != null ? String(entry.exitPrice) : "");
+  const [resultR, setResultR] = useState(!hadPlan && entry?.r != null ? String(entry.r) : "");
+  const [lesson, setLesson] = useState(entry?.lesson === "\u2014" ? "" : entry?.lesson || "");
+  const [exitScreenshots, setExitScreenshots] = useState(entry?.exitScreenshots || []);
+  const entryFileRef = useRef(null);
+  const exitFileRef = useRef(null);
+  const MAX_SHOTS = 4;
+  const instrumentOptions = useMemo(
+    () => customInstruments.length ? [{ category: "\u0421\u0432\u043E\u0438", items: customInstruments }, ...INSTRUMENTS] : INSTRUMENTS,
+    [customInstruments]
+  );
+  const tagOptions = useMemo(() => [...customTags, ...SETUP_TAGS], [customTags]);
+  const plannedRRResult = useMemo(() => {
+    const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
+    if (entryPrice === "" || stopLoss === "" || takeProfit === "" || isNaN(en) || isNaN(sl) || isNaN(tp)) return { ok: false, error: null };
+    return computePlannedRR(direction, en, sl, tp);
+  }, [entryPrice, stopLoss, takeProfit, direction]);
+  const hasPlanNow = plannedRRResult.ok;
+  const effectiveExit = hasPlanNow ? closeType === "tp" ? parseFloat(takeProfit) : closeType === "sl" ? parseFloat(stopLoss) : manualExit === "" ? null : parseFloat(manualExit) : null;
+  const realizedRR = hasPlanNow && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(direction, parseFloat(entryPrice), parseFloat(stopLoss), effectiveExit) : null;
+  const derivedOutcome = hasPlanNow ? closeType === "tp" ? "Win" : closeType === "sl" ? "Loss" : realizedRR == null ? null : realizedRR > 0.02 ? "Win" : realizedRR < -0.02 ? "Loss" : "Breakeven" : resultR !== "" && !isNaN(parseFloat(resultR)) ? parseFloat(resultR) > 0 ? "Win" : parseFloat(resultR) < 0 ? "Loss" : "Breakeven" : null;
+  const canSave = instrument.trim() && point.x !== null && (hasPlanNow ? closeType === "tp" || closeType === "sl" || realizedRR != null : resultR !== "" && !isNaN(parseFloat(resultR)));
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  const makeHandleFiles = (list, setList) => (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const room = MAX_SHOTS - list.length;
+    if (room <= 0) {
+      notify?.(`\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
+      return;
+    }
+    files.slice(0, room).forEach((file) => {
+      if (file.size > 15 * 1024 * 1024) {
+        notify?.(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
+        return;
+      }
+      compressImageFile(file).then((dataUrl) => setList((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
+    });
+  };
+  const ShotRow = ({ list, setList, fileRef, onFiles }) => /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+    list.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
+      /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => setList((prev) => prev.filter((_, idx) => idx !== i)),
+          className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90",
+          style: { background: "rgba(0,0,0,0.55)" },
+          children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" })
+        }
+      )
+    ] }, i)),
+    list.length < MAX_SHOTS && /* @__PURE__ */ jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => fileRef.current?.click(),
+        className: "w-20 h-20 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-150",
+        style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim },
+        children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 })
+      }
+    ),
+    /* @__PURE__ */ jsx("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, onChange: onFiles, className: "hidden" })
+  ] });
+  const submit = () => {
+    if (!canSave) return;
+    if (hasPlanNow) {
+      onSave({
+        instrument: instrument.trim(),
+        direction,
+        tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
+        x: point.x,
+        y: point.y,
+        pull: pull.trim() || "\u2014",
+        screenshots,
+        entryPrice: parseFloat(entryPrice),
+        stopLoss: parseFloat(stopLoss),
+        takeProfit: parseFloat(takeProfit),
+        plannedRR: plannedRRResult.rr,
+        closeType,
+        exitPrice: effectiveExit,
+        realizedRR,
+        r: realizedRR,
+        outcome: derivedOutcome,
+        lesson: lesson.trim() || "\u2014",
+        exitScreenshots
+      });
+    } else {
+      const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
+      onSave({
+        instrument: instrument.trim(),
+        direction,
+        tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
+        x: point.x,
+        y: point.y,
+        pull: pull.trim() || "\u2014",
+        screenshots,
+        entryPrice: num(entryPrice),
+        stopLoss: null,
+        takeProfit: null,
+        plannedRR: null,
+        closeType: "manual",
+        exitPrice: num(manualExit),
+        realizedRR: null,
+        r: num(resultR),
+        outcome: derivedOutcome,
+        lesson: lesson.trim() || "\u2014",
+        exitScreenshots
+      });
+    }
+  };
+  if (!entry) return null;
+  const closeTypeOptions = [
+    { id: "tp", label: "\u041F\u043E TP" },
+    { id: "sl", label: "\u041F\u043E SL" },
+    { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
+  ];
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+      /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
+      " \u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: "ENTRY" }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.instrument }),
+        /* @__PURE__ */ jsx(PickerField, { value: instrument, onChange: setInstrument, options: instrumentOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, mono: true, onCustomAdd: onAddCustomInstrument })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.setupType }),
+        /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.entry }),
+        /* @__PURE__ */ jsx("input", { value: entryPrice, onChange: (e) => setEntryPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.direction }),
+        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Long", "Short"].map((d) => /* @__PURE__ */ jsx(
+          "button",
+          { onClick: () => setDirection(d), className: "flex-1 px-2 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95", style: { background: direction === d ? `${accent}12` : "transparent", color: direction === d ? accent : BASE.inkDim, border: `1px solid ${direction === d ? accent + "40" : BASE.line}` }, children: DIRECTION_LABEL[d] },
+          d
+        )) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-2", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: "Stop Loss" }),
+        /* @__PURE__ */ jsx("input", { value: stopLoss, onChange: (e) => setStopLoss(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: "Take Profit" }),
+        /* @__PURE__ */ jsx("input", { value: takeProfit, onChange: (e) => setTakeProfit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: hasPlanNow ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: hasPlanNow ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0411\u0435\u0437 SL/TP \u2014 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0431\u0443\u0434\u0435\u0442 \u0432\u0432\u043E\u0434\u0438\u0442\u044C\u0441\u044F \u0432\u0440\u0443\u0447\u043D\u0443\u044E" }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
+      /* @__PURE__ */ jsx(ShotRow, { list: screenshots, setList: setScreenshots, fileRef: entryFileRef, onFiles: makeHandleFiles(screenshots, setScreenshots) })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+      /* @__PURE__ */ jsx("textarea", { value: pull, onChange: (e) => setPull(e.target.value), rows: 2, placeholder: t.newEntry.pullPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
+    ] }),
+    /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
+    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: "EXIT" }),
+    hasPlanNow ? /* @__PURE__ */ jsxs(Fragment, { children: [
+      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
+        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
+          "button",
+          { onClick: () => setCloseType(o.id), className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95", style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` }, children: o.label },
+          o.id
+        )) })
+      ] }),
+      closeType === "manual" && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
+        /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "mb-5 text-sm", style: { color: realizedRR != null ? outcomeColor(derivedOutcome) : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `Realized RR: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR \u2014" })
+    ] }) : /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
+      /* @__PURE__ */ jsxs("div", { className: "w-[40%] shrink-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
+        /* @__PURE__ */ jsx("input", { value: resultR, onChange: (e) => setResultR(e.target.value), type: "number", step: "0.1", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
+        /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0432\u044B\u0445\u043E\u0434\u0430" }),
+      /* @__PURE__ */ jsx(ShotRow, { list: exitScreenshots, setList: setExitScreenshots, fileRef: exitFileRef, onFiles: makeHandleFiles(exitScreenshots, setExitScreenshots) })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
+      /* @__PURE__ */ jsx("textarea", { value: lesson, onChange: (e) => setLesson(e.target.value), rows: 2, placeholder: t.newEntry.lessonPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" }),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: submit,
+          disabled: !canSave,
+          className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          style: { background: accent, color: "#06120F", opacity: canSave ? 1 : 0.3, cursor: canSave ? "pointer" : "not-allowed", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: canSave ? softLift(accent) : "none" },
+          children: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"
+        }
+      )
+    ] })
+  ] });
+}
 function LogMiniStat({ label, value, color }) {
   return /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
     /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5 truncate", style: { color: BASE.inkFaint }, children: label }),
     /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: value })
   ] });
 }
-function Log({ entries, onDelete, onCloseTrade, accent, measureMode, currency, t }) {
+function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode, currency, t }) {
   const [openId, setOpenId] = useState(null);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -3976,6 +4206,15 @@ function Log({ entries, onDelete, onCloseTrade, accent, measureMode, currency, t
             className: "flex items-center gap-1.5 text-xs pt-1",
             style: { color: accent },
             children: [/* @__PURE__ */ jsx(ChevronRight, { size: 12 }), " \u0417\u0430\u043A\u0440\u044B\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443"]
+          }
+        ),
+        isEntryClosed(e) && /* @__PURE__ */ jsxs(
+          "button",
+          {
+            onClick: () => onEditTrade(e.id),
+            className: "flex items-center gap-1.5 text-xs pt-1",
+            style: { color: accent },
+            children: [/* @__PURE__ */ jsx(PenLine, { size: 12 }), " \u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C"]
           }
         ),
         confirmId === e.id ? /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 pt-1", children: [
@@ -4247,7 +4486,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-4", children: [
       /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0434\u0435\u043B\u043A\u0438", value: entries.length, accent: BASE.ink }),
       /* @__PURE__ */ jsx(StatCard, { label: "\u0412\u0438\u043D\u0440\u0435\u0439\u0442", value: `${winRate}%`, accent }),
-      /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442", value: formatResult(avgR, measureMode, currency), accent: BASE.ink })
+      /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 RR", value: analytics.rrStats?.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "\u2014", accent: BASE.ink })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-5", children: [
       /* @__PURE__ */ jsx(Pill, { active: view === "emotions", onClick: () => setView("emotions"), accent, children: "\u042D\u043C\u043E\u0446\u0438\u0438" }),
@@ -6199,6 +6438,7 @@ function MindExe() {
   const [entries, setEntries] = useState(() => seedEntries.map(migrateEntry));
   const [tab, setTab] = useState("home");
   const [closingId, setClosingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
   const [name, setName] = useState("");
   const [toast, setToast] = useState(null);
@@ -6772,6 +7012,9 @@ function MindExe() {
           tab === "log" && /* @__PURE__ */ jsx(Log, { entries, accent, onDelete: deleteEntry, onCloseTrade: (id) => {
             setClosingId(id);
             setTab("close");
+          }, onEditTrade: (id) => {
+            setEditingId(id);
+            setTab("edit");
           }, measureMode, currency, t }),
           tab === "close" && /* @__PURE__ */ jsx(CloseTrade, {
             entry: entries.find((e) => e.id === closingId) || null,
@@ -6791,6 +7034,30 @@ function MindExe() {
               showToast("\u0421\u0434\u0435\u043B\u043A\u0430 \u0437\u0430\u043A\u0440\u044B\u0442\u0430");
               playPing();
               setClosingId(null);
+              setTab("log");
+            }
+          }),
+          tab === "edit" && /* @__PURE__ */ jsx(EditTrade, {
+            entry: entries.find((e) => e.id === editingId) || null,
+            accent,
+            measureMode,
+            currency,
+            customInstruments,
+            customTags,
+            onAddCustomInstrument: addCustomInstrument,
+            onAddCustomTag: addCustomTag,
+            notify: showToast,
+            t,
+            onCancel: () => {
+              setEditingId(null);
+              setTab("log");
+            },
+            onSave: (patch) => {
+              const next = entries.map((e) => e.id === editingId ? { ...e, ...patch } : e);
+              setEntries(next);
+              persistNow({ entries: next });
+              showToast("\u0421\u0434\u0435\u043B\u043A\u0430 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0430");
+              setEditingId(null);
               setTab("log");
             }
           }),
