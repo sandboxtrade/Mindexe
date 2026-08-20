@@ -1,4 +1,4 @@
-// mind.exe V0.1 — OPEN/CLOSED trade lifecycle
+// mind.exe V0.3 — Average RR + Win Rate, expectancy-aware neutral insight
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -502,9 +502,37 @@ function deriveEntryStatus(e) {
   return e.outcome != null ? "closed" : "open";
 }
 function migrateEntry(e) {
-  return { ...e, status: deriveEntryStatus(e), exitDate: e.exitDate ? e.exitDate : null };
+  return {
+    ...e,
+    status: deriveEntryStatus(e),
+    exitDate: e.exitDate ? e.exitDate : null,
+    stopLoss: typeof e.stopLoss === "number" && !isNaN(e.stopLoss) ? e.stopLoss : null,
+    takeProfit: typeof e.takeProfit === "number" && !isNaN(e.takeProfit) ? e.takeProfit : null,
+    plannedRR: typeof e.plannedRR === "number" && !isNaN(e.plannedRR) ? e.plannedRR : null,
+    closeType: ["tp", "sl", "manual"].includes(e.closeType) ? e.closeType : null,
+    realizedRR: typeof e.realizedRR === "number" && !isNaN(e.realizedRR) ? e.realizedRR : null,
+    exitScreenshots: Array.isArray(e.exitScreenshots) ? e.exitScreenshots : []
+  };
 }
 var isEntryClosed = (e) => e.status === "closed";
+function computePlannedRR(direction, entry, sl, tp) {
+  if ([entry, sl, tp].some((v) => typeof v !== "number" || isNaN(v) || !isFinite(v))) return { ok: false, error: "\u0417\u0430\u043F\u043E\u043B\u043D\u0438 Entry, SL \u0438 TP \u0447\u0438\u0441\u043B\u0430\u043C\u0438" };
+  const risk = direction === "Short" ? sl - entry : entry - sl;
+  const reward = direction === "Short" ? entry - tp : tp - entry;
+  if (risk <= 0) return { ok: false, error: direction === "Short" ? "SL \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u0432\u044B\u0448\u0435 Entry" : "SL \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043D\u0438\u0436\u0435 Entry" };
+  if (reward <= 0) return { ok: false, error: direction === "Short" ? "TP \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043D\u0438\u0436\u0435 Entry" : "TP \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u0432\u044B\u0448\u0435 Entry" };
+  const rr = reward / risk;
+  if (!isFinite(rr) || isNaN(rr)) return { ok: false, error: "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F" };
+  return { ok: true, rr };
+}
+function computeRealizedRR(direction, entry, sl, exit) {
+  if ([entry, sl, exit].some((v) => typeof v !== "number" || isNaN(v) || !isFinite(v))) return null;
+  const risk = direction === "Short" ? sl - entry : entry - sl;
+  if (!risk || risk <= 0) return null;
+  const reward = direction === "Short" ? entry - exit : exit - entry;
+  const rr = reward / risk;
+  return isFinite(rr) && !isNaN(rr) ? rr : null;
+}
 var findCurrency = (code) => CURRENCIES.find((c) => c.code === code) || CURRENCIES[0];
 var groupThousands = (n) => n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 var isToday = (isoDate) => !!isoDate && new Date(isoDate).toDateString() === (/* @__PURE__ */ new Date()).toDateString();
@@ -2029,6 +2057,26 @@ function pd_shallowReflection(all, lang = "ru") {
     minDiffR: 0.1
   };
 }
+function pd_earlyExit(all, lang = "ru") {
+  const candidates = all.filter(
+    (t) => t.closeType === "manual" && typeof t.realizedRR === "number" && !isNaN(t.realizedRR) && typeof t.plannedRR === "number" && t.plannedRR > 0 && t.realizedRR > 0
+  );
+  if (candidates.length < 3) return null;
+  const early = candidates.filter((t) => t.realizedRR < t.plannedRR * 0.7);
+  if (early.length < 3) return null;
+  const rest = all.filter((t) => !early.includes(t));
+  const avgPlanned = st_mean(early.map((t) => t.plannedRR));
+  const avgRealized = st_mean(early.map((t) => t.realizedRR));
+  return {
+    id: "early_exit",
+    title: lang === "en" ? "Closing before target" : "\u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u0434\u043E \u0446\u0435\u043B\u0438",
+    description: lang === "en" ? `In your manual closes, you often exit before the planned Take Profit \u2014 in the last cases the average plan was ${avgPlanned.toFixed(1)}R, the average actual exit was ${avgRealized.toFixed(1)}R. Worth checking whether this is a deliberate plan change or a repeating early exit.` : `\u0412 \u0442\u0432\u043E\u0438\u0445 \u0440\u0443\u0447\u043D\u044B\u0445 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F\u0445 \u0447\u0430\u0441\u0442\u043E \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u0435\u0442\u0441\u044F \u0432\u044B\u0445\u043E\u0434 \u0434\u043E \u0437\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u043E\u0433\u043E Take Profit \u2014 \u0432 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445 \u0441\u043B\u0443\u0447\u0430\u044F\u0445 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u043F\u043B\u0430\u043D \u0431\u044B\u043B ${avgPlanned.toFixed(1)}R, \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0444\u0430\u043A\u0442\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0432\u044B\u0445\u043E\u0434 \u2014 ${avgRealized.toFixed(1)}R. \u0421\u0442\u043E\u0438\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C, \u044D\u0442\u043E \u043E\u0441\u043E\u0437\u043D\u0430\u043D\u043D\u0430\u044F \u0441\u043C\u0435\u043D\u0430 \u043F\u043B\u0430\u043D\u0430 \u0438\u043B\u0438 \u043F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0439\u0441\u044F \u0440\u0430\u043D\u043D\u0438\u0439 \u0432\u044B\u0445\u043E\u0434.`,
+    group: early,
+    rest: rest.length ? rest : candidates,
+    minDiffR: 0.1,
+    sampleNorm: 8
+  };
+}
 function analyzeTraderPatterns(trades, lang = "ru") {
   const all = (trades || []).filter((t) => t && t.date instanceof Date && !isNaN(t.date.getTime()));
   const complete = all.filter(pe_isEmotionallyComplete);
@@ -2047,7 +2095,8 @@ function analyzeTraderPatterns(trades, lang = "ru") {
     pd_lossStreak(sorted, lang),
     pd_riskAfterWin(sorted, lang),
     pd_avoidLossReview(all, lang),
-    pd_shallowReflection(all, lang)
+    pd_shallowReflection(all, lang),
+    pd_earlyExit(all, lang)
   ].filter(Boolean);
   const scored = [];
   const healthy = [];
@@ -2099,7 +2148,8 @@ var PATTERN_TYPE_MAP = {
   risk_after_win: "risk",
   lesson_not_learned: "reflection",
   avoid_loss_review: "reflection",
-  shallow_reflection: "reflection"
+  shallow_reflection: "reflection",
+  early_exit: "behavioral"
 };
 var PATTERN_RECOMMENDATIONS = {
   confidence_tension: "\u041F\u0435\u0440\u0435\u0434 \u0432\u0445\u043E\u0434\u043E\u043C \u0432 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0438 \xAB\u0443\u0432\u0435\u0440\u0435\u043D, \u043D\u043E \u043D\u0430 \u0432\u0437\u0432\u043E\u0434\u0435\xBB \u2014 \u043E\u0434\u043D\u0430 \u043F\u0430\u0443\u0437\u0430 \u0432 60 \u0441\u0435\u043A\u0443\u043D\u0434 \u0438 \u043F\u0440\u043E\u0432\u0435\u0440\u043A\u0430, \u0441\u043E\u0432\u043F\u0430\u0434\u0430\u0435\u0442 \u043B\u0438 \u0441\u0434\u0435\u043B\u043A\u0430 \u0441 \u043F\u043B\u0430\u043D\u043E\u043C, \u0430 \u043D\u0435 \u0442\u043E\u043B\u044C\u043A\u043E \u0441 \u043C\u043E\u043C\u0435\u043D\u0442\u043E\u043C.",
@@ -2112,7 +2162,8 @@ var PATTERN_RECOMMENDATIONS = {
   loss_streak: "\u041F\u043E\u0441\u043B\u0435 \u0432\u0442\u043E\u0440\u043E\u0439 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u0434\u0440\u044F\u0434 \u2014 \u0441\u0438\u0433\u043D\u0430\u043B \u0441\u0434\u0435\u043B\u0430\u0442\u044C \u043F\u0430\u0443\u0437\u0443 \u0438 \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u0442\u044C\u0441\u044F, \u0430 \u043D\u0435 \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0442\u044C \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C.",
   risk_after_win: "\u041F\u043E\u0431\u0435\u0434\u0430 \u043D\u0435 \u0434\u0435\u043B\u0430\u0435\u0442 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0441\u0435\u0442\u0430\u043F \u0431\u043E\u043B\u0435\u0435 \u0432\u0435\u0440\u043D\u044B\u043C \u2014 \u0434\u0435\u0440\u0436\u0438 \u0440\u0430\u0437\u043C\u0435\u0440 \u0440\u0438\u0441\u043A\u0430 \u043F\u043E\u0441\u0442\u043E\u044F\u043D\u043D\u044B\u043C \u043D\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043C\u043E \u043E\u0442 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0435\u0433\u043E \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430.",
   avoid_loss_review: "\u0412\u043E\u0437\u044C\u043C\u0438 \u0437\u0430 \u043F\u0440\u0438\u0432\u044B\u0447\u043A\u0443 \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0442\u044C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0438\u043C\u0435\u043D\u043D\u043E \u0442\u0435\u0445 \u0441\u0434\u0435\u043B\u043E\u043A, \u043A\u043E\u0442\u043E\u0440\u044B\u0435 \u043D\u0435 \u0445\u043E\u0447\u0435\u0442\u0441\u044F \u043F\u0435\u0440\u0435\u0441\u043C\u0430\u0442\u0440\u0438\u0432\u0430\u0442\u044C \u2014 \u044D\u0442\u043E \u0441\u0430\u043C\u044B\u0439 \u043F\u043E\u043B\u0435\u0437\u043D\u044B\u0439 \u043C\u0430\u0442\u0435\u0440\u0438\u0430\u043B \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435.",
-  shallow_reflection: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0444\u0440\u0430\u0437\u0443 \xAB\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u044F \u0441\u0434\u0435\u043B\u0430\u044E \u0438\u043D\u0430\u0447\u0435, \u0435\u0441\u043B\u0438...\xBB \u0438 \u0434\u043E\u043F\u0438\u0448\u0438 \u0435\u0451 \u0447\u0435\u0441\u0442\u043D\u043E."
+  shallow_reflection: "\u0417\u0430\u0432\u0435\u0440\u0448\u0438 \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0444\u0440\u0430\u0437\u0443 \xAB\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u044F \u0441\u0434\u0435\u043B\u0430\u044E \u0438\u043D\u0430\u0447\u0435, \u0435\u0441\u043B\u0438...\xBB \u0438 \u0434\u043E\u043F\u0438\u0448\u0438 \u0435\u0451 \u0447\u0435\u0441\u0442\u043D\u043E.",
+  early_exit: "\u041F\u0435\u0440\u0435\u0434 \u0440\u0443\u0447\u043D\u044B\u043C \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0435\u043C \u0441\u043F\u0440\u043E\u0441\u0438 \u0441\u0435\u0431\u044F: \u044D\u0442\u043E \u043E\u0441\u043E\u0437\u043D\u0430\u043D\u043D\u0430\u044F \u043A\u043E\u0440\u0440\u0435\u043A\u0442\u0438\u0440\u043E\u0432\u043A\u0430 \u043F\u043B\u0430\u043D\u0430 \u0438\u043B\u0438 \u0440\u0435\u0444\u043B\u0435\u043A\u0441 \u043D\u0430 \u0442\u0440\u0435\u0432\u043E\u0433\u0443? \u0415\u0441\u043B\u0438 \u043E\u0442\u0432\u0435\u0442 \u043D\u0435 \u043E\u0447\u0435\u0432\u0438\u0434\u0435\u043D \u2014 \u0434\u0430\u0439 \u0441\u0434\u0435\u043B\u043A\u0435 \u0447\u0443\u0442\u044C \u0431\u043E\u043B\u044C\u0448\u0435 \u0432\u0440\u0435\u043C\u0435\u043D\u0438 \u0434\u043E \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F."
 };
 var PATTERN_RECOMMENDATIONS_EN = {
   confidence_tension: 'Before entering while feeling "confident but on edge" \u2014 take a 60-second pause and check the trade against your plan, not just against the moment.',
@@ -2125,7 +2176,8 @@ var PATTERN_RECOMMENDATIONS_EN = {
   loss_streak: "After the second loss in a row \u2014 that's a signal to pause and figure out why, not to trade more.",
   risk_after_win: "A win doesn't make the next setup any more valid \u2014 keep your risk size constant regardless of the previous result.",
   avoid_loss_review: "Make a habit of saving a screenshot of exactly the trades you don't want to revisit \u2014 that's the most useful material in the journal.",
-  shallow_reflection: `After a loss, finish the sentence "Next time I'll do it differently if..." and write it honestly.`
+  shallow_reflection: `After a loss, finish the sentence "Next time I'll do it differently if..." and write it honestly.`,
+  early_exit: "Before closing manually, ask yourself: is this a deliberate plan change or anxiety talking? If unsure, give the trade a bit more time before closing."
 };
 function ta_severity(score, diff) {
   const mag = Math.abs(diff ?? 0);
@@ -2166,7 +2218,8 @@ function patternEngineV2(trades, lang = "ru") {
     pd_lossStreak(sorted, lang),
     pd_riskAfterWin(sorted, lang),
     pd_avoidLossReview(all, lang),
-    pd_shallowReflection(all, lang)
+    pd_shallowReflection(all, lang),
+    pd_earlyExit(all, lang)
   ].filter(Boolean);
   const patterns = [], healthy = [];
   for (const c of raw) {
@@ -2188,7 +2241,42 @@ function patternEngineV2(trades, lang = "ru") {
   patterns.sort((a, b) => b.metrics.confidenceScore - a.metrics.confidenceScore);
   return { available: true, sampleSize: complete.length, patterns, healthyPatterns: healthy };
 }
-function buildInsights(patternsResult, calibration, discipline, lang = "ru") {
+function computeRRWinRateStats(closedEntries) {
+  const withRealized = closedEntries.filter((e) => typeof e.realizedRR === "number" && !isNaN(e.realizedRR));
+  const avgRealizedRR = withRealized.length ? st_mean(withRealized.map((e) => e.realizedRR)) : null;
+  const wins = closedEntries.filter((e) => e.outcome === "Win");
+  const losses = closedEntries.filter((e) => e.outcome === "Loss");
+  const breakevens = closedEntries.filter((e) => e.outcome === "Breakeven");
+  const winRate = wins.length + losses.length > 0 ? wins.length / (wins.length + losses.length) * 100 : null;
+  const winsWithR = wins.filter((e) => typeof e.r === "number" && !isNaN(e.r));
+  const lossesWithR = losses.filter((e) => typeof e.r === "number" && !isNaN(e.r));
+  const avgWinR = winsWithR.length ? st_mean(winsWithR.map((e) => e.r)) : null;
+  const avgLossR = lossesWithR.length ? Math.abs(st_mean(lossesWithR.map((e) => e.r))) : null;
+  const total = wins.length + losses.length;
+  const expectancy = total > 0 && avgWinR != null && avgLossR != null ? wins.length / total * avgWinR - losses.length / total * avgLossR : null;
+  return {
+    sampleSize: closedEntries.length,
+    avgRealizedRR: avgRealizedRR != null ? st_round2(avgRealizedRR) : null,
+    winRate: winRate != null ? Math.round(winRate) : null,
+    wins: wins.length,
+    losses: losses.length,
+    breakevens: breakevens.length,
+    avgWinR: avgWinR != null ? st_round2(avgWinR) : null,
+    avgLossR: avgLossR != null ? st_round2(avgLossR) : null,
+    expectancy: expectancy != null ? st_round2(expectancy) : null
+  };
+}
+function rrWinRateInsightText(rr, lang = "ru") {
+  if (!rr || rr.sampleSize < PATTERN_MIN_SAMPLE || rr.avgRealizedRR == null || rr.winRate == null || rr.expectancy == null) return null;
+  if (rr.expectancy < 0) {
+    return lang === "en" ? `Your journal currently shows a combination of an average realized RR of ${rr.avgRealizedRR}R and a ${rr.winRate}% win rate \u2014 based on these numbers the expectancy is negative. Worth checking whether this holds up on a larger sample or reflects a specific stretch.` : `\u0412 \u0442\u0432\u043E\u0451\u043C \u0436\u0443\u0440\u043D\u0430\u043B\u0435 \u0441\u0435\u0439\u0447\u0430\u0441 \u0441\u043E\u0447\u0435\u0442\u0430\u043D\u0438\u0435 \u0441\u0440\u0435\u0434\u043D\u0435\u0433\u043E realized RR \u2248 ${rr.avgRealizedRR}R \u0438 Win Rate ${rr.winRate}% \u2014 \u043F\u0440\u0438 \u0442\u0430\u043A\u0438\u0445 \u0446\u0438\u0444\u0440\u0430\u0445 \u043C\u0430\u0442\u0435\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u043E\u0436\u0438\u0434\u0430\u043D\u0438\u0435 \u043E\u0442\u0440\u0438\u0446\u0430\u0442\u0435\u043B\u044C\u043D\u043E\u0435. \u0421\u0442\u043E\u0438\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C, \u0441\u043E\u0445\u0440\u0430\u043D\u044F\u0435\u0442\u0441\u044F \u043B\u0438 \u044D\u0442\u043E \u043D\u0430 \u0431\u043E\u043B\u044C\u0448\u0435\u0439 \u0432\u044B\u0431\u043E\u0440\u043A\u0435 \u0438\u043B\u0438 \u044D\u0442\u043E \u043E\u0442\u0434\u0435\u043B\u044C\u043D\u044B\u0439 \u043E\u0442\u0440\u0435\u0437\u043E\u043A.`;
+  }
+  if (rr.avgRealizedRR < 1.3 && rr.winRate < 50 && rr.expectancy < 0.15) {
+    return lang === "en" ? `Average realized RR (\u2248${rr.avgRealizedRR}R) and win rate (${rr.winRate}%) currently sit in a zone where the result depends heavily on win frequency. Worth checking whether your system has a stable statistical edge.` : `\u0421\u0440\u0435\u0434\u043D\u0438\u0439 realized RR (\u2248${rr.avgRealizedRR}R) \u0438 Win Rate (${rr.winRate}%) \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0430\u0445\u043E\u0434\u044F\u0442\u0441\u044F \u0432 \u0437\u043E\u043D\u0435, \u0433\u0434\u0435 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0441\u0438\u043B\u044C\u043D\u043E \u0437\u0430\u0432\u0438\u0441\u0438\u0442 \u043E\u0442 \u0447\u0430\u0441\u0442\u043E\u0442\u044B \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A. \u0421\u0442\u043E\u0438\u0442 \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C, \u0435\u0441\u0442\u044C \u043B\u0438 \u0443 \u0442\u0432\u043E\u0435\u0439 \u0441\u0438\u0441\u0442\u0435\u043C\u044B \u0443\u0441\u0442\u043E\u0439\u0447\u0438\u0432\u043E\u0435 \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u0447\u0435\u0441\u043A\u043E\u0435 \u043F\u0440\u0435\u0438\u043C\u0443\u0449\u0435\u0441\u0442\u0432\u043E.`;
+  }
+  return null;
+}
+function buildInsights(patternsResult, calibration, discipline, lang = "ru", rrStats = null) {
   const insights = [];
   (patternsResult.patterns || []).slice(0, 3).forEach((p) => {
     insights.push({ id: `pattern_${p.id}`, basis: "pattern", confidence: p.confidence, sampleSize: p.sampleSize, text: p.description });
@@ -2211,6 +2299,8 @@ function buildInsights(patternsResult, calibration, discipline, lang = "ru") {
     }[top.id];
     if (text) insights.push({ id: `discipline_${top.id}`, basis: "discipline", confidence: discipline.score.confidence, sampleSize: discipline.score.sampleSize, text });
   }
+  const rrText = rrWinRateInsightText(rrStats, lang);
+  if (rrText) insights.push({ id: "rr_winrate", basis: "rr_winrate", confidence: rrStats.sampleSize >= PATTERN_MIN_SAMPLE * 1.5 ? "medium" : "low", sampleSize: rrStats.sampleSize, text: rrText });
   return insights;
 }
 function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
@@ -2225,6 +2315,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
   const awareness = awarenessAnalysis(validEntries, closedEntries, reflection, risk, discipline);
   const patternsResult = patternEngineV2(closedEntries, lang);
   const calibration = calibrationAnalysis(sorted, lastCalibration, lang);
+  const rrStats = computeRRWinRateStats(closedEntries);
   const { recent, previous } = ta_splitRecent(sorted);
   let trend = { awareness: "insufficient_data", discipline: "insufficient_data", riskStability: "insufficient_data", reflectionQuality: "insufficient_data" };
   if (recent.length >= 5 && previous.length >= 5) {
@@ -2249,7 +2340,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
     missingRisk: validEntries.filter((e) => typeof e.r !== "number" || isNaN(e.r)).length,
     missingScreenshots: validEntries.filter((e) => !Array.isArray(e.screenshots) || e.screenshots.length === 0).length
   };
-  const insights = buildInsights(patternsResult, calibration, discipline, lang);
+  const insights = buildInsights(patternsResult, calibration, discipline, lang, rrStats);
   return {
     awareness: { ...awareness, trend: trend.awareness },
     emotionalState: emotional,
@@ -2258,6 +2349,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
     execution: { score: discipline.score, consistency: risk.stability, confidence: discipline.score.confidence },
     reflection: { ...reflection, trend: trend.reflectionQuality },
     calibration,
+    rrStats,
     patterns: patternsResult.patterns,
     healthyPatterns: patternsResult.healthyPatterns,
     insights,
@@ -3336,13 +3428,20 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
   const [instrument, setInstrument] = useState("");
   const [direction, setDirection] = useState("Long");
   const [entryPrice, setEntryPrice] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
+  const [takeProfit, setTakeProfit] = useState("");
   const [tag, setTag] = useState("");
   const [point, setPoint] = useState({ x: null, y: null });
   const [pull, setPull] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const fileInputRef = useRef(null);
-  const canSave = instrument.trim() && point.x !== null;
   const MAX_SHOTS = 4;
+  const plannedRRResult = useMemo(() => {
+    const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
+    if (entryPrice === "" || stopLoss === "" || takeProfit === "" || isNaN(en) || isNaN(sl) || isNaN(tp)) return { ok: false, error: null };
+    return computePlannedRR(direction, en, sl, tp);
+  }, [entryPrice, stopLoss, takeProfit, direction]);
+  const canSave = instrument.trim() && point.x !== null && plannedRRResult.ok;
   const instrumentOptions = useMemo(
     () => customInstruments.length ? [{ category: "\u0421\u0432\u043E\u0438", items: customInstruments }, ...INSTRUMENTS] : INSTRUMENTS,
     [customInstruments]
@@ -3367,8 +3466,13 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     if (files.length > room) notify(`\u0414\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u044B \u043D\u0435 \u0432\u0441\u0435 \u2014 \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
   };
   const submit = () => {
-    if (!canSave) return;
-    const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
+    if (!instrument.trim() || point.x === null) return;
+    const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
+    const rrCheck = computePlannedRR(direction, en, sl, tp);
+    if (!rrCheck.ok) {
+      notify(rrCheck.error || "\u041D\u0435\u043A\u043E\u0440\u0440\u0435\u043A\u0442\u043D\u044B\u0439 \u043F\u043B\u0430\u043D SL/TP");
+      return;
+    }
     onSave({
       id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       status: "open",
@@ -3384,9 +3488,15 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
       date: /* @__PURE__ */ new Date(),
       exitDate: null,
       screenshots,
-      entryPrice: num(entryPrice),
+      exitScreenshots: [],
+      entryPrice: en,
+      stopLoss: sl,
+      takeProfit: tp,
+      plannedRR: rrCheck.rr,
       exitPrice: null,
-      rr: null
+      closeType: null,
+      realizedRR: null,
+      rr: rrCheck.rr
     });
     setInstrument("");
     setDirection("Long");
@@ -3395,6 +3505,8 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     setPull("");
     setScreenshots([]);
     setEntryPrice("");
+    setStopLoss("");
+    setTakeProfit("");
   };
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
   return /* @__PURE__ */ jsxs("div", { children: [
@@ -3444,6 +3556,41 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
         )) })
       ] })
     ] }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-2", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: "Stop Loss" }),
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            value: stopLoss,
+            onChange: (e) => setStopLoss(e.target.value),
+            placeholder: "66 800",
+            type: "number",
+            step: "any",
+            inputMode: "decimal",
+            className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ jsx(L, { children: "Take Profit" }),
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            value: takeProfit,
+            onChange: (e) => setTakeProfit(e.target.value),
+            placeholder: "68 500",
+            type: "number",
+            step: "any",
+            inputMode: "decimal",
+            className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+          }
+        )
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx("div", { className: "mb-5 text-xs", style: { color: plannedRRResult.ok ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: plannedRRResult.ok ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0423\u043A\u0430\u0436\u0438 Entry, SL \u0438 TP \u2014 RR \u0440\u0430\u0441\u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438" }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
@@ -3509,28 +3656,72 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     )
   ] });
 }
-function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, t }) {
-  const [outcome, setOutcome] = useState("Win");
+function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, notify, t }) {
+  const hasPlan = entry && typeof entry.entryPrice === "number" && typeof entry.stopLoss === "number" && typeof entry.takeProfit === "number";
+  const [closeType, setCloseType] = useState("manual");
+  const [manualExit, setManualExit] = useState("");
   const [resultR, setResultR] = useState("");
-  const [exitPrice, setExitPrice] = useState("");
-  const [rr, setRr] = useState("");
   const [lesson, setLesson] = useState("");
-  const canSave = resultR !== "" && !isNaN(parseFloat(resultR));
+  const [exitScreenshots, setExitScreenshots] = useState([]);
+  const fileInputRef = useRef(null);
+  const MAX_SHOTS = 4;
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
-  const submit = () => {
-    if (!canSave) return;
-    const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
-    onSave({
-      status: "closed",
-      outcome,
-      r: num(resultR),
-      exitPrice: num(exitPrice),
-      rr: num(rr),
-      lesson: lesson.trim() || "\u2014",
-      exitDate: /* @__PURE__ */ new Date()
+  const effectiveExit = hasPlan ? closeType === "tp" ? entry.takeProfit : closeType === "sl" ? entry.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : null;
+  const realizedRR = hasPlan && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(entry.direction, entry.entryPrice, entry.stopLoss, effectiveExit) : null;
+  const derivedOutcome = hasPlan ? closeType === "tp" ? "Win" : closeType === "sl" ? "Loss" : realizedRR == null ? null : realizedRR > 0.02 ? "Win" : realizedRR < -0.02 ? "Loss" : "Breakeven" : null;
+  const canSave = hasPlan ? closeType === "tp" || closeType === "sl" || manualExit !== "" && !isNaN(parseFloat(manualExit)) && realizedRR != null : resultR !== "" && !isNaN(parseFloat(resultR));
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    const room = MAX_SHOTS - exitScreenshots.length;
+    if (room <= 0) {
+      notify?.(`\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
+      return;
+    }
+    files.slice(0, room).forEach((file) => {
+      if (file.size > 15 * 1024 * 1024) {
+        notify?.(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
+        return;
+      }
+      compressImageFile(file).then((dataUrl) => setExitScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
     });
   };
+  const submit = () => {
+    if (!canSave) return;
+    if (hasPlan) {
+      onSave({
+        status: "closed",
+        closeType,
+        exitPrice: effectiveExit,
+        realizedRR,
+        r: realizedRR,
+        outcome: derivedOutcome,
+        lesson: lesson.trim() || "\u2014",
+        exitDate: /* @__PURE__ */ new Date(),
+        exitScreenshots
+      });
+    } else {
+      const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
+      onSave({
+        status: "closed",
+        closeType: "manual",
+        exitPrice: num(manualExit),
+        realizedRR: null,
+        r: num(resultR),
+        outcome: num(resultR) > 0 ? "Win" : num(resultR) < 0 ? "Loss" : "Breakeven",
+        lesson: lesson.trim() || "\u2014",
+        exitDate: /* @__PURE__ */ new Date(),
+        exitScreenshots
+      });
+    }
+  };
   if (!entry) return null;
+  const closeTypeOptions = [
+    { id: "tp", label: "\u041F\u043E Take Profit" },
+    { id: "sl", label: "\u041F\u043E Stop Loss" },
+    { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
+  ];
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
@@ -3538,31 +3729,34 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, t 
     ] }),
     /* @__PURE__ */ jsxs("p", { className: "text-sm mb-4", style: { color: BASE.inkFaint }, children: [
       entry.instrument, " \xB7 ", DIRECTION_LABEL[entry.direction],
-      entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : ""
+      entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : "",
+      hasPlan ? ` \xB7 \u043F\u043B\u0430\u043D 1:${entry.plannedRR.toFixed(2)}` : ""
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
-      /* @__PURE__ */ jsxs("div", { className: "w-[38%] shrink-0", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
-        /* @__PURE__ */ jsx(
-          "input",
+    hasPlan && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 text-xs", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(entry.stopLoss)] }),
+      /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(entry.takeProfit)] })
+    ] }),
+    hasPlan ? /* @__PURE__ */ jsxs(Fragment, { children: [
+      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
+        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
+          "button",
           {
-            value: resultR,
-            onChange: (e) => setResultR(e.target.value),
-            placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
-            type: "number",
-            step: "0.1",
-            className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
-          }
-        )
+            onClick: () => setCloseType(o.id),
+            className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95",
+            style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` },
+            children: o.label
+          },
+          o.id
+        )) })
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+      closeType === "manual" && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
         /* @__PURE__ */ jsx(
           "input",
           {
-            value: exitPrice,
-            onChange: (e) => setExitPrice(e.target.value),
+            value: manualExit,
+            onChange: (e) => setManualExit(e.target.value),
             placeholder: "68 412",
             type: "number",
             step: "any",
@@ -3572,35 +3766,71 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, t 
           }
         )
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "w-[28%] shrink-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "R:R" }),
-        /* @__PURE__ */ jsx(
-          "input",
-          {
-            value: rr,
-            onChange: (e) => setRr(e.target.value),
-            placeholder: "2.1",
-            type: "number",
-            step: "0.1",
-            inputMode: "decimal",
-            className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
-          }
-        )
-      ] })
+      /* @__PURE__ */ jsx("div", { className: "mb-5 text-sm", style: { color: realizedRR != null ? outcomeColor(derivedOutcome) : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `Realized RR: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR \u2014" })
+    ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
+        /* @__PURE__ */ jsxs("div", { className: "w-[40%] shrink-0", children: [
+          /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
+          /* @__PURE__ */ jsx(
+            "input",
+            {
+              value: resultR,
+              onChange: (e) => setResultR(e.target.value),
+              placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
+              type: "number",
+              step: "0.1",
+              className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+              style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
+          /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
+          /* @__PURE__ */ jsx(
+            "input",
+            {
+              value: manualExit,
+              onChange: (e) => setManualExit(e.target.value),
+              placeholder: "68 412",
+              type: "number",
+              step: "any",
+              inputMode: "decimal",
+              className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+              style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            }
+          )
+        ] })
+      ] }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-4", style: { color: BASE.inkFaint }, children: "\u0423 \u044D\u0442\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u043D\u0435\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u0433\u043E \u043F\u043B\u0430\u043D\u0430 SL/TP \u2014 \u0443\u043A\u0430\u0436\u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E." })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.outcome }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Win", "Loss", "Breakeven"].map((o) => /* @__PURE__ */ jsx(
-        "button",
-        {
-          onClick: () => setOutcome(o),
-          className: "flex-1 px-2 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
-          style: { background: outcome === o ? `${outcomeColor(o)}14` : "transparent", color: outcome === o ? outcomeColor(o) : BASE.inkDim, border: `1px solid ${outcome === o ? outcomeColor(o) + "50" : BASE.line}` },
-          children: OUTCOME_LABEL[o]
-        },
-        o
-      )) })
+      /* @__PURE__ */ jsx(L, { children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0432\u044B\u0445\u043E\u0434\u0430" }),
+      /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+        exitScreenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+          /* @__PURE__ */ jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => setExitScreenshots((prev) => prev.filter((_, idx) => idx !== i)),
+              className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90",
+              style: { background: "rgba(0,0,0,0.55)" },
+              children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" })
+            }
+          )
+        ] }, i)),
+        exitScreenshots.length < MAX_SHOTS && /* @__PURE__ */ jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => fileInputRef.current?.click(),
+            className: "w-20 h-20 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-150",
+            style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim },
+            children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 })
+          }
+        )
+      ] }),
+      /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
@@ -3672,7 +3902,9 @@ function Log({ entries, onDelete, onCloseTrade, accent, measureMode, currency, t
     return matchesFilter && matchesQuery;
   });
   const closedEntries = entries.filter(isEntryClosed);
-  const winRate = closedEntries.length ? Math.round(closedEntries.filter((e) => e.outcome === "Win").length / closedEntries.length * 100) : 0;
+  const winsCount = closedEntries.filter((e) => e.outcome === "Win").length;
+  const lossesCount = closedEntries.filter((e) => e.outcome === "Loss").length;
+  const winRate = winsCount + lossesCount > 0 ? Math.round(winsCount / (winsCount + lossesCount) * 100) : 0;
   const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const netR = withR.reduce((s, e) => s + e.r, 0);
   return /* @__PURE__ */ jsxs("div", { children: [
@@ -3709,16 +3941,33 @@ function Log({ entries, onDelete, onCloseTrade, accent, measureMode, currency, t
           /* @__PURE__ */ jsx(LogMiniStat, { label: t.log.colResult, value: formatResult(e.r, measureMode, currency), color: e.r != null ? outcomeColor(e.outcome) : void 0 })
         ] })
       ] }),
-      openId === e.id && /* @__PURE__ */ jsxs("div", { className: "tab-content px-4 py-3 space-y-2 text-sm", style: { background: BASE.bg, color: BASE.inkDim }, children: [
-        e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 overflow-x-auto pb-1", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
-        /* @__PURE__ */ jsx("span", { className: "inline-block px-2 py-0.5 rounded-full text-[11px] mb-1", style: { border: `1px solid ${BASE.line}`, color: accent }, children: e.tag }),
-        /* @__PURE__ */ jsxs("p", { children: [
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0417\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u2014 " }),
-          e.pull
+      openId === e.id && /* @__PURE__ */ jsxs("div", { className: "tab-content px-4 py-3 space-y-3 text-sm", style: { background: BASE.bg, color: BASE.inkDim }, children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "ENTRY" }),
+          (e.stopLoss != null || e.takeProfit != null) && /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2", style: { fontFamily: "'JetBrains Mono', monospace" }, children: [
+            e.stopLoss != null && /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(e.stopLoss)] }),
+            e.takeProfit != null && /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(e.takeProfit)] }),
+            e.plannedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: accent }, children: ["\u041F\u043B\u0430\u043D 1:", e.plannedRR.toFixed(2)] })
+          ] }),
+          e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 overflow-x-auto pb-1 mb-2", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          /* @__PURE__ */ jsx("span", { className: "inline-block px-2 py-0.5 rounded-full text-[11px] mb-1", style: { border: `1px solid ${BASE.line}`, color: accent }, children: e.tag }),
+          /* @__PURE__ */ jsxs("p", { children: [
+            /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0417\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u2014 " }),
+            e.pull
+          ] })
         ] }),
-        isEntryClosed(e) && /* @__PURE__ */ jsxs("p", { children: [
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u2014 " }),
-          e.lesson
+        isEntryClosed(e) && /* @__PURE__ */ jsxs("div", { className: "pt-2", style: { borderTop: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "EXIT" }),
+          /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2 flex-wrap", style: { fontFamily: "'JetBrains Mono', monospace" }, children: [
+            e.closeType && /* @__PURE__ */ jsx("span", { children: { tp: "\u041F\u043E TP", sl: "\u041F\u043E SL", manual: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }[e.closeType] || e.closeType }),
+            e.exitPrice != null && /* @__PURE__ */ jsxs("span", { children: ["Exit ", formatPriceValue(e.exitPrice)] }),
+            e.realizedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: outcomeColor(e.outcome) }, children: [e.realizedRR >= 0 ? "+" : "", e.realizedRR.toFixed(2), "R"] })
+          ] }),
+          e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 overflow-x-auto pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          /* @__PURE__ */ jsxs("p", { children: [
+            /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u2014 " }),
+            e.lesson
+          ] })
         ] }),
         !isEntryClosed(e) && /* @__PURE__ */ jsxs(
           "button",
@@ -3916,7 +4165,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     closedEntries.forEach((e) => g[e.outcome]?.push(e));
     return g;
   }, [closedEntries]);
-  const winRate = closedEntries.length ? Math.round(grouped.Win.length / closedEntries.length * 100) : 0;
+  const winRate = grouped.Win.length + grouped.Loss.length > 0 ? Math.round(grouped.Win.length / (grouped.Win.length + grouped.Loss.length) * 100) : 0;
   const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const avgR = withR.length ? withR.reduce((s, e) => s + e.r, 0) / withR.length : null;
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
@@ -3943,6 +4192,20 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     });
     return Object.entries(stats).map(([tag, s]) => ({ tag, avgR: s.sumR / s.count, count: s.count })).sort((a, b) => b.avgR - a.avgR);
   }, [withR]);
+  const planVsFact = useMemo(() => {
+    const withPlan = closedEntries.filter((e) => typeof e.plannedRR === "number" && typeof e.realizedRR === "number");
+    if (withPlan.length < 3) return null;
+    const avgPlanned = st_mean(withPlan.map((e) => e.plannedRR));
+    const avgRealized = st_mean(withPlan.map((e) => e.realizedRR));
+    const captures = withPlan.filter((e) => e.plannedRR > 0).map((e) => Math.max(0, Math.min(1, e.realizedRR / e.plannedRR)));
+    const captureRatio = captures.length ? st_mean(captures) * 100 : null;
+    const closeCounts = { tp: 0, sl: 0, manual: 0 };
+    closedEntries.forEach((e) => {
+      if (e.closeType && closeCounts[e.closeType] != null) closeCounts[e.closeType]++;
+    });
+    const closeTotal = closeCounts.tp + closeCounts.sl + closeCounts.manual;
+    return { count: withPlan.length, avgPlanned, avgRealized, captureRatio, closeCounts, closeTotal };
+  }, [closedEntries]);
   const EquityTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     const e = payload[0].payload;
@@ -4095,7 +4358,32 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         /* @__PURE__ */ jsx(Area, { type: "monotone", dataKey: "cum", stroke: accent, strokeWidth: 2, fill: "url(#eqGrad)", dot: { r: 3, fill: accent, strokeWidth: 0 }, isAnimationActive: true, animationDuration: 700 })
       ] }) }) }),
       /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E \u0442\u0438\u043F\u0443 \u0441\u0435\u0442\u0430\u043F\u0430" }),
-      tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) })
+      tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
+      analytics.rrStats && analytics.rrStats.sampleSize > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "Average RR \u0438 Win Rate" }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2", children: [
+          /* @__PURE__ */ jsx(StatCard, { label: "Average RR", value: analytics.rrStats.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "\u2014", accent: analytics.rrStats.avgRealizedRR != null ? analytics.rrStats.avgRealizedRR >= 0 ? WIN : LOSS : BASE.ink }),
+          /* @__PURE__ */ jsx(StatCard, { label: "Win Rate", value: analytics.rrStats.winRate != null ? `${analytics.rrStats.winRate}%` : "\u2014", accent: BASE.ink })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+          /* @__PURE__ */ jsxs("span", { children: ["Wins ", analytics.rrStats.wins] }),
+          /* @__PURE__ */ jsxs("span", { children: ["Losses ", analytics.rrStats.losses] }),
+          /* @__PURE__ */ jsxs("span", { children: ["Breakeven ", analytics.rrStats.breakevens] })
+        ] })
+      ] }),
+      planVsFact && /* @__PURE__ */ jsxs(Card, { children: [
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041F\u043B\u0430\u043D vs \u0424\u0430\u043A\u0442" }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-3", children: [
+          /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Planned RR", value: `${planVsFact.avgPlanned.toFixed(1)}R`, accent: BASE.ink }),
+          /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Realized RR", value: `${planVsFact.avgRealized.toFixed(1)}R`, accent: planVsFact.avgRealized >= 0 ? WIN : LOSS }),
+          planVsFact.captureRatio != null && /* @__PURE__ */ jsx(StatCard, { label: "TP Capture", value: `${Math.round(planVsFact.captureRatio)}%`, accent: BASE.ink })
+        ] }),
+        planVsFact.closeTotal > 0 && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+          /* @__PURE__ */ jsxs("span", { children: ["TP ", Math.round(planVsFact.closeCounts.tp / planVsFact.closeTotal * 100), "%"] }),
+          /* @__PURE__ */ jsxs("span", { children: ["SL ", Math.round(planVsFact.closeCounts.sl / planVsFact.closeTotal * 100), "%"] }),
+          /* @__PURE__ */ jsxs("span", { children: ["Manual ", Math.round(planVsFact.closeCounts.manual / planVsFact.closeTotal * 100), "%"] })
+        ] })
+      ] })
     ] })
   ] });
 }
@@ -5398,8 +5686,14 @@ function sanitizeImportedEntry(e, fallbackIndex) {
     date,
     exitDate: !isNaN(exitDate?.getTime()) ? exitDate : null,
     screenshots: Array.isArray(e.screenshots) ? e.screenshots.filter((s) => typeof s === "string").slice(0, 4) : [],
+    exitScreenshots: Array.isArray(e.exitScreenshots) ? e.exitScreenshots.filter((s) => typeof s === "string").slice(0, 4) : [],
     entryPrice: typeof e.entryPrice === "number" && !isNaN(e.entryPrice) ? e.entryPrice : null,
     exitPrice: typeof e.exitPrice === "number" && !isNaN(e.exitPrice) ? e.exitPrice : null,
+    stopLoss: e.stopLoss,
+    takeProfit: e.takeProfit,
+    plannedRR: e.plannedRR,
+    closeType: e.closeType,
+    realizedRR: e.realizedRR,
     rr: typeof e.rr === "number" && !isNaN(e.rr) ? e.rr : null
   });
 }
@@ -6007,7 +6301,8 @@ function MindExe() {
             ...e,
             date: new Date(e.date),
             exitDate: e.exitDate ? new Date(e.exitDate) : null,
-            screenshots: Array.isArray(media?.[e.id]) ? media[e.id] : []
+            screenshots: Array.isArray(media?.[e.id]) ? media[e.id] : Array.isArray(media?.[e.id]?.entry) ? media[e.id].entry : [],
+            exitScreenshots: Array.isArray(media?.[e.id]?.exit) ? media[e.id].exit : []
           }));
           setEntries(restoredEntries);
           if (user.name !== void 0) setName(user.name);
@@ -6069,7 +6364,9 @@ function MindExe() {
       const srcEntries = overrides.entries ?? entries;
       const mediaMap = {};
       for (const e of srcEntries) {
-        if (Array.isArray(e.screenshots) && e.screenshots.length > 0) mediaMap[e.id] = e.screenshots;
+        if ((Array.isArray(e.screenshots) && e.screenshots.length > 0) || (Array.isArray(e.exitScreenshots) && e.exitScreenshots.length > 0)) {
+          mediaMap[e.id] = { entry: e.screenshots || [], exit: e.exitScreenshots || [] };
+        }
       }
       await saveMedia(userId, mediaMap);
     } catch (_) {
@@ -6482,6 +6779,7 @@ function MindExe() {
             measureMode,
             currency,
             t,
+            notify: showToast,
             onCancel: () => {
               setClosingId(null);
               setTab("log");
