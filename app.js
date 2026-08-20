@@ -1,4 +1,4 @@
-// mind.exe V0.4 — edit closed trades, Average RR fixed to R (not currency)
+// mind.exe V0.5 — money result is always manual (r/outcome from user input, RR stays price-derived and separate)
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -3666,10 +3666,11 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
   const fileInputRef = useRef(null);
   const MAX_SHOTS = 4;
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
-  const effectiveExit = hasPlan ? closeType === "tp" ? entry.takeProfit : closeType === "sl" ? entry.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : null;
+  const effectiveExit = hasPlan ? closeType === "tp" ? entry.takeProfit : closeType === "sl" ? entry.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
   const realizedRR = hasPlan && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(entry.direction, entry.entryPrice, entry.stopLoss, effectiveExit) : null;
-  const derivedOutcome = hasPlan ? closeType === "tp" ? "Win" : closeType === "sl" ? "Loss" : realizedRR == null ? null : realizedRR > 0.02 ? "Win" : realizedRR < -0.02 ? "Loss" : "Breakeven" : null;
-  const canSave = hasPlan ? closeType === "tp" || closeType === "sl" || manualExit !== "" && !isNaN(parseFloat(manualExit)) && realizedRR != null : resultR !== "" && !isNaN(parseFloat(resultR));
+  const resultNum = resultR === "" ? null : parseFloat(resultR);
+  const derivedOutcome = resultNum == null || isNaN(resultNum) ? null : resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven";
+  const canSave = resultR !== "" && !isNaN(parseFloat(resultR));
   const handleFiles = (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -3689,32 +3690,17 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
   };
   const submit = () => {
     if (!canSave) return;
-    if (hasPlan) {
-      onSave({
-        status: "closed",
-        closeType,
-        exitPrice: effectiveExit,
-        realizedRR,
-        r: realizedRR,
-        outcome: derivedOutcome,
-        lesson: lesson.trim() || "\u2014",
-        exitDate: /* @__PURE__ */ new Date(),
-        exitScreenshots
-      });
-    } else {
-      const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
-      onSave({
-        status: "closed",
-        closeType: "manual",
-        exitPrice: num(manualExit),
-        realizedRR: null,
-        r: num(resultR),
-        outcome: num(resultR) > 0 ? "Win" : num(resultR) < 0 ? "Loss" : "Breakeven",
-        lesson: lesson.trim() || "\u2014",
-        exitDate: /* @__PURE__ */ new Date(),
-        exitScreenshots
-      });
-    }
+    onSave({
+      status: "closed",
+      closeType: hasPlan ? closeType : "manual",
+      exitPrice: effectiveExit,
+      realizedRR,
+      r: resultNum,
+      outcome: derivedOutcome,
+      lesson: lesson.trim() || "\u2014",
+      exitDate: /* @__PURE__ */ new Date(),
+      exitScreenshots
+    });
   };
   if (!entry) return null;
   const closeTypeOptions = [
@@ -3736,72 +3722,51 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(entry.stopLoss)] }),
       /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(entry.takeProfit)] })
     ] }),
-    hasPlan ? /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
-        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
-          "button",
-          {
-            onClick: () => setCloseType(o.id),
-            className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95",
-            style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` },
-            children: o.label
-          },
-          o.id
-        )) })
-      ] }),
-      closeType === "manual" && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
-        /* @__PURE__ */ jsx(
-          "input",
-          {
-            value: manualExit,
-            onChange: (e) => setManualExit(e.target.value),
-            placeholder: "68 412",
-            type: "number",
-            step: "any",
-            inputMode: "decimal",
-            className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
-          }
-        )
-      ] }),
-      /* @__PURE__ */ jsx("div", { className: "mb-5 text-sm", style: { color: realizedRR != null ? outcomeColor(derivedOutcome) : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `Realized RR: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR \u2014" })
-    ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
-        /* @__PURE__ */ jsxs("div", { className: "w-[40%] shrink-0", children: [
-          /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
-          /* @__PURE__ */ jsx(
-            "input",
-            {
-              value: resultR,
-              onChange: (e) => setResultR(e.target.value),
-              placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
-              type: "number",
-              step: "0.1",
-              className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-              style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
-            }
-          )
-        ] }),
-        /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-          /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
-          /* @__PURE__ */ jsx(
-            "input",
-            {
-              value: manualExit,
-              onChange: (e) => setManualExit(e.target.value),
-              placeholder: "68 412",
-              type: "number",
-              step: "any",
-              inputMode: "decimal",
-              className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-              style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
-            }
-          )
-        ] })
-      ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-4", style: { color: BASE.inkFaint }, children: "\u0423 \u044D\u0442\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438 \u043D\u0435\u0442 \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u043E\u0433\u043E \u043F\u043B\u0430\u043D\u0430 SL/TP \u2014 \u0443\u043A\u0430\u0436\u0438 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E." })
+    hasPlan && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: () => setCloseType(o.id),
+          className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95",
+          style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` },
+          children: o.label
+        },
+        o.id
+      )) })
+    ] }),
+    (!hasPlan || closeType === "manual") && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          value: manualExit,
+          onChange: (e) => setManualExit(e.target.value),
+          placeholder: "68 412",
+          type: "number",
+          step: "any",
+          inputMode: "decimal",
+          className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+        }
+      )
+    ] }),
+    hasPlan && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
+      /* @__PURE__ */ jsx(
+        "input",
+        {
+          value: resultR,
+          onChange: (e) => setResultR(e.target.value),
+          placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80",
+          type: "number",
+          step: "0.1",
+          className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+        }
+      ),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-1.5", style: { color: BASE.inkFaint }, children: "\u0412\u0432\u0435\u0434\u0438 \u0438\u0442\u043E\u0433\u043E\u0432\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u2014 \u043E\u043D \u0438\u0434\u0451\u0442 \u0432 PnL \u0438 \u0431\u0430\u043B\u0430\u043D\u0441." })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0432\u044B\u0445\u043E\u0434\u0430" }),
@@ -3887,10 +3852,9 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   const [point, setPoint] = useState({ x: entry?.x ?? null, y: entry?.y ?? null });
   const [pull, setPull] = useState(entry?.pull === "\u2014" ? "" : entry?.pull || "");
   const [screenshots, setScreenshots] = useState(entry?.screenshots || []);
-  const hadPlan = entry && typeof entry.stopLoss === "number" && typeof entry.takeProfit === "number";
   const [closeType, setCloseType] = useState(entry?.closeType || "manual");
   const [manualExit, setManualExit] = useState(entry?.exitPrice != null ? String(entry.exitPrice) : "");
-  const [resultR, setResultR] = useState(!hadPlan && entry?.r != null ? String(entry.r) : "");
+  const [resultR, setResultR] = useState(entry?.r != null ? String(entry.r) : "");
   const [lesson, setLesson] = useState(entry?.lesson === "\u2014" ? "" : entry?.lesson || "");
   const [exitScreenshots, setExitScreenshots] = useState(entry?.exitScreenshots || []);
   const entryFileRef = useRef(null);
@@ -3907,10 +3871,11 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     return computePlannedRR(direction, en, sl, tp);
   }, [entryPrice, stopLoss, takeProfit, direction]);
   const hasPlanNow = plannedRRResult.ok;
-  const effectiveExit = hasPlanNow ? closeType === "tp" ? parseFloat(takeProfit) : closeType === "sl" ? parseFloat(stopLoss) : manualExit === "" ? null : parseFloat(manualExit) : null;
+  const effectiveExit = hasPlanNow ? closeType === "tp" ? parseFloat(takeProfit) : closeType === "sl" ? parseFloat(stopLoss) : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
   const realizedRR = hasPlanNow && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(direction, parseFloat(entryPrice), parseFloat(stopLoss), effectiveExit) : null;
-  const derivedOutcome = hasPlanNow ? closeType === "tp" ? "Win" : closeType === "sl" ? "Loss" : realizedRR == null ? null : realizedRR > 0.02 ? "Win" : realizedRR < -0.02 ? "Loss" : "Breakeven" : resultR !== "" && !isNaN(parseFloat(resultR)) ? parseFloat(resultR) > 0 ? "Win" : parseFloat(resultR) < 0 ? "Loss" : "Breakeven" : null;
-  const canSave = instrument.trim() && point.x !== null && (hasPlanNow ? closeType === "tp" || closeType === "sl" || realizedRR != null : resultR !== "" && !isNaN(parseFloat(resultR)));
+  const resultNum = resultR === "" ? null : parseFloat(resultR);
+  const derivedOutcome = resultNum == null || isNaN(resultNum) ? null : resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven";
+  const canSave = instrument.trim() && point.x !== null && resultR !== "" && !isNaN(parseFloat(resultR));
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
   const makeHandleFiles = (list, setList) => (e) => {
     const files = Array.from(e.target.files || []);
@@ -3957,50 +3922,27 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   ] });
   const submit = () => {
     if (!canSave) return;
-    if (hasPlanNow) {
-      onSave({
-        instrument: instrument.trim(),
-        direction,
-        tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
-        x: point.x,
-        y: point.y,
-        pull: pull.trim() || "\u2014",
-        screenshots,
-        entryPrice: parseFloat(entryPrice),
-        stopLoss: parseFloat(stopLoss),
-        takeProfit: parseFloat(takeProfit),
-        plannedRR: plannedRRResult.rr,
-        closeType,
-        exitPrice: effectiveExit,
-        realizedRR,
-        r: realizedRR,
-        outcome: derivedOutcome,
-        lesson: lesson.trim() || "\u2014",
-        exitScreenshots
-      });
-    } else {
-      const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
-      onSave({
-        instrument: instrument.trim(),
-        direction,
-        tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
-        x: point.x,
-        y: point.y,
-        pull: pull.trim() || "\u2014",
-        screenshots,
-        entryPrice: num(entryPrice),
-        stopLoss: null,
-        takeProfit: null,
-        plannedRR: null,
-        closeType: "manual",
-        exitPrice: num(manualExit),
-        realizedRR: null,
-        r: num(resultR),
-        outcome: derivedOutcome,
-        lesson: lesson.trim() || "\u2014",
-        exitScreenshots
-      });
-    }
+    const num = (s) => s === "" || isNaN(parseFloat(s)) ? null : parseFloat(s);
+    onSave({
+      instrument: instrument.trim(),
+      direction,
+      tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
+      x: point.x,
+      y: point.y,
+      pull: pull.trim() || "\u2014",
+      screenshots,
+      entryPrice: num(entryPrice),
+      stopLoss: hasPlanNow ? parseFloat(stopLoss) : null,
+      takeProfit: hasPlanNow ? parseFloat(takeProfit) : null,
+      plannedRR: hasPlanNow ? plannedRRResult.rr : null,
+      closeType: hasPlanNow ? closeType : "manual",
+      exitPrice: effectiveExit,
+      realizedRR,
+      r: resultNum,
+      outcome: derivedOutcome,
+      lesson: lesson.trim() || "\u2014",
+      exitScreenshots
+    });
   };
   if (!entry) return null;
   const closeTypeOptions = [
@@ -4060,29 +4002,23 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
     /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: "EXIT" }),
-    hasPlanNow ? /* @__PURE__ */ jsxs(Fragment, { children: [
-      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-        /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
-        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
-          "button",
-          { onClick: () => setCloseType(o.id), className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95", style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` }, children: o.label },
-          o.id
-        )) })
-      ] }),
-      closeType === "manual" && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
-        /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
-      ] }),
-      /* @__PURE__ */ jsx("div", { className: "mb-5 text-sm", style: { color: realizedRR != null ? outcomeColor(derivedOutcome) : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `Realized RR: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR \u2014" })
-    ] }) : /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 items-end", children: [
-      /* @__PURE__ */ jsxs("div", { className: "w-[40%] shrink-0", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
-        /* @__PURE__ */ jsx("input", { value: resultR, onChange: (e) => setResultR(e.target.value), type: "number", step: "0.1", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
-      ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
-        /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
-      ] })
+    hasPlanNow && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
+        "button",
+        { onClick: () => setCloseType(o.id), className: "flex-1 px-2 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95", style: { background: closeType === o.id ? `${accent}12` : "transparent", color: closeType === o.id ? accent : BASE.inkDim, border: `1px solid ${closeType === o.id ? accent + "40" : BASE.line}` }, children: o.label },
+        o.id
+      )) })
+    ] }),
+    (!hasPlanNow || closeType === "manual") && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
+      /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+    ] }),
+    hasPlanNow && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
+      /* @__PURE__ */ jsx("input", { value: resultR, onChange: (e) => setResultR(e.target.value), type: "number", step: "0.1", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-1.5", style: { color: BASE.inkFaint }, children: "\u0418\u0442\u043E\u0433\u043E\u0432\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0432\u043E\u0434\u0438\u0442\u0441\u044F \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u2014 \u043E\u043D \u0438\u0434\u0451\u0442 \u0432 PnL \u0438 \u0431\u0430\u043B\u0430\u043D\u0441." })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0432\u044B\u0445\u043E\u0434\u0430" }),
