@@ -1,7 +1,47 @@
-// mind.exe V0.5 — money result is always manual (r/outcome from user input, RR stays price-derived and separate)
+// mind.exe V0.6 — Firebase Auth (email/password via username@mindexe.local) + Firestore storage backend, legacy local-auth and pre-auth localStorage data migrated automatically on first login
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
+
+// firebase.js
+import { initializeApp } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  onAuthStateChanged,
+  updateProfile as firebaseUpdateProfile
+} from "firebase/auth";
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc
+} from "firebase/firestore";
+var firebaseConfig = {
+  apiKey: "AIzaSyAPSGcQOPS09ytLKi8dk0WOh0U3WfLm4_E",
+  authDomain: "mindexe-29adf.firebaseapp.com",
+  projectId: "mindexe-29adf",
+  storageBucket: "mindexe-29adf.firebasestorage.app",
+  messagingSenderId: "448455109935",
+  appId: "1:448455109935:web:46862c8d072ea6cb7505da",
+  measurementId: "G-NJFS3KLKFN"
+};
+var firebaseApp = initializeApp(firebaseConfig);
+var fbAuth = getAuth(firebaseApp);
+var fbDb = getFirestore(firebaseApp);
+function fsSanitizeKey(key) {
+  return String(key).replace(/[\/]/g, "_");
+}
+function fsDocRef(key, shared) {
+  const safeKey = fsSanitizeKey(key);
+  if (shared) return doc(fbDb, "shared", safeKey);
+  const uid = fbAuth.currentUser?.uid;
+  if (!uid) return null;
+  return doc(fbDb, "users", uid, "data", safeKey);
+}
 
 // mind-exe.tsx
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -5939,7 +5979,7 @@ var storageDegraded = false;
 function markStorageDegraded(e) {
   if (/unexpected response/i.test(String(e?.message || e || ""))) storageDegraded = true;
 }
-async function storageGet(key, shared = false) {
+async function legacyStorageGet(key, shared = false) {
   if (!window.storage || storageDegraded) return null;
   try {
     return await queueStorage(() => withStorageRetry(() => window.storage.get(key, shared)));
@@ -5948,7 +5988,7 @@ async function storageGet(key, shared = false) {
     throw e;
   }
 }
-async function storageSet(key, value, shared = false) {
+async function legacyStorageSet(key, value, shared = false) {
   if (!window.storage || storageDegraded) return null;
   try {
     return await queueStorage(() => withStorageRetry(() => window.storage.set(key, value, shared)));
@@ -5957,7 +5997,7 @@ async function storageSet(key, value, shared = false) {
     throw e;
   }
 }
-async function storageDelete(key, shared = false) {
+async function legacyStorageDelete(key, shared = false) {
   if (!window.storage || storageDegraded) return null;
   try {
     return await queueStorage(() => withStorageRetry(() => window.storage.delete(key, shared)));
@@ -5965,6 +6005,25 @@ async function storageDelete(key, shared = false) {
     markStorageDegraded(e);
     throw e;
   }
+}
+async function storageGet(key, shared = false) {
+  const ref = fsDocRef(key, shared);
+  if (!ref) return null;
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  return { key, value: snap.data().value, shared: !!shared };
+}
+async function storageSet(key, value, shared = false) {
+  const ref = fsDocRef(key, shared);
+  if (!ref) return null;
+  await setDoc(ref, { value, updatedAt: Date.now() });
+  return { key, value, shared: !!shared };
+}
+async function storageDelete(key, shared = false) {
+  const ref = fsDocRef(key, shared);
+  if (!ref) return null;
+  await deleteDoc(ref);
+  return { key, deleted: true, shared: !!shared };
 }
 function profileKey(userId) {
   return `${PROFILE_KEY}:${userId}`;
@@ -6000,114 +6059,105 @@ async function saveMedia(userId, mediaMap) {
   }
 }
 var AUTH_USERS_KEY = "mind-exe-auth-users";
-var AUTH_SESSION_KEY = "mind-exe-auth-session";
 var LEGACY_CLAIMED_KEY = "mind-exe-legacy-claimed";
-function mockHashPassword(pw) {
-  let h = 5381;
-  for (let i = 0; i < pw.length; i++) h = (h * 33 ^ pw.charCodeAt(i)) >>> 0;
-  return `mock:${h.toString(16)}`;
+var LOCAL_MIGRATED_KEY = "mind-exe-local-migrated";
+var USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
+function usernameToEmail(username) {
+  return `${username.trim().toLowerCase()}@mindexe.local`;
 }
-var memoryAuthUsers = {};
-var memoryAuthSession = null;
-async function loadAuthUsers() {
-  if (!window.storage || storageDegraded) return memoryAuthUsers;
-  try {
-    const res = await storageGet(AUTH_USERS_KEY, false);
-    return res?.value ? JSON.parse(res.value) : {};
-  } catch (_) {
-    return {};
-  }
+function emailToUsername(email) {
+  return (email || "").split("@")[0];
 }
-async function saveAuthUsers(users) {
-  memoryAuthUsers = users;
-  if (!window.storage || storageDegraded) return;
+async function findLegacyLocalUser(username) {
   try {
-    await storageSet(AUTH_USERS_KEY, JSON.stringify(users), false);
-  } catch (e) {
-    console.warn("mind.exe: account storage unavailable in this preview \u2014 accounts will only last this session", e);
-  }
-}
-async function loadAuthSession() {
-  if (!window.storage || storageDegraded) return memoryAuthSession;
-  try {
-    const res = await storageGet(AUTH_SESSION_KEY, false);
-    return res?.value ? JSON.parse(res.value) : null;
+    const res = await legacyStorageGet(AUTH_USERS_KEY, false);
+    const users = res?.value ? JSON.parse(res.value) : {};
+    return users[username.trim().toLowerCase()] || null;
   } catch (_) {
     return null;
   }
 }
-async function saveAuthSession(session) {
-  memoryAuthSession = session || null;
-  if (!window.storage || storageDegraded) return;
+async function migrateLocalAccountIfNeeded(uid, username) {
   try {
-    if (!session) {
-      await storageDelete(AUTH_SESSION_KEY, false);
-    } else {
-      await storageSet(AUTH_SESSION_KEY, JSON.stringify(session), false);
-    }
+    const already = await storageGet(LOCAL_MIGRATED_KEY, false);
+    if (already?.value) return;
+    const legacyUser = await findLegacyLocalUser(username);
+    if (!legacyUser) return;
+    const [legacyProfile, legacyMedia] = await Promise.all([
+      legacyStorageGet(profileKey(legacyUser.id), false).catch(() => null),
+      legacyStorageGet(mediaKey(legacyUser.id), false).catch(() => null)
+    ]);
+    if (legacyProfile?.value) await storageSet(profileKey(uid), legacyProfile.value, false);
+    if (legacyMedia?.value) await storageSet(mediaKey(uid), legacyMedia.value, false);
+    await storageSet(LOCAL_MIGRATED_KEY, "1", false);
   } catch (e) {
-    console.warn("mind.exe: session storage unavailable in this preview \u2014 staying logged in only for this tab", e);
+    console.warn("mind.exe: local\u2192Firebase account migration skipped", e);
   }
 }
-function createLocalAuthProvider() {
+function createFirebaseAuthProvider() {
   return {
     async register(username, password) {
       const uname = (username || "").trim();
-      if (uname.length < 3) throw new Error("\u041B\u043E\u0433\u0438\u043D \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043E\u0442 3 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
-      if ((password || "").length < 4) throw new Error("\u041F\u0430\u0440\u043E\u043B\u044C \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043E\u0442 4 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
-      const key = uname.toLowerCase();
-      const users = await loadAuthUsers();
-      if (users[key]) throw new Error("\u0422\u0430\u043A\u043E\u0439 \u043B\u043E\u0433\u0438\u043D \u0443\u0436\u0435 \u0437\u0430\u043D\u044F\u0442");
-      const user = {
-        id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-        username: uname,
-        email: null,
-        authProvider: "local",
-        createdAt: (/* @__PURE__ */ new Date()).toISOString()
-      };
-      users[key] = { ...user, passwordHash: mockHashPassword(password) };
-      await saveAuthUsers(users);
-      await saveAuthSession({ userId: user.id, username: user.username });
-      return user;
+      if (!USERNAME_RE.test(uname.toLowerCase())) {
+        throw new Error("\u041B\u043E\u0433\u0438\u043D: 3-32 \u0441\u0438\u043C\u0432\u043E\u043B\u0430, \u043B\u0430\u0442\u0438\u043D\u0438\u0446\u0430/\u0446\u0438\u0444\u0440\u044B/._-");
+      }
+      if ((password || "").length < 6) {
+        throw new Error("\u041F\u0430\u0440\u043E\u043B\u044C \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043E\u0442 6 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
+      }
+      const cred = await createUserWithEmailAndPassword(fbAuth, usernameToEmail(uname), password);
+      await firebaseUpdateProfile(cred.user, { displayName: uname });
+      await migrateLocalAccountIfNeeded(cred.user.uid, uname);
+      return { id: cred.user.uid, username: uname };
     },
     async login(username, password) {
-      const key = (username || "").trim().toLowerCase();
-      const users = await loadAuthUsers();
-      const record = users[key];
-      if (!record || record.passwordHash !== mockHashPassword(password || "")) {
-        throw new Error("\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C");
-      }
-      const { passwordHash, ...user } = record;
-      await saveAuthSession({ userId: user.id, username: user.username });
-      return user;
+      const uname = (username || "").trim();
+      const cred = await signInWithEmailAndPassword(fbAuth, usernameToEmail(uname), password);
+      await migrateLocalAccountIfNeeded(cred.user.uid, uname);
+      return { id: cred.user.uid, username: cred.user.displayName || emailToUsername(cred.user.email) };
     },
     async logout() {
-      await saveAuthSession(null);
+      await firebaseSignOut(fbAuth);
     },
     async getSession() {
-      const session = await loadAuthSession();
-      if (!session?.userId) return null;
-      const users = await loadAuthUsers();
-      const record = Object.values(users).find((u) => u.id === session.userId);
-      if (!record) return null;
-      const { passwordHash, ...user } = record;
-      return user;
+      return new Promise((resolve) => {
+        const unsub = onAuthStateChanged(fbAuth, (u) => {
+          unsub();
+          resolve(u ? { id: u.uid, username: u.displayName || emailToUsername(u.email) } : null);
+        });
+      });
     }
   };
 }
-var authProvider = createLocalAuthProvider();
+var authProvider = createFirebaseAuthProvider();
 var authService = {
-  register: (username, password) => authProvider.register(username, password),
-  login: (username, password) => authProvider.login(username, password),
+  register: (username, password) => {
+    const friendly = (e) => {
+      const code = e?.code || "";
+      if (code === "auth/email-already-in-use") return new Error("\u0422\u0430\u043A\u043E\u0439 \u043B\u043E\u0433\u0438\u043D \u0443\u0436\u0435 \u0437\u0430\u043D\u044F\u0442");
+      if (code === "auth/weak-password") return new Error("\u0421\u043B\u0438\u0448\u043A\u043E\u043C \u043F\u0440\u043E\u0441\u0442\u043E\u0439 \u043F\u0430\u0440\u043E\u043B\u044C");
+      return e;
+    };
+    return authProvider.register(username, password).catch((e) => { throw friendly(e); });
+  },
+  login: (username, password) => {
+    const friendly = (e) => {
+      const code = e?.code || "";
+      if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+        return new Error("\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u043B\u043E\u0433\u0438\u043D \u0438\u043B\u0438 \u043F\u0430\u0440\u043E\u043B\u044C");
+      }
+      return e;
+    };
+    return authProvider.login(username, password).catch((e) => { throw friendly(e); });
+  },
   logout: () => authProvider.logout(),
   getCurrentUser: () => authProvider.getSession()
 };
 async function checkLegacyDataAvailable() {
   if (!window.storage) return false;
   try {
-    const claimed = await storageGet(LEGACY_CLAIMED_KEY, false);
+    const claimed = await legacyStorageGet(LEGACY_CLAIMED_KEY, false);
     if (claimed?.value) return false;
-    const legacy = await storageGet(PROFILE_KEY, false);
+    const legacy = await legacyStorageGet(PROFILE_KEY, false);
     return !!legacy?.value;
   } catch (_) {
     return false;
@@ -6117,14 +6167,14 @@ async function claimLegacyData(userId) {
   if (!window.storage) return;
   try {
     const [legacyProfile, legacyMedia] = await Promise.all([
-      storageGet(PROFILE_KEY, false).catch(() => null),
-      storageGet(MEDIA_KEY, false).catch(() => null)
+      legacyStorageGet(PROFILE_KEY, false).catch(() => null),
+      legacyStorageGet(MEDIA_KEY, false).catch(() => null)
     ]);
     if (legacyProfile?.value) await storageSet(profileKey(userId), legacyProfile.value, false);
     if (legacyMedia?.value) await storageSet(mediaKey(userId), legacyMedia.value, false);
   } finally {
     try {
-      await storageSet(LEGACY_CLAIMED_KEY, "1", false);
+      await legacyStorageSet(LEGACY_CLAIMED_KEY, "1", false);
     } catch (_) {
     }
   }
@@ -6132,7 +6182,7 @@ async function claimLegacyData(userId) {
 async function skipLegacyData() {
   if (!window.storage) return;
   try {
-    await storageSet(LEGACY_CLAIMED_KEY, "1", false);
+    await legacyStorageSet(LEGACY_CLAIMED_KEY, "1", false);
   } catch (_) {
   }
 }

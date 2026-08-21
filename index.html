@@ -23,6 +23,10 @@
     // don't collide. This is a drop-in replacement only — the app itself never talks to
     // localStorage directly, only through window.storage (see storage/storageAdapter in
     // ARCHITECTURE.md), so swapping this shim for a real backend later needs no app changes.
+    //
+    // NOTE (Firebase migration): this shim is now only used to read pre-Firebase local data
+    // during the one-time legacy migration path in app.js (legacyStorage*). All new reads/writes
+    // for authenticated users go through Firestore instead — see firebase/* imports in app.js.
     (function () {
       const PREFIX = "mindexe:";
       function fullKey(key, shared) {
@@ -63,7 +67,10 @@
       "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
       "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
       "recharts": "https://esm.sh/recharts@2.12.7?external=react,react-dom",
-      "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react"
+      "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react",
+      "firebase/app": "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js",
+      "firebase/auth": "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js",
+      "firebase/firestore": "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js"
     }
   }
   </script>
