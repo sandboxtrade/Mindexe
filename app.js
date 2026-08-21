@@ -1,4 +1,4 @@
-// mind.exe V1.1 — one-time terminal-style boot intro (monospace lines: auth/sync/welcome) shown only on the very first login ever per account, flag persisted in Firestore; subsequent logins skip straight to Home
+// mind.exe V1.2 — boot intro now plays on every app entry (page load / fresh session, including when Firebase session persists and skips the login screen), not just the very first-ever login
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -6207,9 +6207,6 @@ function mediaKey(userId) {
 function aiKey(userId) {
   return `mind-exe-ai:${userId}`;
 }
-function introSeenKey(userId) {
-  return `mind-exe-intro-seen:${userId}`;
-}
 async function loadAiState(userId) {
   if (!window.storage || !userId) return { analysis: "", chatMessages: [] };
   try {
@@ -6796,24 +6793,8 @@ function MindExe() {
   };
   useEffect(() => {
     if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
-    let cancelled = false;
-    (async () => {
-      let seen = null;
-      try {
-        seen = await storageGet(introSeenKey(userId), false);
-      } catch (_) {
-      }
-      if (cancelled) return;
-      if (!seen?.value) {
-        setShowBootIntro(true);
-        storageSet(introSeenKey(userId), "1", false).catch(() => {
-        });
-      }
-      setIntroResolved(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setShowBootIntro(true);
+    setIntroResolved(true);
   }, [authStatus, loaded, migrateFor, userId, introResolved]);
   useEffect(() => {
     const t1 = setTimeout(() => setSplashFading(true), 7200);
