@@ -1,4 +1,4 @@
-// mind.exe V0.6 — Firebase Auth (email/password via username@mindexe.local) + Firestore storage backend, legacy local-auth and pre-auth localStorage data migrated automatically on first login
+// mind.exe V0.7 — Google Sign-In added alongside username/password (Firebase Auth GoogleAuthProvider + signInWithPopup)
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -11,7 +11,9 @@ import {
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  updateProfile as firebaseUpdateProfile
+  updateProfile as firebaseUpdateProfile,
+  GoogleAuthProvider,
+  signInWithPopup
 } from "firebase/auth";
 import {
   getFirestore,
@@ -6118,6 +6120,12 @@ function createFirebaseAuthProvider() {
     async logout() {
       await firebaseSignOut(fbAuth);
     },
+    async loginWithGoogle() {
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(fbAuth, provider);
+      const uname = cred.user.displayName || emailToUsername(cred.user.email) || `user_${cred.user.uid.slice(0, 6)}`;
+      return { id: cred.user.uid, username: uname };
+    },
     async getSession() {
       return new Promise((resolve) => {
         const unsub = onAuthStateChanged(fbAuth, (u) => {
@@ -6150,6 +6158,19 @@ var authService = {
     return authProvider.login(username, password).catch((e) => { throw friendly(e); });
   },
   logout: () => authProvider.logout(),
+  loginWithGoogle: () => {
+    const friendly = (e) => {
+      const code = e?.code || "";
+      if (code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request") {
+        return new Error("\u0412\u0445\u043E\u0434 \u043E\u0442\u043C\u0435\u043D\u0451\u043D");
+      }
+      if (code === "auth/popup-blocked") {
+        return new Error("\u0411\u0440\u0430\u0443\u0437\u0435\u0440 \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043B \u0432\u0441\u043F\u043B\u044B\u0432\u0430\u044E\u0449\u0435\u0435 \u043E\u043A\u043D\u043E \u2014 \u0440\u0430\u0437\u0440\u0435\u0448\u0438 \u0432\u0441\u043F\u043B\u044B\u0432\u0430\u044E\u0449\u0438\u0435 \u043E\u043A\u043D\u0430 \u0438 \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437");
+      }
+      return e;
+    };
+    return authProvider.loginWithGoogle().catch((e) => { throw friendly(e); });
+  },
   getCurrentUser: () => authProvider.getSession()
 };
 async function checkLegacyDataAvailable() {
@@ -6215,14 +6236,20 @@ function useAuth() {
     setStatus("authenticated");
     return u;
   };
+  const loginWithGoogle = async () => {
+    const u = await authService.loginWithGoogle();
+    setUser(u);
+    setStatus("authenticated");
+    return u;
+  };
   const logout = async () => {
     await authService.logout();
     setUser(null);
     setStatus("unauthenticated");
   };
-  return { status, user, register, login, logout };
+  return { status, user, register, login, loginWithGoogle, logout };
 }
-function AuthScreen({ accent, onRegister, onLogin }) {
+function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
   const [mode, setMode] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -6230,6 +6257,7 @@ function AuthScreen({ accent, onRegister, onLogin }) {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const switchMode = (m) => {
     setMode(m);
     setError("");
@@ -6250,6 +6278,18 @@ function AuthScreen({ accent, onRegister, onLogin }) {
       setError(/unexpected response/i.test(raw) ? "\u0425\u0440\u0430\u043D\u0438\u043B\u0438\u0449\u0435 \u043D\u0435 \u043E\u0442\u0432\u0435\u0442\u0438\u043B\u043E \u2014 \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437." : raw || "\u0427\u0442\u043E-\u0442\u043E \u043F\u043E\u0448\u043B\u043E \u043D\u0435 \u0442\u0430\u043A");
     } finally {
       setBusy(false);
+    }
+  };
+  const submitGoogle = async () => {
+    if (googleBusy) return;
+    setError("");
+    setGoogleBusy(true);
+    try {
+      await onGoogle();
+    } catch (e) {
+      setError(e?.message || "\u0427\u0442\u043E-\u0442\u043E \u043F\u043E\u0448\u043B\u043E \u043D\u0435 \u0442\u0430\u043A");
+    } finally {
+      setGoogleBusy(false);
     }
   };
   const disabled = busy || !username.trim() || !password || mode === "register" && !confirmPassword;
@@ -6355,13 +6395,19 @@ function AuthScreen({ accent, onRegister, onLogin }) {
       /* @__PURE__ */ jsxs(
         "button",
         {
-          disabled: true,
+          onClick: submitGoogle,
+          disabled: googleBusy,
           type: "button",
-          className: "w-full py-3 rounded-xl text-sm mb-6 flex items-center justify-center gap-2 opacity-40 cursor-not-allowed",
-          style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim },
+          className: "w-full py-3 rounded-xl text-sm mb-6 flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
+          style: { border: `1px solid ${BASE.line}`, color: BASE.ink, background: BASE.surface2 },
           children: [
-            "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0441 Google ",
-            /* @__PURE__ */ jsx("span", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: "\xB7 \u0441\u043A\u043E\u0440\u043E" })
+            /* @__PURE__ */ jsxs("svg", { width: 16, height: 16, viewBox: "0 0 48 48", "aria-hidden": "true", children: [
+              /* @__PURE__ */ jsx("path", { fill: "#FFC107", d: "M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.4-.4-3.5z" }),
+              /* @__PURE__ */ jsx("path", { fill: "#FF3D00", d: "M6.3 14.7l6.6 4.8C14.6 15.9 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 6.1 29.6 4 24 4c-7.7 0-14.4 4.3-17.7 10.7z" }),
+              /* @__PURE__ */ jsx("path", { fill: "#4CAF50", d: "M24 44c5.5 0 10.4-2.1 14.1-5.5l-6.5-5.5C29.4 34.9 26.9 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.6 5.1C9.5 39.6 16.2 44 24 44z" }),
+              /* @__PURE__ */ jsx("path", { fill: "#1976D2", d: "M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.7l6.5 5.5C41.5 35.7 44 30.4 44 24c0-1.2-.1-2.4-.4-3.5z" })
+            ] }),
+            googleBusy ? "\u2026" : "\u041F\u0440\u043E\u0434\u043E\u043B\u0436\u0438\u0442\u044C \u0441 Google"
           ]
         }
       ),
@@ -6450,7 +6496,7 @@ function MindExe() {
   const toastTimer = useRef(null);
   const firstLoadRef = useRef(true);
   const firstDailyRewardRef = useRef(true);
-  const { status: authStatus, user: authUser, register: authRegister, login: authLogin, logout: authLogout } = useAuth();
+  const { status: authStatus, user: authUser, register: authRegister, login: authLogin, loginWithGoogle: authLoginWithGoogle, logout: authLogout } = useAuth();
   const userId = authUser?.id || null;
   const [migrateFor, setMigrateFor] = useState(null);
   const accent = accentPreset.value;
@@ -6477,6 +6523,11 @@ function MindExe() {
   };
   const handleLogin = async (username, password) => {
     await authLogin(username, password);
+  };
+  const handleGoogleLogin = async () => {
+    const newUser = await authLoginWithGoogle();
+    const hasLegacy = await checkLegacyDataAvailable();
+    if (hasLegacy) setMigrateFor(newUser.id);
   };
   const handleMigrate = async () => {
     if (!migrateFor) return;
@@ -6949,7 +7000,7 @@ function MindExe() {
         .stagger > *:nth-child(6) { animation-delay: 300ms; }
       ` }),
     showSplash && /* @__PURE__ */ jsx(Splash, { accent, fading: splashFading }),
-    !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin }),
+    !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin, onGoogle: handleGoogleLogin }),
     !showSplash && authStatus === "authenticated" && migrateFor && /* @__PURE__ */ jsx(LegacyMigratePrompt, { accent, onMigrate: handleMigrate, onSkip: handleSkipMigrate }),
     !showSplash && authStatus === "authenticated" && !migrateFor && /* @__PURE__ */ jsxs(Fragment, { children: [
       /* @__PURE__ */ jsx("div", { className: "pointer-events-none fixed inset-0", style: { background: `radial-gradient(circle at 50% 0%, ${accent}0A 0%, transparent 55%)`, transition: "background 0.4s ease" } }),
