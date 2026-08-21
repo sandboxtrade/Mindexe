@@ -1,4 +1,4 @@
-// mind.exe V1.0 — Simulator moved out of the bottom nav (was crowding 8 icons) into a tile at the bottom of the Home screen; bottom nav back to 7 items
+// mind.exe V1.1 — one-time terminal-style boot intro (monospace lines: auth/sync/welcome) shown only on the very first login ever per account, flag persisted in Firestore; subsequent logins skip straight to Home
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -6207,6 +6207,9 @@ function mediaKey(userId) {
 function aiKey(userId) {
   return `mind-exe-ai:${userId}`;
 }
+function introSeenKey(userId) {
+  return `mind-exe-intro-seen:${userId}`;
+}
 async function loadAiState(userId) {
   if (!window.storage || !userId) return { analysis: "", chatMessages: [] };
   try {
@@ -6662,6 +6665,53 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
     ] })
   ] });
 }
+function BootIntro({ accent, name, lang, onDone }) {
+  const isEn = lang === "en";
+  const lines = isEn ? [
+    "> mind.exe",
+    "> auth\u2026 ok",
+    "> syncing journal\u2026",
+    `> welcome, ${name || "operator"}`
+  ] : [
+    "> mind.exe",
+    "> \u0430\u0432\u0442\u043E\u0440\u0438\u0437\u0430\u0446\u0438\u044F\u2026 ok",
+    "> \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F \u0434\u043D\u0435\u0432\u043D\u0438\u043A\u0430\u2026",
+    `> \u0434\u043E\u0431\u0440\u043E \u043F\u043E\u0436\u0430\u043B\u043E\u0432\u0430\u0442\u044C, ${name || "\u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440"}`
+  ];
+  const [fading, setFading] = useState(false);
+  useEffect(() => {
+    const lineDelay = 420;
+    const holdAfter = 600;
+    const totalTypeTime = lines.length * lineDelay + holdAfter;
+    const fadeTimer = setTimeout(() => setFading(true), totalTypeTime);
+    const doneTimer = setTimeout(() => onDone(), totalTypeTime + 480);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(doneTimer);
+    };
+  }, []);
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      className: "fixed inset-0 z-50 flex flex-col items-center justify-center px-8 transition-opacity duration-500",
+      style: { background: "#040405", opacity: fading ? 0 : 1 },
+      children: /* @__PURE__ */ jsx("div", { className: "w-full max-w-xs", children: lines.map((line, i) => /* @__PURE__ */ jsx(
+        "p",
+        {
+          className: "text-sm mb-2",
+          style: {
+            color: i === lines.length - 1 ? accent : BASE.inkDim,
+            fontFamily: "'JetBrains Mono', monospace",
+            opacity: 0,
+            animation: `riseIn 0.4s ease ${i * 0.42}s forwards`
+          },
+          children: line
+        },
+        i
+      )) })
+    }
+  );
+}
 function MindExe() {
   const [entries, setEntries] = useState(() => seedEntries.map(migrateEntry));
   const [tab, setTab] = useState("home");
@@ -6688,6 +6738,8 @@ function MindExe() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [showBootIntro, setShowBootIntro] = useState(false);
+  const [introResolved, setIntroResolved] = useState(false);
   const [anonId] = useState(getOrCreateAnonId);
   const toastTimer = useRef(null);
   const firstLoadRef = useRef(true);
@@ -6737,9 +6789,32 @@ function MindExe() {
   const handleLogout = async () => {
     await authLogout();
     setLoaded(false);
+    setIntroResolved(false);
+    setShowBootIntro(false);
     resetInMemoryState();
     setTab("home");
   };
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
+    let cancelled = false;
+    (async () => {
+      let seen = null;
+      try {
+        seen = await storageGet(introSeenKey(userId), false);
+      } catch (_) {
+      }
+      if (cancelled) return;
+      if (!seen?.value) {
+        setShowBootIntro(true);
+        storageSet(introSeenKey(userId), "1", false).catch(() => {
+        });
+      }
+      setIntroResolved(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, loaded, migrateFor, userId, introResolved]);
   useEffect(() => {
     const t1 = setTimeout(() => setSplashFading(true), 7200);
     const t2 = setTimeout(() => setShowSplash(false), 7700);
@@ -7198,7 +7273,8 @@ function MindExe() {
     showSplash && /* @__PURE__ */ jsx(Splash, { accent, fading: splashFading }),
     !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin, onGoogle: handleGoogleLogin }),
     !showSplash && authStatus === "authenticated" && migrateFor && /* @__PURE__ */ jsx(LegacyMigratePrompt, { accent, onMigrate: handleMigrate, onSkip: handleSkipMigrate }),
-    !showSplash && authStatus === "authenticated" && !migrateFor && /* @__PURE__ */ jsxs(Fragment, { children: [
+    !showSplash && authStatus === "authenticated" && !migrateFor && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { accent, name, lang, onDone: () => setShowBootIntro(false) }),
+    !showSplash && authStatus === "authenticated" && !migrateFor && introResolved && !showBootIntro && /* @__PURE__ */ jsxs(Fragment, { children: [
       /* @__PURE__ */ jsx("div", { className: "pointer-events-none fixed inset-0", style: { background: `radial-gradient(circle at 50% 0%, ${accent}0A 0%, transparent 55%)`, transition: "background 0.4s ease" } }),
       accentPreset.cosmic && /* @__PURE__ */ jsxs("div", { className: "pointer-events-none fixed inset-0 overflow-hidden", "aria-hidden": "true", children: [
         /* @__PURE__ */ jsx("div", { className: "cosmic-core" }),
