@@ -1,4 +1,4 @@
-// mind.exe V0.7 — Google Sign-In added alongside username/password (Firebase Auth GoogleAuthProvider + signInWithPopup)
+// mind.exe V0.8 — account provider badge (email/google) now reflects real Firebase provider instead of hardcoded "local"; account note updated to say data syncs via cloud
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -196,7 +196,7 @@ var STRINGS = {
       english: "English",
       account: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442",
       logout: "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430",
-      localAccountNote: "\u041B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u0442\u0435\u0441\u0442\u043E\u0432\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435. \u0414\u0430\u043D\u043D\u044B\u0435 \u043D\u0435 \u0443\u0434\u0430\u043B\u044F\u044E\u0442\u0441\u044F \u043F\u0440\u0438 \u0432\u044B\u0445\u043E\u0434\u0435 \u0438 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u044F\u0442\u0441\u044F \u043F\u0440\u0438 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u043C \u0432\u0445\u043E\u0434\u0435.",
+      localAccountNote: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0447\u0435\u0440\u0435\u0437 \u043E\u0431\u043B\u0430\u043A\u043E \u0438 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u0441 \u043B\u044E\u0431\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043F\u043E\u0441\u043B\u0435 \u0432\u0445\u043E\u0434\u0430.",
       operatorName: "\u0418\u043C\u044F \u043E\u043F\u0435\u0440\u0430\u0442\u043E\u0440\u0430",
       operatorPlaceholder: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440",
       accentColor: "\u0410\u043A\u0446\u0435\u043D\u0442\u043D\u044B\u0439 \u0446\u0432\u0435\u0442",
@@ -395,7 +395,7 @@ var STRINGS = {
       english: "English",
       account: "Account",
       logout: "Log out",
-      localAccountNote: "Local test account on this device. Data isn't deleted on logout and will be restored the next time you log in.",
+      localAccountNote: "Account syncs to the cloud and is available from any device after logging in.",
       operatorName: "Operator name",
       operatorPlaceholder: "Operator",
       accentColor: "Accent color",
@@ -5684,6 +5684,7 @@ function Settings({
   startingCapital,
   setStartingCapital,
   username,
+  accountProvider,
   onLogout,
   lang,
   setLang,
@@ -5723,7 +5724,7 @@ function Settings({
           " ",
           username || "\u2014"
         ] }),
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: "local" })
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: accountProvider || "\u2014" })
       ] }),
       /* @__PURE__ */ jsxs("button", { onClick: onLogout, className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.inkDim }, children: [
         /* @__PURE__ */ jsx(LogOut, { size: 15 }),
@@ -6135,6 +6136,12 @@ function createFirebaseAuthProvider() {
       });
     }
   };
+}
+function authProviderLabel() {
+  const pid = fbAuth.currentUser?.providerData?.[0]?.providerId;
+  if (pid === "google.com") return "google";
+  if (pid === "password") return "email";
+  return "\u2014";
 }
 var authProvider = createFirebaseAuthProvider();
 var authService = {
@@ -7130,6 +7137,7 @@ function MindExe() {
               startingCapital,
               setStartingCapital,
               username: authUser?.username,
+              accountProvider: authProviderLabel(),
               onLogout: handleLogout,
               lang,
               setLang,
