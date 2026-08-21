@@ -1,4 +1,4 @@
-// mind.exe V0.8 — account provider badge (email/google) now reflects real Firebase provider instead of hardcoded "local"; account note updated to say data syncs via cloud
+// mind.exe V0.9 — AI Coach tab: manual-trigger journal analysis + chat, backed by Firebase Cloud Function (aiAnalyze) calling Anthropic API server-side
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -22,6 +22,7 @@ import {
   setDoc,
   deleteDoc
 } from "firebase/firestore";
+import { getFunctions, httpsCallable } from "firebase/functions";
 var firebaseConfig = {
   apiKey: "AIzaSyAPSGcQOPS09ytLKi8dk0WOh0U3WfLm4_E",
   authDomain: "mindexe-29adf.firebaseapp.com",
@@ -34,6 +35,8 @@ var firebaseConfig = {
 var firebaseApp = initializeApp(firebaseConfig);
 var fbAuth = getAuth(firebaseApp);
 var fbDb = getFirestore(firebaseApp);
+var fbFunctions = getFunctions(firebaseApp, "europe-west1");
+var aiAnalyzeCallable = httpsCallable(fbFunctions, "aiAnalyze");
 function fsSanitizeKey(key) {
   return String(key).replace(/[\/]/g, "_");
 }
@@ -94,7 +97,9 @@ import {
   KeyRound,
   Eye,
   EyeOff,
-  LogOut
+  LogOut,
+  Bot,
+  Send
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var BASE = {
@@ -128,7 +133,20 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0418\u0418", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0418\u0418", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u041A\u043E\u0443\u0447", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    coach: {
+      title: "\u0418\u0418-\u043A\u043E\u0443\u0447",
+      analyzeTitle: "\u0410\u043D\u0430\u043B\u0438\u0437 \u0434\u043D\u0435\u0432\u043D\u0438\u043A\u0430",
+      analyzeBtn: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C",
+      analyzeBusy: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u044E\u2026",
+      analyzeEmpty: "\u041D\u0430\u0436\u043C\u0438 \u00AB\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u00BB, \u0447\u0442\u043E\u0431\u044B \u0418\u0418 \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u043B \u0442\u0432\u043E\u0439 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
+      analyzeNoEntries: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0434\u043E\u0431\u0430\u0432\u044C \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0432 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
+      chatTitle: "\u0421\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u043E\u0443\u0447\u0430",
+      chatPlaceholder: "\u041D\u0430\u043F\u0438\u0448\u0438 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435\u2026",
+      chatEmpty: "\u0421\u043F\u0440\u043E\u0441\u0438 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B \u0438\u043B\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
+      send: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C",
+      error: "\u0418\u0418 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D, \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437."
+    },
     home: {
       welcomeBack: (name) => `\u0421 \u0432\u043E\u0437\u0432\u0440\u0430\u0449\u0435\u043D\u0438\u0435\u043C, ${name}`,
       defaultName: "\u041E\u043F\u0435\u0440\u0430\u0442\u043E\u0440",
@@ -327,7 +345,20 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "AI", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", settings: "Settings" },
+    nav: { home: "AI", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Coach", settings: "Settings" },
+    coach: {
+      title: "AI Coach",
+      analyzeTitle: "Journal analysis",
+      analyzeBtn: "Analyze",
+      analyzeBusy: "Analyzing\u2026",
+      analyzeEmpty: "Tap \"Analyze\" to have AI review your journal.",
+      analyzeNoEntries: "Add a few journal entries first.",
+      chatTitle: "Ask the coach",
+      chatPlaceholder: "Type a message\u2026",
+      chatEmpty: "Ask about your trades, patterns, or trading psychology.",
+      send: "Send",
+      error: "AI is unavailable right now, try again."
+    },
     home: {
       welcomeBack: (name) => `Welcome back, ${name}`,
       defaultName: "Operator",
@@ -5183,6 +5214,142 @@ function LeverageBar({ value, onChange, accent, disabled }) {
     )) })
   ] });
 }
+function Coach({ entries, accent, userId, lang, t }) {
+  const [analysis, setAnalysis] = useState("");
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const loadedRef = useRef(false);
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    let cancelled = false;
+    loadAiState(userId).then((s) => {
+      if (cancelled) return;
+      setAnalysis(s.analysis || "");
+      setChatMessages(Array.isArray(s.chatMessages) ? s.chatMessages : []);
+      loadedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+  useEffect(() => {
+    if (!loadedRef.current) return;
+    saveAiState(userId, { analysis, chatMessages });
+  }, [analysis, chatMessages, userId]);
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [chatMessages, sending]);
+  const compactEntries = (list) => list.map((e) => ({
+    date: e.date instanceof Date ? e.date.toISOString() : e.date,
+    instrument: e.instrument,
+    direction: e.direction,
+    outcome: e.outcome,
+    r: e.r,
+    setup: e.setup,
+    mood: e.mood,
+    notes: (e.notes || "").slice(0, 400)
+  }));
+  const runAnalyze = async () => {
+    if (analyzing || entries.length === 0) return;
+    setAnalyzing(true);
+    setError("");
+    try {
+      const res = await aiAnalyzeCallable({ mode: "insights", entries: compactEntries(entries.slice(-100)), lang });
+      setAnalysis(res.data?.text || "");
+    } catch (e) {
+      setError(t.coach.error);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+  const sendMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || sending) return;
+    setChatInput("");
+    setError("");
+    const nextMessages = [...chatMessages, { role: "user", content: text }];
+    setChatMessages(nextMessages);
+    setSending(true);
+    try {
+      const res = await aiAnalyzeCallable({
+        mode: "chat",
+        message: text,
+        history: nextMessages.slice(-20),
+        entries: compactEntries(entries.slice(-40)),
+        lang
+      });
+      setChatMessages((prev) => [...prev, { role: "assistant", content: res.data?.text || "" }]);
+    } catch (e) {
+      setError(t.coach.error);
+    } finally {
+      setSending(false);
+    }
+  };
+  return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+      /* @__PURE__ */ jsx(Bot, { size: 17, style: { color: accent } }),
+      " ",
+      t.coach.title
+    ] }),
+    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: t.coach.analyzeTitle }),
+      analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap mb-3", style: { color: BASE.ink }, children: analysis }) : /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeEmpty }),
+      /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: runAnalyze,
+          disabled: analyzing || entries.length === 0,
+          className: "w-full py-2.5 rounded-xl text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
+          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
+          children: analyzing ? t.coach.analyzeBusy : t.coach.analyzeBtn
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { height: "48vh" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: t.coach.chatTitle }),
+      /* @__PURE__ */ jsx("div", { ref: scrollRef, className: "flex-1 overflow-y-auto mb-3 pr-1", children: chatMessages.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkFaint }, children: t.coach.chatEmpty }) : chatMessages.map((m, i) => /* @__PURE__ */ jsx(
+        "div",
+        {
+          className: `mb-2.5 max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "ml-auto" : ""}`,
+          style: m.role === "user" ? { background: `${accent}14`, color: BASE.ink } : { background: BASE.surface2, color: BASE.ink },
+          children: m.content
+        },
+        i
+      )) }),
+      sending && /* @__PURE__ */ jsx("p", { className: "text-xs mb-2", style: { color: BASE.inkFaint }, children: "\u2026" }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            value: chatInput,
+            onChange: (e) => setChatInput(e.target.value),
+            onKeyDown: (e) => {
+              if (e.key === "Enter") sendMessage();
+            },
+            placeholder: t.coach.chatPlaceholder,
+            className: "flex-1 bg-transparent outline-none text-sm px-3 py-2 rounded-xl",
+            style: { border: `1px solid ${BASE.line}`, color: BASE.ink }
+          }
+        ),
+        /* @__PURE__ */ jsx(
+          "button",
+          {
+            onClick: sendMessage,
+            disabled: sending || !chatInput.trim(),
+            className: "shrink-0 p-2.5 rounded-xl transition-all duration-200 active:scale-95 disabled:opacity-40",
+            style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent },
+            "aria-label": t.coach.send,
+            children: /* @__PURE__ */ jsx(Send, { size: 15 })
+          }
+        )
+      ] })
+    ] }),
+    error && /* @__PURE__ */ jsx("p", { className: "text-xs text-center", style: { color: LOSS }, children: error })
+  ] });
+}
 function Simulator({ accent, onWin, t, lang }) {
   const [stage, setStage] = useState("intro");
   const [leverage, setLeverage] = useState(10);
@@ -6034,6 +6201,25 @@ function profileKey(userId) {
 function mediaKey(userId) {
   return `${MEDIA_KEY}:${userId}`;
 }
+function aiKey(userId) {
+  return `mind-exe-ai:${userId}`;
+}
+async function loadAiState(userId) {
+  if (!window.storage || !userId) return { analysis: "", chatMessages: [] };
+  try {
+    const res = await storageGet(aiKey(userId), false);
+    return res?.value ? JSON.parse(res.value) : { analysis: "", chatMessages: [] };
+  } catch (_) {
+    return { analysis: "", chatMessages: [] };
+  }
+}
+async function saveAiState(userId, aiState) {
+  if (!window.storage || !userId) return;
+  try {
+    await storageSet(aiKey(userId), JSON.stringify(aiState), false);
+  } catch (_) {
+  }
+}
 async function loadProfile(userId) {
   if (!window.storage || !userId) return null;
   const res = await storageGet(profileKey(userId), false);
@@ -6876,6 +7062,7 @@ function MindExe() {
     { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
     { id: "simulator", label: t.nav.simulator, icon: Swords },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
+    { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
   const activeIndex = Math.max(0, nav.findIndex((n) => n.id === tab));
@@ -7112,6 +7299,7 @@ function MindExe() {
             showToast(lang === "en" ? "+5 MindCoin \u2014 win in the game" : "+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
           }, t, lang }),
           tab === "challenge" && /* @__PURE__ */ jsx(Challenge, { entries, accent, weeklyGoal, t, lang }),
+          tab === "coach" && /* @__PURE__ */ jsx(Coach, { entries, accent, userId, lang, t }),
           tab === "settings" && /* @__PURE__ */ jsx(
             Settings,
             {
