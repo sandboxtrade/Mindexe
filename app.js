@@ -1,4 +1,4 @@
-// mind.exe V0.9 — AI Coach tab: manual-trigger journal analysis + chat, backed by Firebase Cloud Function (aiAnalyze) calling Anthropic API server-side
+// mind.exe V1.0 — Simulator moved out of the bottom nav (was crowding 8 icons) into a tile at the bottom of the Home screen; bottom nav back to 7 items
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -172,6 +172,7 @@ var STRINGS = {
       newEntryTile: "\u041D\u043E\u0432\u0430\u044F \u0437\u0430\u043F\u0438\u0441\u044C",
       logTile: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438",
       patternsTile: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430",
+      simulatorTile: "\u0418\u0433\u0440\u0430",
       market: "\u0420\u044B\u043D\u043E\u043A",
       streakDays: (n) => `${n} \u0434\u043D. \u043F\u043E\u0434\u0440\u044F\u0434`,
       startStreak: "\u041D\u0430\u0447\u043D\u0438 \u0441\u0435\u0440\u0438\u044E"
@@ -384,6 +385,7 @@ var STRINGS = {
       newEntryTile: "New entry",
       logTile: "Notes",
       patternsTile: "Analytics",
+      simulatorTile: "Game",
       market: "Market",
       streakDays: (n) => `${n} days in a row`,
       startStreak: "Start a streak"
@@ -3077,7 +3079,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const tiles = [
     { id: "new", label: t.home.newEntryTile, icon: BookOpen, primary: true },
     { id: "log", label: t.home.logTile, icon: NotebookText },
-    { id: "patterns", label: t.home.patternsTile, icon: LineChartIcon }
+    { id: "patterns", label: t.home.patternsTile, icon: LineChartIcon },
+    { id: "simulator", label: t.home.simulatorTile, icon: Swords }
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-6", children: [
@@ -7060,7 +7063,6 @@ function MindExe() {
     { id: "new", label: t.nav.new, icon: BookOpen },
     { id: "log", label: t.nav.log, icon: NotebookText },
     { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
-    { id: "simulator", label: t.nav.simulator, icon: Swords },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
