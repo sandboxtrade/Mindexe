@@ -63,7 +63,7 @@ var AI_MODEL = "gemini-3.1-flash-lite";
 // yet, but Google has announced enforcement starting Nov 2, 2026 — create a reCAPTCHA v3 key in the
 // Firebase console (App Check section) and paste it here before that date. Left blank, App Check is
 // simply skipped and the app (including AI features) keeps working exactly as it does today.
-var AI_APP_CHECK_SITE_KEY = "";
+var AI_APP_CHECK_SITE_KEY = "6LebzJQtAAAAAAWWewd3EI6SbiY-xoTeAjRrmrNa";
 if (AI_APP_CHECK_SITE_KEY) {
   try {
     initializeAppCheck(firebaseApp, {
