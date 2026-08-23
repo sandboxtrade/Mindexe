@@ -1,7 +1,21 @@
-// mind.exe V1.5 — splash screen background photo replaced with a 16:9 black hole render (was a
-// portrait 9:16 image before); regenerated the matching luminance shimmer mask from the new photo
-// and retuned object-position/mask-position to 46%/47% to keep the event horizon centered under
-// object-fit:cover across both narrow mobile and wide desktop viewports.
+// mind.exe V2.0 — Gemini AI layer added via Firebase AI Logic (client SDK, Gemini Developer API
+// backend — no Cloud Function, no Blaze billing plan needed). Bumped the Firebase JS SDK from
+// 10.13.0 to 12.17.1 in index.html (required for the firebase/ai package to exist) and added
+// firebase/ai + firebase/app-check imports. Replaced the old aiAnalyzeCallable Cloud Function
+// (Anthropic-backed, deferred pending Blaze) with a direct Gemini call. New AI layer, organized as
+// three logical modules within this file: aiContextBuilder (turns real analytics/journal data into
+// a compact, privacy-safe JSON — no raw Firestore/user/auth data ever leaves the device), aiPrompts
+// (fixed system instruction: no trading signals, no diagnoses, RR+WinRate read jointly, cites only
+// given numbers), aiService (single Gemini call site + error handling). Coach tab now calls Gemini
+// directly; requests only fire on explicit user action (Analyze button / Send), never on render, and
+// the automatic insight is skipped entirely if the underlying stats hash hasn't changed since the
+// last generated insight. AI_MODEL is the one place the model name lives (gemini-3.1-flash-lite —
+// current free-tier fast/cheap model; 2.0/2.5 Flash & Flash-Lite are being retired through 2026).
+// Two manual setup steps remain in the Firebase console (can't be done from code): 1) run through
+// the "AI Logic" setup wizard once to enable the Gemini Developer API for this project (Spark plan
+// is fine, no billing needed); 2) optionally create a reCAPTCHA v3 site key under App Check and
+// paste it into AI_APP_CHECK_SITE_KEY before Nov 2, 2026, when Google starts enforcing App Check
+// for Firebase AI Logic — until then the app works fine with it left blank.
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -25,7 +39,8 @@ import {
   setDoc,
   deleteDoc
 } from "firebase/firestore";
-import { getFunctions, httpsCallable } from "firebase/functions";
+import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
+import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
 var firebaseConfig = {
   apiKey: "AIzaSyAPSGcQOPS09ytLKi8dk0WOh0U3WfLm4_E",
   authDomain: "mindexe-29adf.firebaseapp.com",
@@ -38,8 +53,27 @@ var firebaseConfig = {
 var firebaseApp = initializeApp(firebaseConfig);
 var fbAuth = getAuth(firebaseApp);
 var fbDb = getFirestore(firebaseApp);
-var fbFunctions = getFunctions(firebaseApp, "europe-west1");
-var aiAnalyzeCallable = httpsCallable(fbFunctions, "aiAnalyze");
+// ai/config.js — single place that controls which Gemini model is used everywhere in the app.
+// Gemini 2.0/2.5 Flash and Flash-Lite are being retired in 2026 (2.0 already shut down June 1,
+// 2.5 shuts down Oct 16) — 3.1 Flash-Lite is the current cheap/fast free-tier model recommended
+// as their replacement, so that's what's wired in by default. Swap the model by changing this one
+// constant; nothing else in the file should hardcode a model name.
+var AI_MODEL = "gemini-3.1-flash-lite";
+// reCAPTCHA v3 site key for Firebase App Check (Web). Firebase AI Logic doesn't require App Check
+// yet, but Google has announced enforcement starting Nov 2, 2026 — create a reCAPTCHA v3 key in the
+// Firebase console (App Check section) and paste it here before that date. Left blank, App Check is
+// simply skipped and the app (including AI features) keeps working exactly as it does today.
+var AI_APP_CHECK_SITE_KEY = "";
+if (AI_APP_CHECK_SITE_KEY) {
+  try {
+    initializeAppCheck(firebaseApp, {
+      provider: new ReCaptchaV3Provider(AI_APP_CHECK_SITE_KEY),
+      isTokenAutoRefreshEnabled: true
+    });
+  } catch (_) {
+  }
+}
+var aiLogic = getAI(firebaseApp, { backend: new GoogleAIBackend() });
 function fsSanitizeKey(key) {
   return String(key).replace(/[\/]/g, "_");
 }
@@ -136,7 +170,7 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0418\u0418", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u041A\u043E\u0443\u0447", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u041A\u043E\u0443\u0447", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
     coach: {
       title: "\u0418\u0418-\u043A\u043E\u0443\u0447",
       analyzeTitle: "\u0410\u043D\u0430\u043B\u0438\u0437 \u0434\u043D\u0435\u0432\u043D\u0438\u043A\u0430",
@@ -349,7 +383,7 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "AI", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Coach", settings: "Settings" },
+    nav: { home: "Home", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Coach", settings: "Settings" },
     coach: {
       title: "AI Coach",
       analyzeTitle: "Journal analysis",
@@ -5259,7 +5293,265 @@ function LeverageBar({ value, onChange, accent, disabled }) {
     )) })
   ] });
 }
-function Coach({ entries, accent, userId, lang, t }) {
+
+// ============================================================================
+// src/services/ai/ — Gemini AI layer for the Coach tab, built via Firebase AI
+// Logic (client SDK, Gemini Developer API backend — no Cloud Function, no
+// Blaze plan required). Kept as one section of this file (the app ships as a
+// single bundled module) but organized as three logically separate pieces,
+// exactly like separate files would be:
+//   - aiContextBuilder: turns existing analytics/journal data into a compact,
+//     privacy-safe object. Never invents a metric the app doesn't compute.
+//   - aiPrompts: the fixed system instruction + task templates.
+//   - aiService: the only place that talks to Gemini; owns error handling.
+// Nothing outside this section calls the Gemini SDK directly.
+// ============================================================================
+
+// ---- aiContextBuilder.js ----------------------------------------------------
+function aiSafeNum(v) {
+  return typeof v === "number" && isFinite(v) ? v : null;
+}
+function aiComputeStreakDays(entries) {
+  const dateSet = new Set((entries || []).map((e) => e.date.toDateString()));
+  const cursor = /* @__PURE__ */ new Date();
+  if (!dateSet.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
+  let streak = 0;
+  while (dateSet.has(cursor.toDateString())) {
+    streak++;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return streak;
+}
+function aiComputeStreaks(sortedClosed) {
+  let curLoss = 0, maxLoss = 0, curWin = 0, maxWin = 0;
+  sortedClosed.forEach((t) => {
+    if (t.outcome === "Loss") {
+      curLoss++;
+      maxLoss = Math.max(maxLoss, curLoss);
+      curWin = 0;
+    } else if (t.outcome === "Win") {
+      curWin++;
+      maxWin = Math.max(maxWin, curWin);
+      curLoss = 0;
+    } else {
+      curLoss = 0;
+      curWin = 0;
+    }
+  });
+  return { maxLossStreak: maxLoss, maxWinStreak: maxWin };
+}
+function aiComputePlanVsFact(closedEntries) {
+  const withPlan = closedEntries.filter((e) => typeof e.plannedRR === "number" && typeof e.realizedRR === "number");
+  if (withPlan.length < 3) return null;
+  const avgPlanned = st_mean(withPlan.map((e) => e.plannedRR));
+  const avgRealized = st_mean(withPlan.map((e) => e.realizedRR));
+  const captures = withPlan.filter((e) => e.plannedRR > 0).map((e) => Math.max(0, Math.min(1, e.realizedRR / e.plannedRR)));
+  const captureRatioPct = captures.length ? Math.round(st_mean(captures) * 100) : null;
+  const closeCounts = { tp: 0, sl: 0, manual: 0 };
+  closedEntries.forEach((e) => {
+    if (e.closeType && closeCounts[e.closeType] != null) closeCounts[e.closeType]++;
+  });
+  const closeTotal = closeCounts.tp + closeCounts.sl + closeCounts.manual;
+  return {
+    sample: withPlan.length,
+    avgPlannedRR: st_round2(avgPlanned),
+    avgRealizedRR: st_round2(avgRealized),
+    captureRatioPct,
+    tpSharePct: closeTotal ? Math.round(closeCounts.tp / closeTotal * 100) : null,
+    slSharePct: closeTotal ? Math.round(closeCounts.sl / closeTotal * 100) : null,
+    manualSharePct: closeTotal ? Math.round(closeCounts.manual / closeTotal * 100) : null
+  };
+}
+function aiSummarizePattern(p) {
+  if (!p) return null;
+  return {
+    id: p.id,
+    title: p.title,
+    type: p.type || null,
+    severity: p.severity || null,
+    confidence: p.confidence || null,
+    sampleSize: aiSafeNum(p.sampleSize),
+    avgR: p.metrics?.group?.avgR != null ? aiSafeNum(p.metrics.group.avgR) : null,
+    winRatePct: p.metrics?.group?.winRate != null ? aiSafeNum(p.metrics.group.winRate) : null,
+    summary: p.description || null
+  };
+}
+function aiBuildContext(entries, analytics, lang) {
+  const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
+  const closedEntries = validEntries.filter(isEntryClosed);
+  const sortedClosed = [...closedEntries].sort((a, b) => a.date - b.date);
+  const streaks = aiComputeStreaks(sortedClosed);
+  const rr = analytics?.rrStats || null;
+  const violation = (id) => analytics?.discipline?.violations?.find((v) => v.id === id)?.value ?? null;
+  const context = {
+    lang: lang === "en" ? "en" : "ru",
+    trader: {
+      level: calculateTraderLevel(validEntries.length),
+      awarenessScore: aiSafeNum(analytics?.awareness?.score?.value),
+      awarenessTrend: analytics?.awareness?.trend || null,
+      currentStreakDays: aiComputeStreakDays(validEntries)
+    },
+    statistics: rr ? {
+      totalTrades: validEntries.length,
+      closedTrades: aiSafeNum(rr.sampleSize),
+      winRate: aiSafeNum(rr.winRate),
+      wins: aiSafeNum(rr.wins),
+      losses: aiSafeNum(rr.losses),
+      breakevens: aiSafeNum(rr.breakevens),
+      avgRealizedRR: aiSafeNum(rr.avgRealizedRR),
+      avgWinR: aiSafeNum(rr.avgWinR),
+      avgLossR: aiSafeNum(rr.avgLossR),
+      expectancy: aiSafeNum(rr.expectancy)
+    } : { totalTrades: validEntries.length, closedTrades: 0 },
+    planVsFact: aiComputePlanVsFact(closedEntries),
+    behavior: {
+      disciplineScore: aiSafeNum(analytics?.discipline?.score?.value),
+      revengeTradeRatePct: aiSafeNum(violation("revenge_rate")),
+      overtradingDaySharePct: aiSafeNum(violation("overtrading_days")),
+      riskChangeAfterLossPct: aiSafeNum(analytics?.risk?.postLossChange?.value),
+      riskChangeAfterWinPct: aiSafeNum(analytics?.risk?.postWinChange?.value),
+      maxLossStreak: streaks.maxLossStreak,
+      maxWinStreak: streaks.maxWinStreak
+    },
+    risk: {
+      averageRiskR: aiSafeNum(analytics?.risk?.averageRisk),
+      stabilityScore: aiSafeNum(analytics?.risk?.stability?.value),
+      volatility: aiSafeNum(analytics?.risk?.volatility)
+    },
+    reflection: {
+      reflectionScore: aiSafeNum(analytics?.reflection?.score?.value),
+      lossReviewCoveragePct: aiSafeNum(analytics?.reflection?.lossReviewCoverage?.value),
+      repeatedLessonsCount: analytics?.reflection?.repeatedLessons?.length ?? 0
+    },
+    emotional: analytics?.emotionalState?.average ? {
+      average: analytics.emotionalState.average,
+      confidence: analytics.emotionalState.confidence || null,
+      bestState: analytics.emotionalState.bestState ? {
+        title: analytics.emotionalState.bestState.title,
+        winRatePct: aiSafeNum(analytics.emotionalState.bestState.winRate),
+        meanR: aiSafeNum(analytics.emotionalState.bestState.meanR),
+        trades: aiSafeNum(analytics.emotionalState.bestState.trades)
+      } : null,
+      worstState: analytics.emotionalState.worstState ? {
+        title: analytics.emotionalState.worstState.title,
+        winRatePct: aiSafeNum(analytics.emotionalState.worstState.winRate),
+        meanR: aiSafeNum(analytics.emotionalState.worstState.meanR),
+        trades: aiSafeNum(analytics.emotionalState.worstState.trades)
+      } : null
+    } : null,
+    patterns: (analytics?.patterns || []).slice(0, 5).map(aiSummarizePattern).filter(Boolean),
+    healthyPatterns: (analytics?.healthyPatterns || []).slice(0, 3).map(aiSummarizePattern).filter(Boolean),
+    dataQuality: analytics?.dataQuality || null
+  };
+  return context;
+}
+function aiHashContext(context) {
+  const str = JSON.stringify(context);
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+  h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+function aiCompactRecentEntries(entries, limit) {
+  return (entries || []).slice(-limit).map((e) => ({
+    date: e.date instanceof Date ? e.date.toISOString().slice(0, 10) : null,
+    instrument: e.instrument || null,
+    direction: e.direction || null,
+    outcome: e.outcome || null,
+    r: aiSafeNum(e.r),
+    tag: e.tag && e.tag !== "\u041E\u0431\u0449\u0435\u0435" ? e.tag : null,
+    plannedRR: aiSafeNum(e.plannedRR),
+    realizedRR: aiSafeNum(e.realizedRR),
+    closeType: e.closeType || null,
+    pull: e.pull && e.pull !== "\u2014" ? String(e.pull).slice(0, 200) : null,
+    lesson: e.lesson && e.lesson !== "\u2014" ? String(e.lesson).slice(0, 200) : null
+  }));
+}
+
+// ---- aiPrompts.js ------------------------------------------------------------
+var AI_SYSTEM_INSTRUCTION = `You are the analytical assistant inside mind.exe, a trading journal app.
+You analyze a trader's already-computed journal statistics and behavioral patterns. You are NOT a
+financial advisor and must never give trading signals or instructions ("buy", "sell", "go long",
+"set your stop here", specific entries/exits/instruments/position sizing).
+
+You analyze: discipline, execution of the trader's own plan, emotional state, statistics, recurring
+behavioral patterns, and gaps between plan and outcome.
+
+Rules:
+- Every number you cite must come from the JSON context you are given. Never invent statistics,
+  dates, trade counts, or patterns that are not present in the data.
+- Clearly separate FACT (a number from the data) from INTERPRETATION (your reading of it). Prefer
+  phrasing like "this may indicate..." over flat claims.
+- Never issue a psychological diagnosis ("you are afraid of profit", "you are addicted to..."). You
+  may describe an observed behavioral tendency, but not label the person.
+- Win rate and RR (risk/reward) must always be read together, never in isolation. A low win rate
+  with a higher RR is not automatically bad trading, and a high win rate with a low RR is not
+  automatically good trading. If the app-computed expectancy is available and positive, say so
+  explicitly rather than criticizing win rate or RR individually.
+- If the sample size for a metric is small or a field is null/missing, say plainly that there isn't
+  enough data for a confident conclusion on that point, instead of guessing.
+- Never reference the exact time period unless dates are present in the data — don't say "over the
+  last few months" if you don't know the span.
+- Keep responses concise, concrete, and grounded in the numbers you were given.
+- Respond in the language given by the context's "lang" field: "ru" \u2192 Russian, "en" \u2192 English.`;
+var AI_INSIGHT_TASK = `Write a short journal insight (3-6 sentences) for the Home/Coach screen, based only on
+the AGGREGATED_CONTEXT JSON below. Reference at least one concrete number from the data. If the
+sample size is too small anywhere relevant, say so instead of speculating. Do not use headers or
+bullet lists \u2014 plain prose.`;
+var AI_CHAT_TASK = `Answer the trader's USER_QUESTION using AGGREGATED_CONTEXT and, if provided,
+RECENT_TRADES as your only source of truth. Use CONVERSATION_SO_FAR for context on the ongoing
+chat. If the data doesn't support a confident answer, say so directly rather than guessing.`;
+
+// ---- aiService.js ------------------------------------------------------------
+var aiGeminiModel = null;
+function aiGetModel() {
+  if (!aiGeminiModel) {
+    aiGeminiModel = getGenerativeModel(aiLogic, {
+      model: AI_MODEL,
+      systemInstruction: AI_SYSTEM_INSTRUCTION,
+      generationConfig: { temperature: 0.4, maxOutputTokens: 700 }
+    });
+  }
+  return aiGeminiModel;
+}
+async function aiCallGemini(prompt) {
+  const model = aiGetModel();
+  const result = await model.generateContent(prompt);
+  const text = result?.response?.text?.();
+  if (!text || !text.trim()) throw new Error("ai_empty_response");
+  return text.trim();
+}
+async function aiGenerateInsight(context) {
+  const prompt = `${AI_INSIGHT_TASK}
+
+AGGREGATED_CONTEXT:
+${JSON.stringify(context)}`;
+  return aiCallGemini(prompt);
+}
+async function aiChatReply(context, recentTrades, history, question) {
+  const historyText = (history || []).slice(-10).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
+  const prompt = `${AI_CHAT_TASK}
+
+AGGREGATED_CONTEXT:
+${JSON.stringify(context)}
+
+RECENT_TRADES:
+${JSON.stringify(recentTrades)}
+
+CONVERSATION_SO_FAR:
+${historyText || "(none yet)"}
+
+USER_QUESTION:
+${question}`;
+  return aiCallGemini(prompt);
+}
+
+function Coach({ entries, analytics, accent, userId, lang, t }) {
   const [analysis, setAnalysis] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
@@ -5268,12 +5560,14 @@ function Coach({ entries, accent, userId, lang, t }) {
   const [error, setError] = useState("");
   const loadedRef = useRef(false);
   const scrollRef = useRef(null);
+  const lastContextHashRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
     loadAiState(userId).then((s) => {
       if (cancelled) return;
       setAnalysis(s.analysis || "");
       setChatMessages(Array.isArray(s.chatMessages) ? s.chatMessages : []);
+      lastContextHashRef.current = s.lastContextHash || null;
       loadedRef.current = true;
     });
     return () => {
@@ -5282,28 +5576,26 @@ function Coach({ entries, accent, userId, lang, t }) {
   }, [userId]);
   useEffect(() => {
     if (!loadedRef.current) return;
-    saveAiState(userId, { analysis, chatMessages });
+    saveAiState(userId, { analysis, chatMessages, lastContextHash: lastContextHashRef.current });
   }, [analysis, chatMessages, userId]);
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [chatMessages, sending]);
-  const compactEntries = (list) => list.map((e) => ({
-    date: e.date instanceof Date ? e.date.toISOString() : e.date,
-    instrument: e.instrument,
-    direction: e.direction,
-    outcome: e.outcome,
-    r: e.r,
-    setup: e.setup,
-    mood: e.mood,
-    notes: (e.notes || "").slice(0, 400)
-  }));
+  // Gemini request is only ever triggered by an explicit user action below (button press /
+  // send message) — never inside a useEffect tied to entries/state, per the no-request-per-render
+  // rule. runAnalyze also skips the network call entirely when the underlying stats haven't
+  // changed since the last generated insight (context hash cache).
   const runAnalyze = async () => {
     if (analyzing || entries.length === 0) return;
+    const context = aiBuildContext(entries, analytics, lang);
+    const hash = aiHashContext(context);
+    if (hash === lastContextHashRef.current && analysis) return;
     setAnalyzing(true);
     setError("");
     try {
-      const res = await aiAnalyzeCallable({ mode: "insights", entries: compactEntries(entries.slice(-100)), lang });
-      setAnalysis(res.data?.text || "");
+      const text = await aiGenerateInsight(context);
+      setAnalysis(text);
+      lastContextHashRef.current = hash;
     } catch (e) {
       setError(t.coach.error);
     } finally {
@@ -5319,14 +5611,10 @@ function Coach({ entries, accent, userId, lang, t }) {
     setChatMessages(nextMessages);
     setSending(true);
     try {
-      const res = await aiAnalyzeCallable({
-        mode: "chat",
-        message: text,
-        history: nextMessages.slice(-20),
-        entries: compactEntries(entries.slice(-40)),
-        lang
-      });
-      setChatMessages((prev) => [...prev, { role: "assistant", content: res.data?.text || "" }]);
+      const context = aiBuildContext(entries, analytics, lang);
+      const recentTrades = aiCompactRecentEntries(entries, 15);
+      const reply = await aiChatReply(context, recentTrades, nextMessages, text);
+      setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
     } catch (e) {
       setError(t.coach.error);
     } finally {
@@ -7438,7 +7726,7 @@ function MindExe() {
             showToast(lang === "en" ? "+5 MindCoin \u2014 win in the game" : "+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
           }, t, lang }),
           tab === "challenge" && /* @__PURE__ */ jsx(Challenge, { entries, accent, weeklyGoal, t, lang }),
-          tab === "coach" && /* @__PURE__ */ jsx(Coach, { entries, accent, userId, lang, t }),
+          tab === "coach" && /* @__PURE__ */ jsx(Coach, { entries, analytics, accent, userId, lang, t }),
           tab === "settings" && /* @__PURE__ */ jsx(
             Settings,
             {
