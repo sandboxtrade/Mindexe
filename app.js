@@ -1,4 +1,9 @@
-// mind.exe V1.2 — boot intro now plays on every app entry (page load / fresh session, including when Firebase session persists and skips the login screen), not just the very first-ever login
+// mind.exe V1.3 — desktop adaptation: fixed left sidebar nav replaces bottom dock on md+ screens (>=768px),
+// content container widens responsively (max-w-2xl on md for form/single-flow tabs, up to max-w-6xl on xl
+// for the home/log/patterns dashboards), Home uses CSS multi-column (lg:columns-2) to tile its widget cards,
+// Log's trade list becomes a 2/3-col grid on md/xl, and Patterns' setup/RR/plan-vs-fact cards tile 2-up on lg.
+// Mobile layout (<768px) is untouched — all changes are additive Tailwind responsive classes gated by md:/lg:/xl:
+// breakpoints, so nothing here alters behavior below 768px wide viewports.
 // entry.jsx
 import React2 from "react";
 import { createRoot } from "react-dom/client";
@@ -660,6 +665,21 @@ function useAnimatedNumber(target, duration = 600) {
     return () => cancelAnimationFrame(raf);
   }, [target, duration]);
   return display;
+}
+function useIsDesktop(breakpoint = 900) {
+  const [isDesktop, setIsDesktop] = useState(() => typeof window !== "undefined" && window.innerWidth >= breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`);
+    const handler = (e) => setIsDesktop(e.matches);
+    handler(mq);
+    if (mq.addEventListener) mq.addEventListener("change", handler);
+    else mq.addListener(handler);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", handler);
+      else mq.removeListener(handler);
+    };
+  }, [breakpoint]);
+  return isDesktop;
 }
 function calculateTraderLevel(entriesCount) {
   return Math.min(9, 3 + Math.floor(entriesCount / 3));
@@ -2900,7 +2920,7 @@ function Card({ children, className = "", glowing = false, accent, style = {} })
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: `rounded-2xl p-4 transition-shadow duration-300 ${className}`,
+      className: `rounded-2xl p-4 transition-shadow duration-300 break-inside-avoid ${className}`,
       style: {
         background: BASE.surface,
         border: `1px solid ${glowing ? accent + "45" : BASE.line}`,
@@ -3087,6 +3107,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsx("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: t.home.welcomeBack(name || t.home.defaultName) }),
       /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.home.subtitle })
     ] }),
+    /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
     /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-1.5", children: [
         /* @__PURE__ */ jsxs("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: [
@@ -3106,7 +3127,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       "button",
       {
         onClick: () => goTo("calibration"),
-        className: "w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-3 text-left transition-all duration-200 active:scale-[0.98]",
+        className: "w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-3 text-left transition-all duration-200 active:scale-[0.98] break-inside-avoid",
         style: { border: `1px solid ${calibratedToday ? BASE.line : accent + "40"}`, background: calibratedToday ? BASE.surface : `${accent}0D` },
         children: [
           /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: [
@@ -3239,7 +3260,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: t.pattern.buildingUpDesc })
     ] }),
     patternOpen && traderPatterns.primaryPattern && /* @__PURE__ */ jsx(TraderPatternDetail, { pattern: traderPatterns.primaryPattern, accent, currency, onClose: () => setPatternOpen(false), t, lang }),
-    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-3", children: tiles.map((tile) => /* @__PURE__ */ jsxs(
+    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-3 break-inside-avoid", children: tiles.map((tile) => /* @__PURE__ */ jsxs(
       "button",
       {
         onClick: () => goTo(tile.id),
@@ -3255,7 +3276,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         ]
       },
       tile.id
-    )) }),
+    )) })
+    ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
       /* @__PURE__ */ jsxs("span", { children: [
         "BTC.D ",
@@ -4165,7 +4187,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       /* @__PURE__ */ jsx("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: t.log.searchPlaceholder, className: "bg-transparent outline-none text-sm flex-1", style: { color: BASE.ink } })
     ] }) }),
     /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 overflow-x-auto", children: logFilters.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
-    filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.log.empty }) : /* @__PURE__ */ jsx("div", { className: "space-y-2", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+    filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.log.empty }) : /* @__PURE__ */ jsx("div", { className: "space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start xl:grid-cols-3", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
       /* @__PURE__ */ jsxs("button", { onClick: () => setOpenId(openId === e.id ? null : e.id), className: "w-full text-left transition-colors duration-150", style: { background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-4 pt-3 pb-2.5", children: [
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
@@ -4609,7 +4631,8 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         /* @__PURE__ */ jsx(Area, { type: "monotone", dataKey: "cum", stroke: accent, strokeWidth: 2, fill: "url(#eqGrad)", dot: { r: 3, fill: accent, strokeWidth: 0 }, isAnimationActive: true, animationDuration: 700 })
       ] }) }) }),
       /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E \u0442\u0438\u043F\u0443 \u0441\u0435\u0442\u0430\u043F\u0430" }),
-      tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
+      /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start", children: [
+      tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm lg:col-span-2", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
       analytics.rrStats && analytics.rrStats.sampleSize > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
         /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "Average RR \u0438 Win Rate" }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2", children: [
@@ -4634,6 +4657,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
           /* @__PURE__ */ jsxs("span", { children: ["SL ", Math.round(planVsFact.closeCounts.sl / planVsFact.closeTotal * 100), "%"] }),
           /* @__PURE__ */ jsxs("span", { children: ["Manual ", Math.round(planVsFact.closeCounts.manual / planVsFact.closeTotal * 100), "%"] })
         ] })
+      ] })
       ] })
     ] })
   ] });
@@ -6709,6 +6733,38 @@ function BootIntro({ accent, name, lang, onDone }) {
     }
   );
 }
+function DesktopSidebar({ nav, tab, setTab, accent, mindCoins, onWalletClick }) {
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      className: "hidden md:flex fixed left-0 top-0 bottom-0 w-[232px] flex-col px-3 pt-6 pb-5 z-20",
+      style: { background: "rgba(10,10,12,0.6)", borderRight: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" },
+      children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-2 mb-1", children: [
+          /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
+          /* @__PURE__ */ jsx(Wordmark, { accent })
+        ] }),
+        /* @__PURE__ */ jsx("div", { className: "mb-6 mt-2 px-2", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: onWalletClick }) }),
+        /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-1 flex-1", children: nav.map((n) => {
+          const active = tab === n.id;
+          return /* @__PURE__ */ jsxs(
+            "button",
+            {
+              onClick: () => setTab(n.id),
+              className: "relative flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-all duration-150",
+              style: { background: active ? `${accent}12` : "transparent", border: `1px solid ${active ? accent + "35" : "transparent"}` },
+              children: [
+                /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint } }),
+                /* @__PURE__ */ jsx("span", { className: "text-[13px]", style: { color: active ? accent : BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
+              ]
+            },
+            n.id
+          );
+        }) })
+      ]
+    }
+  );
+}
 function MindExe() {
   const [entries, setEntries] = useState(() => seedEntries.map(migrateEntry));
   const [tab, setTab] = useState("home");
@@ -7124,6 +7180,7 @@ function MindExe() {
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
   const activeIndex = Math.max(0, nav.findIndex((n) => n.id === tab));
+  const wideTab = ["home", "log", "patterns"].includes(tab);
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "'Inter', sans-serif" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -7265,8 +7322,9 @@ function MindExe() {
       ] }),
       /* @__PURE__ */ jsx(Toast, { text: toast }),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
-      /* @__PURE__ */ jsxs("div", { className: "max-w-md mx-auto px-5 pt-8 pb-32 relative", children: [
-        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center mb-3", children: [
+      /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
+      /* @__PURE__ */ jsxs("div", { className: `max-w-md ${wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl" : "md:max-w-2xl"} mx-auto md:mx-0 md:ml-[232px] px-5 md:px-10 pt-8 md:pt-10 pb-32 md:pb-16 relative`, children: [
+        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center mb-3 md:hidden", children: [
           /* @__PURE__ */ jsx("div", {}),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
             /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
@@ -7393,7 +7451,7 @@ function MindExe() {
           )
         ] }, tab)
       ] }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3", children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 max-w-md w-full p-1 rounded-[22px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 max-w-md w-full p-1 rounded-[22px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: [
         /* @__PURE__ */ jsx(
           "div",
           {
