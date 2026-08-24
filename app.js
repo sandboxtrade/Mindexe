@@ -1,3 +1,30 @@
+// mind.exe V2.4 — pilot: text on the Coach screen no longer just fades in, it "decodes" — the
+// full string renders immediately with every letter/digit scrambled to a random character from
+// its own script (cyrillic stays cyrillic, digits stay digits, so width never jumps), then
+// characters lock into their real value left-to-right over a capped ~0.5-1.1s regardless of
+// string length. New shared DecodeText component (near LogoSpinner) drives this via
+// requestAnimationFrame and respects prefers-reduced-motion. Applied to: the Coach title/
+// subtitle, both card section labels, the Analyze button label, the analysis result paragraph
+// (so a fresh AI insight visibly "decrypts" in), the scope-info line, the 6 quick-question
+// chips, assistant chat replies (user messages stay plain — only AI output decodes), the
+// disclaimer, and the status/model footer row. Card layout and colors unchanged. If this reads
+// well, next step is rolling DecodeText out to the other screens.
+// mind.exe V2.3 — bottom mobile nav bar geometry fixed: the active-tab highlight was positioned
+// with percentages measured against the bar's padding box (p-1 on the same element as the grid),
+// while the grid tracks themselves are sized against the content box (padding excluded) — a
+// mismatch that grows with each column, so it was worst (visibly skewed/cut) on the rightmost
+// tab (Settings). Fixed by moving the 4px inset from padding to margin on an inner wrapper: the
+// highlight and the grid buttons now share that inner div as their coordinate system with zero
+// padding on it, so percentage math for both matches exactly. Outer rounded shell also got
+// overflow-hidden so nothing can visually poke past its rounded corners again.
+// mind.exe V2.2 — Coach tab redesigned: header now has a subtitle line, the analysis card gained
+// a small glowing accent orb + gradient "Analyze" button + a scope-info footer line, and the chat
+// card shows a 2-column grid of tappable quick-question chips (Brain/Star/TrendingDown/Target/
+// RotateCcw/LineChart icons) before the first message, which fire straight into sendMessage
+// instead of requiring typing. Added a bottom status row (pulsing WIN-colored online dot +
+// "Model: Gemini" badge) below the chat card. All colors stay on the existing cosmic BASE/accent
+// palette — no new hues introduced. sendMessage now accepts an optional override string so the
+// quick-question chips can bypass the input box.
 // mind.exe V2.1 — splash-screen shimmer glow restored: the luminance mask baked for the new 16:9
 // black hole photo had way too harsh a contrast curve (mean alpha ~4/255, only ~5% of pixels
 // visible), so the animated light sweep across the ring was barely there. Rebuilt the mask with a
@@ -145,7 +172,14 @@ import {
   EyeOff,
   LogOut,
   Bot,
-  Send
+  Send,
+  Brain,
+  Star,
+  TrendingDown,
+  Target,
+  RotateCcw,
+  Zap,
+  Info
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var BASE = {
@@ -182,14 +216,30 @@ var STRINGS = {
     nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u041A\u043E\u0443\u0447", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
     coach: {
       title: "\u0418\u0418-\u043A\u043E\u0443\u0447",
+      subtitle: "\u0422\u0432\u043E\u0439 \u043B\u0438\u0447\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041F\u043E\u043D\u0438\u043C\u0430\u0435\u0442 \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
       analyzeTitle: "\u0410\u043D\u0430\u043B\u0438\u0437 \u0434\u043D\u0435\u0432\u043D\u0438\u043A\u0430",
+      analyzeDesc: "\u0418\u0418 \u043F\u0440\u043E\u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u0442\u0432\u043E\u0439 \u0436\u0443\u0440\u043D\u0430\u043B \u0438 \u043D\u0430\u0439\u0434\u0451\u0442 \u0432\u0430\u0436\u043D\u044B\u0435 \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B, \u0441\u0438\u043B\u044C\u043D\u044B\u0435 \u0438 \u0441\u043B\u0430\u0431\u044B\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B.",
+      analyzeScopeInfo: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u043C \u0432\u0435\u0441\u044C \u0434\u043D\u0435\u0432\u043D\u0438\u043A \u0438 \u043D\u0430\u0439\u0434\u0435\u043D\u043D\u044B\u0435 \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B",
       analyzeBtn: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C",
       analyzeBusy: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u044E\u2026",
       analyzeEmpty: "\u041D\u0430\u0436\u043C\u0438 \u00AB\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u00BB, \u0447\u0442\u043E\u0431\u044B \u0418\u0418 \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u043B \u0442\u0432\u043E\u0439 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
       analyzeNoEntries: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0434\u043E\u0431\u0430\u0432\u044C \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0432 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
-      chatTitle: "\u0421\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u043A\u043E\u0443\u0447\u0430",
+      chatTitle: "\u0421\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0418\u0418-\u043A\u043E\u0443\u0447\u0430",
+      chatDesc: "\u0417\u0430\u0434\u0430\u0439 \u043B\u044E\u0431\u043E\u0439 \u0432\u043E\u043F\u0440\u043E\u0441 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0438\u043B\u0438 \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u044E \u0432 \u0446\u0435\u043B\u043E\u043C.",
       chatPlaceholder: "\u041D\u0430\u043F\u0438\u0448\u0438 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435\u2026",
       chatEmpty: "\u0421\u043F\u0440\u043E\u0441\u0438 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B \u0438\u043B\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
+      quick: {
+        lateCloses: "\u041F\u043E\u0447\u0435\u043C\u0443 \u044F \u0437\u0430\u043A\u0440\u044B\u0432\u0430\u044E \u0441\u0434\u0435\u043B\u043A\u0438 \u0440\u0430\u043D\u044C\u0448\u0435?",
+        strengths: "\u041C\u043E\u0438 \u0441\u0438\u043B\u044C\u043D\u044B\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B",
+        losses: "\u041F\u043E\u0447\u0435\u043C\u0443 \u044F \u0432 \u0443\u0431\u044B\u0442\u043A\u0435?",
+        discipline: "\u041A\u0430\u043A \u0443\u043B\u0443\u0447\u0448\u0438\u0442\u044C \u0434\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0443?",
+        strategy: "\u0421\u0442\u043E\u0438\u0442 \u043B\u0438 \u043C\u0435\u043D\u044F\u0442\u044C \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044E?",
+        style: "\u041A\u0430\u043A\u043E\u0439 \u0443 \u043C\u0435\u043D\u044F \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438?"
+      },
+      disclaimer: "\u0418\u0418 \u043D\u0435 \u0434\u0430\u0451\u0442 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0445 \u0441\u043E\u0432\u0435\u0442\u043E\u0432. \u0422\u043E\u043B\u044C\u043A\u043E \u0430\u043D\u0430\u043B\u0438\u0437 \u0438 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u044F.",
+      statusReady: "\u0413\u043E\u0442\u043E\u0432 \u043F\u043E\u043C\u043E\u0447\u044C",
+      statusOnline: "\u0418\u0418-\u043A\u043E\u0443\u0447 \u043E\u043D\u043B\u0430\u0439\u043D",
+      modelLabel: "\u041C\u043E\u0434\u0435\u043B\u044C: Gemini",
       send: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C",
       error: "\u0418\u0418 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D, \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437."
     },
@@ -395,14 +445,30 @@ var STRINGS = {
     nav: { home: "Home", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Coach", settings: "Settings" },
     coach: {
       title: "AI Coach",
+      subtitle: "Your personal analyst. Understands your trading style.",
       analyzeTitle: "Journal analysis",
+      analyzeDesc: "AI will review your journal and surface key patterns, strengths and weaknesses.",
+      analyzeScopeInfo: "Analyzing your full journal and detected patterns",
       analyzeBtn: "Analyze",
       analyzeBusy: "Analyzing\u2026",
       analyzeEmpty: "Tap \"Analyze\" to have AI review your journal.",
       analyzeNoEntries: "Add a few journal entries first.",
-      chatTitle: "Ask the coach",
+      chatTitle: "Ask the AI coach",
+      chatDesc: "Ask anything about your trades, psychology, or trading in general.",
       chatPlaceholder: "Type a message\u2026",
       chatEmpty: "Ask about your trades, patterns, or trading psychology.",
+      quick: {
+        lateCloses: "Why do I close trades too early?",
+        strengths: "My strengths",
+        losses: "Why am I losing?",
+        discipline: "How can I improve discipline?",
+        strategy: "Should I change my strategy?",
+        style: "What's my trading style?"
+      },
+      disclaimer: "AI doesn't give financial advice. Analysis and observations only.",
+      statusReady: "Ready to help",
+      statusOnline: "AI coach online",
+      modelLabel: "Model: Gemini",
       send: "Send",
       error: "AI is unavailable right now, try again."
     },
@@ -2904,6 +2970,70 @@ function LogoMark({ size = 26, color, accent, animated = false }) {
 }
 function LogoSpinner({ size = 22, color, accent }) {
   return /* @__PURE__ */ jsx("span", { style: { display: "inline-flex", animation: "logoPulseFade 1.1s ease-in-out infinite" }, children: /* @__PURE__ */ jsx(LogoMark, { size, color, accent }) });
+}
+// ---- DecodeText.js -----------------------------------------------------------
+// Reveal effect for text/numbers: instead of a plain fade-in, the full string is shown
+// immediately but every non-space character is randomly scrambled (matching its own
+// script/case/digit-ness so cyrillic stays cyrillic, digits stay digits — no layout shift,
+// no width jump) and characters "lock in" to their real value left-to-right over time, like
+// text decrypting on a terminal. Total animation length is capped via maxTotalMs regardless
+// of string length, so a 6-word label and a 300-character AI paragraph both settle in roughly
+// the same perceived time. Respects prefers-reduced-motion by skipping straight to final text.
+var DECODE_POOL_CYR_UP = "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F";
+var DECODE_POOL_CYR_LO = "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F";
+var DECODE_POOL_LAT_UP = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+var DECODE_POOL_LAT_LO = "abcdefghijklmnopqrstuvwxyz";
+var DECODE_POOL_DIGIT = "0123456789";
+function decodeScrambleChar(ch) {
+  if (ch >= "0" && ch <= "9") return DECODE_POOL_DIGIT[Math.floor(Math.random() * 10)];
+  if (ch >= "\u0410" && ch <= "\u042F") return DECODE_POOL_CYR_UP[Math.floor(Math.random() * 32)];
+  if (ch >= "\u0430" && ch <= "\u044F") return DECODE_POOL_CYR_LO[Math.floor(Math.random() * 32)];
+  if (ch >= "A" && ch <= "Z") return DECODE_POOL_LAT_UP[Math.floor(Math.random() * 26)];
+  if (ch >= "a" && ch <= "z") return DECODE_POOL_LAT_LO[Math.floor(Math.random() * 26)];
+  return ch;
+}
+var decodeReduceMotion = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 900, revealMs = 260 }) {
+  const value = text == null ? "" : String(text);
+  const [display, setDisplay] = useState(value);
+  const rafRef = useRef(null);
+  useEffect(() => {
+    if (decodeReduceMotion && decodeReduceMotion.matches) {
+      setDisplay(value);
+      return;
+    }
+    if (!value) {
+      setDisplay("");
+      return;
+    }
+    const len = value.length;
+    const charDelay = Math.max(2, Math.min(22, (maxTotalMs - revealMs) / len));
+    const totalMs = (len - 1) * charDelay + revealMs;
+    const start = performance.now();
+    const tick = (now) => {
+      const elapsed = now - start;
+      let out = "";
+      for (let i = 0; i < len; i++) {
+        const ch = value[i];
+        if (ch === " " || ch === "\n" || ch === "\t") {
+          out += ch;
+          continue;
+        }
+        out += elapsed >= i * charDelay + revealMs ? ch : decodeScrambleChar(ch);
+      }
+      setDisplay(out);
+      if (elapsed < totalMs) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setDisplay(value);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [value, maxTotalMs, revealMs]);
+  return /* @__PURE__ */ jsx(as, { className, style, children: display });
 }
 function Wordmark({ accent, size = 15, animated = false, wide = false }) {
   return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: BASE.ink, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
@@ -5614,8 +5744,8 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
       setAnalyzing(false);
     }
   };
-  const sendMessage = async () => {
-    const text = chatInput.trim();
+  const sendMessage = async (overrideText) => {
+    const text = (overrideText ?? chatInput).trim();
     if (!text || sending) return;
     setChatInput("");
     setError("");
@@ -5633,39 +5763,80 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
       setSending(false);
     }
   };
+  const quickQuestions = [
+    { icon: Brain, text: t.coach.quick.lateCloses },
+    { icon: Star, text: t.coach.quick.strengths },
+    { icon: TrendingDown, text: t.coach.quick.losses },
+    { icon: Target, text: t.coach.quick.discipline },
+    { icon: RotateCcw, text: t.coach.quick.strategy },
+    { icon: LineChartIcon, text: t.coach.quick.style }
+  ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(Bot, { size: 17, style: { color: accent } }),
-      " ",
-      t.coach.title
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+        /* @__PURE__ */ jsx(Bot, { size: 17, style: { color: accent } }),
+        " ",
+        /* @__PURE__ */ jsx(DecodeText, { text: t.coach.title })
+      ] }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkDim }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.subtitle }) })
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
-      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: t.coach.analyzeTitle }),
-      analyzing ? /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 mb-3 py-1", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 20, accent }) }) : analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap mb-3", style: { color: BASE.ink, animation: "fadeIn 0.4s ease-out" }, children: analysis }) : /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeEmpty }),
+      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeTitle }) }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-4 mb-4", children: [
+        /* @__PURE__ */ jsx("div", { className: "flex-1", children: analyzing ? /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 py-1", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 20, accent }) }) : analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { as: "span", text: analysis, maxTotalMs: 1100 }) }) : /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeDesc }) }) }),
+        /* @__PURE__ */ jsxs("div", { className: "relative shrink-0 w-16 h-16 rounded-full flex items-center justify-center", style: { background: `radial-gradient(circle at 35% 30%, ${accent}30, transparent 72%)`, border: `1px solid ${accent}35`, boxShadow: ring(accent) }, children: [
+          /* @__PURE__ */ jsx("div", { className: "absolute inset-2 rounded-full", style: { border: `1px solid ${accent}25` } }),
+          /* @__PURE__ */ jsx(Sparkles, { size: 20, style: { color: accent } })
+        ] })
+      ] }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: runAnalyze,
           disabled: analyzing || entries.length === 0,
-          className: "w-full py-2.5 rounded-xl text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
-          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
-          children: analyzing ? t.coach.analyzeBusy : t.coach.analyzeBtn
+          className: "w-full py-2.5 rounded-xl text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2",
+          style: { border: `1px solid ${accent}40`, background: `linear-gradient(135deg, ${accent}30, ${accent}12)`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
+          children: [
+            /* @__PURE__ */ jsx(Sparkles, { size: 14 }),
+            /* @__PURE__ */ jsx(DecodeText, { text: analyzing ? t.coach.analyzeBusy : t.coach.analyzeBtn })
+          ]
         }
-      )
+      ),
+      entries.length > 0 && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 mt-3 pt-3 text-[11px]", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint }, children: [
+        /* @__PURE__ */ jsx(Info, { size: 12 }),
+        /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeScopeInfo })
+      ] })
     ] }),
-    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { height: "48vh" }, children: [
-      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: t.coach.chatTitle }),
-      /* @__PURE__ */ jsx("div", { ref: scrollRef, className: "flex-1 overflow-y-auto mb-3 pr-1", children: chatMessages.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkFaint }, children: t.coach.chatEmpty }) : chatMessages.map((m, i) => /* @__PURE__ */ jsx(
-        "div",
-        {
-          className: `mb-2.5 max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "ml-auto" : ""}`,
-          style: { ...(m.role === "user" ? { background: `${accent}14`, color: BASE.ink } : { background: BASE.surface2, color: BASE.ink }), animation: "fadeIn 0.35s ease-out" },
-          children: m.content
-        },
-        i
-      )) }),
+    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { minHeight: "48vh" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-1", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatDesc }) }),
+      /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 overflow-y-auto mb-3 pr-1", children: [
+        chatMessages.length === 0 && /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: quickQuestions.map((q, i) => /* @__PURE__ */ jsxs(
+          "button",
+          {
+            onClick: () => sendMessage(q.text),
+            disabled: sending,
+            className: "flex items-center gap-2 text-left p-2.5 rounded-xl text-[12px] leading-snug transition-all duration-200 active:scale-[0.97] disabled:opacity-40",
+            style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink },
+            children: [
+              /* @__PURE__ */ jsx("span", { className: "shrink-0 w-6 h-6 rounded-lg flex items-center justify-center", style: { background: `${accent}14`, color: accent }, children: /* @__PURE__ */ jsx(q.icon, { size: 13 }) }),
+              /* @__PURE__ */ jsx(DecodeText, { text: q.text, maxTotalMs: 700 })
+            ]
+          },
+          i
+        )) }),
+        chatMessages.map((m, i) => /* @__PURE__ */ jsx(
+          "div",
+          {
+            className: `mt-2.5 max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "ml-auto" : ""}`,
+            style: m.role === "user" ? { background: `${accent}14`, color: BASE.ink } : { background: BASE.surface2, color: BASE.ink },
+            children: m.role === "assistant" ? /* @__PURE__ */ jsx(DecodeText, { text: m.content, maxTotalMs: 1100 }) : m.content
+          },
+          i
+        ))
+      ] }),
       sending && /* @__PURE__ */ jsx("div", { className: "mb-2.5 max-w-[85%] rounded-xl px-3 py-2 flex items-center", style: { background: BASE.surface2 }, children: /* @__PURE__ */ jsx(LogoSpinner, { size: 18, accent }) }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -5682,7 +5853,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
         /* @__PURE__ */ jsx(
           "button",
           {
-            onClick: sendMessage,
+            onClick: () => sendMessage(),
             disabled: sending || !chatInput.trim(),
             className: "shrink-0 p-2.5 rounded-xl transition-all duration-200 active:scale-95 disabled:opacity-40",
             style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent },
@@ -5690,6 +5861,23 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
             children: /* @__PURE__ */ jsx(Send, { size: 15 })
           }
         )
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[10.5px]", style: { color: BASE.inkFaint }, children: [
+        /* @__PURE__ */ jsx(ShieldCheck, { size: 11 }),
+        /* @__PURE__ */ jsx(DecodeText, { text: t.coach.disclaimer })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex items-center justify-between", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+        /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: WIN } }),
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.statusReady }) }),
+          /* @__PURE__ */ jsx("p", { className: "text-[10.5px]", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.statusOnline }) })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[10.5px]", style: { color: accent }, children: [
+        /* @__PURE__ */ jsx(Zap, { size: 11 }),
+        /* @__PURE__ */ jsx(DecodeText, { text: t.coach.modelLabel })
       ] })
     ] }),
     error && /* @__PURE__ */ jsx("p", { className: "text-xs text-center", style: { color: LOSS }, children: error })
@@ -7780,11 +7968,11 @@ function MindExe() {
           )
         ] }, tab)
       ] }) }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 max-w-md w-full p-1 rounded-[22px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[22px] overflow-hidden", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 m-1", children: [
         /* @__PURE__ */ jsx(
           "div",
           {
-            className: "absolute top-1 bottom-1 rounded-2xl transition-all duration-300 ease-out",
+            className: "absolute top-0 bottom-0 rounded-2xl transition-all duration-300 ease-out",
             style: { left: `calc(${activeIndex} * (100% / 7) + 3px)`, width: `calc(100% / 7 - 6px)`, background: `${accent}12`, border: `1px solid ${accent}35` }
           }
         ),
@@ -7795,7 +7983,7 @@ function MindExe() {
             /* @__PURE__ */ jsx("span", { className: "text-[8px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
           ] }, n.id);
         })
-      ] }) })
+      ] }) }) })
     ] })
   ] });
 }
