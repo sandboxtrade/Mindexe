@@ -1,3 +1,12 @@
+// mind.exe V3.1 — fixed the "странный блюр" on long AI replies: DecodeText's per-word cascade
+// computed its stagger step as maxTotalMs/wordCount, and for a long paragraph (a full AI answer
+// can be 150+ words) that step collapsed toward its floor — meaning dozens of words ended up
+// mid-fade simultaneously for well over a second, so a screenshot taken in that window showed a
+// patchwork of sharp/blurred words in no visible order rather than a clean sweep. Long text
+// (>24 words) now skips the per-word stagger entirely and fades in as one synchronized block
+// (single 0.55s softReveal, no stagger) — reads as calm regardless of length or when it's
+// captured. Short text (titles, buttons, chips) keeps the per-word cascade, which was never the
+// part that looked wrong.
 // mind.exe V3.0 — two changes. (1) DecodeText replaced entirely: the per-character random-glyph
 // "decrypt" animation is gone (it was still reading as jittery/artificial even after V2.5's
 // tuning). New version is a calm word-by-word blur+fade cascade — each word starts blurred,
@@ -3171,14 +3180,24 @@ function LogoSpinner({ size = 22, color, accent }) {
 // long AI paragraph both settle in roughly the same perceived time. Respects
 // prefers-reduced-motion by skipping straight to the final text with no animation.
 var decodeReduceMotion = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+// Long text (an AI paragraph, a chat reply) is rendered as one single fade instead of a
+// per-word cascade: with enough words the per-word stagger step shrinks to almost nothing, so
+// a big chunk of the paragraph ends up mid-fade at once — a screenshot taken in that window
+// shows a messy "half the words sharp, half still blurred, no clear order" mix rather than a
+// clean wave. One synchronized block-fade reads as calm regardless of length or timing.
+var DECODE_WORD_CASCADE_LIMIT = 24;
 function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520 }) {
   const value = text == null ? "" : String(text);
   const reduced = decodeReduceMotion && decodeReduceMotion.matches;
   const tokens = useMemo(() => value.split(/(\s+)/), [value]);
   const wordCount = useMemo(() => tokens.filter((w) => w.trim()).length || 1, [tokens]);
+  if (reduced) return /* @__PURE__ */ jsx(as, { className, style, children: value });
+  if (wordCount > DECODE_WORD_CASCADE_LIMIT) {
+    return /* @__PURE__ */ jsx(as, { className, style: { ...style, display: style?.display || "inline-block", animation: "softReveal 0.55s cubic-bezier(0.22,0.61,0.36,1) both" }, children: value });
+  }
   const stepMs = Math.max(10, Math.min(38, maxTotalMs / wordCount));
   let wordIndex = -1;
-  return /* @__PURE__ */ jsx(as, { className, style, children: reduced ? value : tokens.map((w, i) => {
+  return /* @__PURE__ */ jsx(as, { className, style, children: tokens.map((w, i) => {
     if (!w.trim()) return w;
     wordIndex++;
     return /* @__PURE__ */ jsx("span", { style: { display: "inline-block", animation: `softReveal 0.5s cubic-bezier(0.22,0.61,0.36,1) ${wordIndex * stepMs}ms both` }, children: w }, i);
