@@ -1,3 +1,26 @@
+// mind.exe V2.7 — renamed the "Coach" tab to "Analysis" everywhere it's user-visible: bottom nav
+// label, screen title, chat section title ("Спросить ИИ" / "Ask AI"), and the online-status line.
+// Internal identifiers (Coach component, t.coach.* keys, aiCoach-adjacent functions) intentionally
+// left as-is — renaming those is a pure code-churn risk with zero user-facing benefit.
+// mind.exe V2.6 — Adaptive pre-session Calibration. Calibration is no longer a fixed 6-question
+// quiz: on "Start" it now reads the existing Analytics/Pattern Engine output for the trader's last
+// closed session + a short recent window and turns it into a small set of typed, severity-scored
+// factors (consecutive_losses, euphoria_risk, revenge_risk, increased_risk, overtrading_risk,
+// early_exit_pattern, fomo_risk, repeated_lesson, decreased_discipline, poor_sleep,
+// reflection_note — new caComputeAdaptiveFactors, nothing invented if the sample isn't there).
+// Those factors + a compact context (new caBuildContext, same shape family as the Coach tab's
+// aiBuildContext) go to the existing Gemini integration (one new call site,
+// aiGenerateCalibrationQuestions) which returns ONLY question text + factor/category/priority —
+// never scores, never awareness, per spec. Every returned (or fallback) question is scored through
+// one new shared 4-point readiness scale (CALIBRATION_READINESS_SCALE) via scoreCalibrationDynamic,
+// so Gemini can't influence the math. Final set = 2 baseline questions (sleep/emotion, unchanged
+// from CALIBRATION_QUESTIONS) + up to 4 adaptive ones. Three-tier fallback if Gemini is unavailable
+// or returns something unusable: caLocalFallbackQuestions (local per-factor question bank) ->
+// full original static CALIBRATION_QUESTIONS set — Calibration can never break. Same-day caching
+// and a rolling question history (avoids repeating the same factor every day) are stored per user
+// via the same storageGet/Set Firestore pattern as loadAiState (new calibHistoryKey). Nothing in
+// Analytics Engine, Pattern Engine, Calibration Score math, Firebase Auth, Firestore schema, or the
+// existing Gemini/Coach integration was changed — this is purely an added layer.
 // mind.exe V2.5 — two Coach-screen fixes. (1) Chat card layout: it had `minHeight` instead of a
 // fixed `height`, so the card grew to fit the whole conversation instead of scrolling internally
 // — pushed the input off-screen and blew past the bottom nav, exactly like the "стало резиновым"
@@ -228,9 +251,9 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u041A\u043E\u0443\u0447", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
     coach: {
-      title: "\u0418\u0418-\u043A\u043E\u0443\u0447",
+      title: "\u0418\u0418-\u0430\u043D\u0430\u043B\u0438\u0437",
       subtitle: "\u0422\u0432\u043E\u0439 \u043B\u0438\u0447\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041F\u043E\u043D\u0438\u043C\u0430\u0435\u0442 \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
       analyzeTitle: "\u0410\u043D\u0430\u043B\u0438\u0437 \u0434\u043D\u0435\u0432\u043D\u0438\u043A\u0430",
       analyzeDesc: "\u0418\u0418 \u043F\u0440\u043E\u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u0442\u0432\u043E\u0439 \u0436\u0443\u0440\u043D\u0430\u043B \u0438 \u043D\u0430\u0439\u0434\u0451\u0442 \u0432\u0430\u0436\u043D\u044B\u0435 \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B, \u0441\u0438\u043B\u044C\u043D\u044B\u0435 \u0438 \u0441\u043B\u0430\u0431\u044B\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B.",
@@ -239,7 +262,7 @@ var STRINGS = {
       analyzeBusy: "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u044E\u2026",
       analyzeEmpty: "\u041D\u0430\u0436\u043C\u0438 \u00AB\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C\u00BB, \u0447\u0442\u043E\u0431\u044B \u0418\u0418 \u0440\u0430\u0437\u043E\u0431\u0440\u0430\u043B \u0442\u0432\u043E\u0439 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
       analyzeNoEntries: "\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u0434\u043E\u0431\u0430\u0432\u044C \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u0432 \u0434\u043D\u0435\u0432\u043D\u0438\u043A.",
-      chatTitle: "\u0421\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0418\u0418-\u043A\u043E\u0443\u0447\u0430",
+      chatTitle: "\u0421\u043F\u0440\u043E\u0441\u0438\u0442\u044C \u0418\u0418",
       chatDesc: "\u0417\u0430\u0434\u0430\u0439 \u043B\u044E\u0431\u043E\u0439 \u0432\u043E\u043F\u0440\u043E\u0441 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0438\u043B\u0438 \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u044E \u0432 \u0446\u0435\u043B\u043E\u043C.",
       chatPlaceholder: "\u041D\u0430\u043F\u0438\u0448\u0438 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435\u2026",
       chatEmpty: "\u0421\u043F\u0440\u043E\u0441\u0438 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B \u0438\u043B\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
@@ -253,7 +276,7 @@ var STRINGS = {
       },
       disclaimer: "\u0418\u0418 \u043D\u0435 \u0434\u0430\u0451\u0442 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0445 \u0441\u043E\u0432\u0435\u0442\u043E\u0432. \u0422\u043E\u043B\u044C\u043A\u043E \u0430\u043D\u0430\u043B\u0438\u0437 \u0438 \u043D\u0430\u0431\u043B\u044E\u0434\u0435\u043D\u0438\u044F.",
       statusReady: "\u0413\u043E\u0442\u043E\u0432 \u043F\u043E\u043C\u043E\u0447\u044C",
-      statusOnline: "\u0418\u0418-\u043A\u043E\u0443\u0447 \u043E\u043D\u043B\u0430\u0439\u043D",
+      statusOnline: "\u0418\u0418-\u0430\u043D\u0430\u043B\u0438\u0437 \u043E\u043D\u043B\u0430\u0439\u043D",
       modelLabel: "\u041C\u043E\u0434\u0435\u043B\u044C: Gemini",
       send: "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C",
       error: "\u0418\u0418 \u0441\u0435\u0439\u0447\u0430\u0441 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D, \u043F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0435\u0449\u0451 \u0440\u0430\u0437."
@@ -369,6 +392,8 @@ var STRINGS = {
       subtitle: "\u041E\u043F\u0440\u0435\u0434\u0435\u043B\u0438\u0442\u044C \u0433\u043E\u0442\u043E\u0432\u043D\u043E\u0441\u0442\u044C \u043A \u0442\u043E\u0440\u0433\u043E\u0432\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438.",
       intro: "\u042D\u0442\u043E \u0437\u0430\u0439\u043C\u0451\u0442 \u043C\u0435\u043D\u0435\u0435 30 \u0441\u0435\u043A\u0443\u043D\u0434. \u041E\u0442\u0432\u0435\u0447\u0430\u0439\u0442\u0435 \u0447\u0435\u0441\u0442\u043D\u043E. \u0421\u0438\u0441\u0442\u0435\u043C\u0430 \u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u043D\u0435 \u0440\u044B\u043D\u043E\u043A, \u0430 \u0432\u0430\u0448\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435.",
       start: "\u041D\u0430\u0447\u0430\u0442\u044C",
+      loading: "\u0413\u043E\u0442\u043E\u0432\u0438\u043C \u0432\u043E\u043F\u0440\u043E\u0441\u044B \u043D\u0430 \u043E\u0441\u043D\u043E\u0432\u0435 \u0442\u0432\u043E\u0438\u0445 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445 \u0441\u0435\u0441\u0441\u0438\u0439\u2026",
+      adaptiveNote: "\u0421\u0435\u0433\u043E\u0434\u043D\u044F\u0448\u043D\u044F\u044F \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u043F\u043E\u0441\u0442\u0440\u043E\u0435\u043D\u0430 \u043D\u0430 \u0442\u0432\u043E\u0438\u0445 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u0430\u0445.",
       questionOf: (i, total) => `\u0412\u043E\u043F\u0440\u043E\u0441 ${i} \u0438\u0437 ${total}`,
       cancel: "\u041E\u0442\u043C\u0435\u043D\u0430",
       mainRiskFactor: "\u0413\u043B\u0430\u0432\u043D\u044B\u0439 \u0444\u0430\u043A\u0442\u043E\u0440 \u0440\u0438\u0441\u043A\u0430",
@@ -457,9 +482,9 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "Home", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Coach", settings: "Settings" },
+    nav: { home: "Home", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
     coach: {
-      title: "AI Coach",
+      title: "AI Analysis",
       subtitle: "Your personal analyst. Understands your trading style.",
       analyzeTitle: "Journal analysis",
       analyzeDesc: "AI will review your journal and surface key patterns, strengths and weaknesses.",
@@ -468,7 +493,7 @@ var STRINGS = {
       analyzeBusy: "Analyzing\u2026",
       analyzeEmpty: "Tap \"Analyze\" to have AI review your journal.",
       analyzeNoEntries: "Add a few journal entries first.",
-      chatTitle: "Ask the AI coach",
+      chatTitle: "Ask AI",
       chatDesc: "Ask anything about your trades, psychology, or trading in general.",
       chatPlaceholder: "Type a message\u2026",
       chatEmpty: "Ask about your trades, patterns, or trading psychology.",
@@ -482,7 +507,7 @@ var STRINGS = {
       },
       disclaimer: "AI doesn't give financial advice. Analysis and observations only.",
       statusReady: "Ready to help",
-      statusOnline: "AI coach online",
+      statusOnline: "AI Analysis online",
       modelLabel: "Model: Gemini",
       send: "Send",
       error: "AI is unavailable right now, try again."
@@ -598,6 +623,8 @@ var STRINGS = {
       subtitle: "Check your readiness for a trading session.",
       intro: "It takes less than 30 seconds. Answer honestly. The system analyzes your state, not the market.",
       start: "Start",
+      loading: "Building today's questions from your recent sessions\u2026",
+      adaptiveNote: "Today's calibration is built on your recent results.",
       questionOf: (i, total) => `Question ${i} of ${total}`,
       cancel: "Cancel",
       mainRiskFactor: "Main risk factor",
@@ -1145,6 +1172,82 @@ function scoreCalibration(answers, lang = "ru") {
     if (a.score === -2) return { type: "warning", text: q.negative };
     return null;
   }).filter(Boolean);
+  return { pct, tier: tiers[tierIndex], riskFactors, factors };
+}
+// ---- Adaptive Calibration: shared answer scale + scorer ---------------------
+// Adaptive (Gemini-written) questions don't carry their own per-option scores — that would let
+// the model influence scoring, which p.14 of the spec explicitly forbids. Instead every adaptive
+// question uses this one fixed 4-point readiness scale, and score is derived purely from which
+// option (position) the user picked. Baseline questions (sleep/emotion, pulled from
+// CALIBRATION_QUESTIONS as-is) keep their existing custom-labeled options untouched.
+var CALIBRATION_READINESS_SCALE = [
+  { label: "\u041D\u0435\u0442", score: -2 },
+  { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435\u0442", score: -1 },
+  { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0434\u0430", score: 1 },
+  { label: "\u0414\u0430", score: 2 }
+];
+var CALIBRATION_READINESS_SCALE_EN = [
+  { label: "No", score: -2 },
+  { label: "Probably not", score: -1 },
+  { label: "Probably yes", score: 1 },
+  { label: "Yes", score: 2 }
+];
+var ADAPTIVE_FACTOR_LABELS = {
+  consecutive_losses: { ru: "\u0421\u0435\u0440\u0438\u044F \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A", en: "A losing streak" },
+  euphoria_risk: { ru: "\u042D\u0439\u0444\u043E\u0440\u0438\u044F \u043F\u043E\u0441\u043B\u0435 \u0441\u0435\u0440\u0438\u0438 \u043F\u043E\u0431\u0435\u0434", en: "Euphoria after a winning streak" },
+  revenge_risk: { ru: "\u0416\u0435\u043B\u0430\u043D\u0438\u0435 \u0431\u044B\u0441\u0442\u0440\u043E \u043E\u0442\u044B\u0433\u0440\u0430\u0442\u044C\u0441\u044F", en: "Wanting to win back losses quickly" },
+  increased_risk: { ru: "\u0420\u0438\u0441\u043A \u0432\u044B\u0448\u0435 \u043E\u0431\u044B\u0447\u043D\u043E\u0433\u043E \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430", en: "Risk creeping up after a loss" },
+  overtrading_risk: { ru: "\u0421\u043A\u043B\u043E\u043D\u043D\u043E\u0441\u0442\u044C \u043A \u043F\u0435\u0440\u0435\u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0435", en: "Tendency to overtrade" },
+  early_exit_pattern: { ru: "\u0420\u0430\u043D\u043D\u0438\u0435 \u0432\u044B\u0445\u043E\u0434\u044B \u0438\u0437 \u043F\u043E\u0437\u0438\u0446\u0438\u0439", en: "Exiting positions early" },
+  fomo_risk: { ru: "FOMO \u2014 \u0441\u0442\u0440\u0430\u0445 \u043F\u0440\u043E\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0434\u0432\u0438\u0436\u0435\u043D\u0438\u0435", en: "FOMO \u2014 fear of missing the move" },
+  repeated_lesson: { ru: "\u041F\u043E\u0432\u0442\u043E\u0440\u044F\u044E\u0449\u0438\u0439\u0441\u044F \u0443\u0440\u043E\u043A", en: "A recurring lesson" },
+  poor_sleep: { ru: "\u041D\u0435\u0434\u043E\u0441\u0442\u0430\u0442\u043E\u043A \u0441\u043D\u0430", en: "Lack of sleep" },
+  decreased_discipline: { ru: "\u0421\u043D\u0438\u0436\u0435\u043D\u043D\u0430\u044F \u0434\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u0430", en: "Discipline slipping" },
+  reflection_note: { ru: "\u0412\u0447\u0435\u0440\u0430\u0448\u043D\u044F\u044F \u0440\u0435\u0444\u043B\u0435\u043A\u0441\u0438\u044F", en: "Yesterday's reflection" }
+};
+function caFactorLabel(factor, lang) {
+  const entry = ADAPTIVE_FACTOR_LABELS[factor];
+  if (!entry) return null;
+  return lang === "en" ? entry.en : entry.ru;
+}
+// Works for any question list: static CALIBRATION_QUESTIONS, or the mixed baseline+adaptive
+// list assembled by assembleCalibrationQuestions(). Baseline questions keep their embedded
+// positive/negative/flag; adaptive questions derive their factor label from q.factor when the
+// user picks a low-readiness option (score <= -1) on the shared scale.
+function scoreCalibrationDynamic(questions, answers, lang = "ru") {
+  const tiers = lang === "en" ? CALIBRATION_TIERS_EN : CALIBRATION_TIERS;
+  const total = questions.reduce((s, q) => s + (answers[q.id]?.score ?? 0), 0);
+  const maxAbs = Math.max(1, questions.length) * 2;
+  const pct = Math.max(0, Math.min(100, Math.round((total + maxAbs) / (2 * maxAbs) * 100)));
+  let tierIndex = pct >= 85 ? 0 : pct >= 70 ? 1 : pct >= 50 ? 2 : pct >= 30 ? 3 : 4;
+  const riskFactors = [];
+  const factors = [];
+  questions.forEach((q) => {
+    const a = answers[q.id];
+    if (!a) return;
+    if (q.source === "adaptive" || q.source === "fallback") {
+      const label = caFactorLabel(q.factor, lang);
+      if (a.score <= -1 && label && !riskFactors.includes(label)) riskFactors.push(label);
+      if (a.score === 2) factors.push({ type: "positive", text: q.text });
+      else if (a.score === -2) factors.push({ type: "warning", text: label || q.text });
+    } else {
+      if (a.score === 2 && q.positive) factors.push({ type: "positive", text: q.positive });
+      if (a.score === -2 && q.negative) factors.push({ type: "warning", text: q.negative });
+      if (a.flag === "revenge") {
+        const t2 = lang === "en" ? "Wanting to win back losses" : "\u0416\u0435\u043B\u0430\u043D\u0438\u0435 \u043E\u0442\u0431\u0438\u0442\u044C \u0443\u0431\u044B\u0442\u043A\u0438";
+        if (!riskFactors.includes(t2)) riskFactors.push(t2);
+      }
+      if (a.flag === "emotion") {
+        const t2 = lang === "en" ? "Strong emotional involvement" : "\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u044C";
+        if (!riskFactors.includes(t2)) riskFactors.push(t2);
+      }
+      if (a.flag === "fomo") {
+        const t2 = lang === "en" ? "Fear of missing out" : "\u0421\u0442\u0440\u0430\u0445 \u0443\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u0432\u043E\u0437\u043C\u043E\u0436\u043D\u043E\u0441\u0442\u044C";
+        if (!riskFactors.includes(t2)) riskFactors.push(t2);
+      }
+    }
+  });
+  if (riskFactors.length) tierIndex = Math.max(tierIndex, 2);
   return { pct, tier: tiers[tierIndex], riskFactors, factors };
 }
 var REVIEW_LIKERT = [
@@ -4959,13 +5062,53 @@ function CalibrationRing({ pct, color, size = 172 }) {
     ] })
   ] });
 }
-function Calibration({ accent, onComplete, lang, t }) {
+function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }) {
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
-  const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
+  const [questions, setQuestions] = useState(() => (lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS).map((q) => ({ ...q, category: "baseline", source: "baseline" })));
+  const [adaptiveActive, setAdaptiveActive] = useState(false);
+  const historyRef = useRef([]);
   const q = questions[qIndex];
+  // Runs only on explicit "Start" tap (never on render/state change, matching the Coach tab's
+  // request rule). Cache: if a set was already generated today, reuse it instead of calling
+  // Gemini again. Falls back through: Gemini adaptive -> local factor-based fallback questions ->
+  // the original static 6-question CALIBRATION_QUESTIONS set, so this screen can never break.
+  const prepareAndStart = async () => {
+    setStage("loading");
+    try {
+      const history = await caLoadCalibrationHistory(userId);
+      historyRef.current = history;
+      const todayKey = (/* @__PURE__ */ new Date()).toDateString();
+      const cached = history[0] && new Date(history[0].date).toDateString() === todayKey ? history[0] : null;
+      if (cached && Array.isArray(cached.questions) && cached.questions.length) {
+        setQuestions(cached.questions);
+        setAdaptiveActive(cached.questions.some((qq) => qq.category === "adaptive"));
+        setStage("quiz");
+        return;
+      }
+      const factors = caComputeAdaptiveFactors(entries, analytics, history, lang);
+      let adaptiveQuestions = [];
+      if (factors.length) {
+        try {
+          const context = caBuildContext(entries, analytics, factors, history, lang);
+          adaptiveQuestions = await aiGenerateCalibrationQuestions(context);
+        } catch (e) {
+          adaptiveQuestions = [];
+        }
+        if (!adaptiveQuestions.length) adaptiveQuestions = caLocalFallbackQuestions(factors, lang);
+      }
+      const finalQuestions = assembleCalibrationQuestions(adaptiveQuestions, lang);
+      setQuestions(finalQuestions);
+      setAdaptiveActive(adaptiveQuestions.length > 0);
+    } catch (e) {
+      setQuestions((lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS).map((qq) => ({ ...qq, category: "baseline", source: "baseline" })));
+      setAdaptiveActive(false);
+    } finally {
+      setStage("quiz");
+    }
+  };
   const selectAnswer = (option) => {
     const next = { ...answers, [q.id]: option };
     setAnswers(next);
@@ -4973,9 +5116,17 @@ function Calibration({ accent, onComplete, lang, t }) {
       if (qIndex + 1 < questions.length) {
         setQIndex(qIndex + 1);
       } else {
-        const r = scoreCalibration(next, lang);
+        const r = scoreCalibrationDynamic(questions, next, lang);
         setResult(r);
         onComplete({ pct: r.pct, tierColor: r.tier.color, date: (/* @__PURE__ */ new Date()).toISOString(), riskFactors: r.riskFactors });
+        const record = {
+          date: (/* @__PURE__ */ new Date()).toISOString(),
+          questions: questions.map((qq) => ({ id: qq.id, text: qq.text, factor: qq.factor || null, category: qq.category, source: qq.source })),
+          answers: next,
+          pct: r.pct,
+          riskFactors: r.riskFactors
+        };
+        caSaveCalibrationHistory(userId, [record, ...historyRef.current]);
         setStage("result");
       }
     }, 200);
@@ -4995,12 +5146,18 @@ function Calibration({ accent, onComplete, lang, t }) {
       /* @__PURE__ */ jsx(
         "button",
         {
-          onClick: () => setStage("quiz"),
+          onClick: prepareAndStart,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
           style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.calibration.start
         }
       )
+    ] });
+  }
+  if (stage === "loading") {
+    return /* @__PURE__ */ jsxs("div", { className: "text-center py-16", children: [
+      /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-4", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 26, accent }) }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.calibration.loading })
     ] });
   }
   if (stage === "quiz") {
@@ -5010,6 +5167,10 @@ function Calibration({ accent, onComplete, lang, t }) {
         /* @__PURE__ */ jsx("button", { onClick: restart, style: { color: BASE.inkFaint }, children: t.calibration.cancel })
       ] }),
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-6", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${qIndex / questions.length * 100}%`, background: accent } }) }),
+      qIndex === 0 && adaptiveActive && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 mb-4 text-[11px]", style: { color: accent }, children: [
+        /* @__PURE__ */ jsx(Sparkles, { size: 11 }),
+        t.calibration.adaptiveNote
+      ] }),
       /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: q.text }),
       /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: q.options.map((opt) => /* @__PURE__ */ jsx(
         "button",
@@ -5707,6 +5868,309 @@ ${historyText || "(none yet)"}
 USER_QUESTION:
 ${question}`;
   return aiCallGemini(prompt);
+}
+
+// ============================================================================
+// ---- Adaptive Calibration Engine ---------------------------------------------
+// New layer on top of the existing Calibration/scoreCalibrationDynamic UI and the existing
+// aiCallGemini plumbing above. Nothing here replaces Analytics Engine, Pattern Engine,
+// Calibration Score math, Firebase Auth, or Firestore — it only adds:
+//   caComputeAdaptiveFactors: reads existing `analytics` + entries.slice for the last trading
+//     day and a short rolling window, and turns that into a small list of typed, severity-scored
+//     factors (recent_losses, revenge_risk, increased_risk, overtrading_risk, early_exit_pattern,
+//     euphoria_risk, fomo_risk, repeated_lesson, poor_sleep, decreased_discipline, reflection_note).
+//     Nothing is invented — every factor requires the underlying sample to actually exist.
+//   caBuildContext: compresses entries+analytics+factors+recent question history into the same
+//     kind of compact JSON aiBuildContext already builds for the Coach tab.
+//   aiGenerateCalibrationQuestions: the only new Gemini call site. Gemini returns question TEXT
+//     + factor/category/priority metadata only — never scores, never awareness, per the client's
+//     explicit constraint. All questions (adaptive or fallback) are scored afterwards through the
+//     existing shared CALIBRATION_READINESS_SCALE via scoreCalibrationDynamic.
+//   caLocalFallbackQuestions: used whenever Gemini is unavailable or returns something unusable,
+//     so the calibration screen can never break.
+//   caLoadCalibrationHistory/caSaveCalibrationHistory: Firestore-backed (same storageGet/Set
+//     pattern as loadAiState/saveAiState), doubles as same-day cache (don't regenerate if a set
+//     was already produced today) and as the "don't ask the same thing again" question history.
+// ============================================================================
+function caMinutesBetween(a, b) {
+  if (!a || !b) return null;
+  const diff = Math.abs(new Date(b).getTime() - new Date(a).getTime());
+  return Math.round(diff / 6e4);
+}
+function caDayKey(d) {
+  return d instanceof Date && !isNaN(d.getTime()) ? d.toDateString() : null;
+}
+function caLastSessionEntries(closedSorted) {
+  if (!closedSorted.length) return { dayKey: null, list: [] };
+  const dayKey = caDayKey(closedSorted[closedSorted.length - 1].exitDate || closedSorted[closedSorted.length - 1].date);
+  const list = closedSorted.filter((e) => caDayKey(e.exitDate || e.date) === dayKey);
+  return { dayKey, list };
+}
+function caTrailingStreak(closedSorted) {
+  if (!closedSorted.length) return { type: null, count: 0 };
+  let type = null, count = 0;
+  for (let i = closedSorted.length - 1; i >= 0; i--) {
+    const o = closedSorted[i].outcome;
+    if (o !== "Win" && o !== "Loss") break;
+    if (type === null) type = o;
+    if (o !== type) break;
+    count++;
+  }
+  return { type: type === "Win" ? "win" : type === "Loss" ? "loss" : null, count };
+}
+function caComputeAdaptiveFactors(entries, analytics, calibrationHistory, lang) {
+  const closedSorted = (entries || []).filter(isEntryClosed).slice().sort((a, b) => (a.exitDate || a.date) - (b.exitDate || b.date));
+  const factors = [];
+  if (!closedSorted.length) return factors;
+  const { list: lastSession } = caLastSessionEntries(closedSorted);
+  const streak = caTrailingStreak(closedSorted);
+  if (streak.type === "loss" && streak.count >= 2) {
+    factors.push({
+      type: "consecutive_losses",
+      severity: Math.min(1, 0.4 + streak.count * 0.13),
+      evidence: lang === "en" ? `${streak.count} losing trades in a row (most recent trend)` : `${streak.count} \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u0434\u0440\u044F\u0434 (\u0441\u0430\u043C\u044B\u0439 \u0441\u0432\u0435\u0436\u0438\u0439 \u0442\u0440\u0435\u043D\u0434)`,
+      source: "journal"
+    });
+  }
+  if (streak.type === "win" && streak.count >= 2) {
+    factors.push({
+      type: "euphoria_risk",
+      severity: Math.min(1, 0.35 + streak.count * 0.12),
+      evidence: lang === "en" ? `${streak.count} winning trades in a row` : `${streak.count} \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u0434\u0440\u044F\u0434`,
+      source: "journal"
+    });
+  }
+  for (let i = 0; i < lastSession.length - 1; i++) {
+    const cur = lastSession[i], next = lastSession[i + 1];
+    if (cur.outcome !== "Loss") continue;
+    const mins = caMinutesBetween(cur.exitDate || cur.date, next.date);
+    if (mins != null && mins <= 25) {
+      factors.push({
+        type: "revenge_risk",
+        severity: mins <= 10 ? 0.8 : mins <= 20 ? 0.6 : 0.4,
+        evidence: lang === "en" ? `Re-entered ${mins} min after a loss in the last session` : `\u041D\u043E\u0432\u044B\u0439 \u0432\u0445\u043E\u0434 \u0447\u0435\u0440\u0435\u0437 ${mins} \u043C\u0438\u043D \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0432 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438`,
+        source: "journal"
+      });
+      break;
+    }
+  }
+  const riskChange = analytics?.risk?.postLossChange?.value;
+  if (riskChange != null && riskChange > 15) {
+    factors.push({
+      type: "increased_risk",
+      severity: Math.min(1, riskChange / 40),
+      evidence: lang === "en" ? `Risk tends to run ${Math.round(riskChange)}% higher right after a loss` : `\u0420\u0438\u0441\u043A \u043F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u043E\u0431\u044B\u0447\u043D\u043E \u0432\u044B\u0448\u0435 \u043D\u0430 ${Math.round(riskChange)}%`,
+      source: "pattern_engine"
+    });
+  }
+  const recentByDay = {};
+  closedSorted.slice(-40).forEach((e) => {
+    const k = caDayKey(e.exitDate || e.date);
+    if (k) recentByDay[k] = (recentByDay[k] || 0) + 1;
+  });
+  const dayCounts = Object.values(recentByDay);
+  const avgPerDay = dayCounts.length ? dayCounts.reduce((s, n) => s + n, 0) / dayCounts.length : 0;
+  if (lastSession.length >= 3 && avgPerDay > 0 && lastSession.length > avgPerDay * 1.6) {
+    factors.push({
+      type: "overtrading_risk",
+      severity: Math.min(1, 0.4 + (lastSession.length / Math.max(1, avgPerDay) - 1) * 0.3),
+      evidence: lang === "en" ? `${lastSession.length} trades last session vs a usual ~${Math.round(avgPerDay)}` : `${lastSession.length} \u0441\u0434\u0435\u043B\u043E\u043A \u0432 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043F\u0440\u043E\u0442\u0438\u0432 \u043E\u0431\u044B\u0447\u043D\u044B\u0445 ~${Math.round(avgPerDay)}`,
+      source: "journal"
+    });
+  }
+  const earlyCandidates = closedSorted.slice(-15).filter((e) => e.closeType === "manual" && typeof e.plannedRR === "number" && e.plannedRR > 0 && typeof e.realizedRR === "number" && e.realizedRR > 0);
+  const earlyExits = earlyCandidates.filter((e) => e.realizedRR < e.plannedRR * 0.7);
+  if (earlyCandidates.length >= 3 && earlyExits.length / earlyCandidates.length >= 0.4) {
+    factors.push({
+      type: "early_exit_pattern",
+      severity: Math.min(1, 0.4 + earlyExits.length / earlyCandidates.length * 0.5),
+      evidence: lang === "en" ? `${earlyExits.length} of the last ${earlyCandidates.length} manual closes exited well before planned RR` : `${earlyExits.length} \u0438\u0437 \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445 ${earlyCandidates.length} \u0440\u0443\u0447\u043D\u044B\u0445 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u0439 \u0431\u044B\u043B\u0438 \u0437\u0430\u043C\u0435\u0442\u043D\u043E \u0440\u0430\u043D\u044C\u0448\u0435 \u043F\u043B\u0430\u043D\u043E\u0432\u043E\u0433\u043E RR`,
+      source: "pattern_engine"
+    });
+  }
+  const yesterday = /* @__PURE__ */ new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const hadTradesYesterday = closedSorted.some((e) => caDayKey(e.exitDate || e.date) === caDayKey(yesterday));
+  if (!hadTradesYesterday) {
+    factors.push({
+      type: "fomo_risk",
+      severity: 0.35,
+      evidence: lang === "en" ? "No trades yesterday" : "\u0412\u0447\u0435\u0440\u0430 \u043D\u0435 \u0431\u044B\u043B\u043E \u0441\u0434\u0435\u043B\u043E\u043A",
+      source: "journal"
+    });
+  }
+  const repeatedLessons = analytics?.reflection?.repeatedLessons?.length ?? 0;
+  if (repeatedLessons >= 2) {
+    factors.push({
+      type: "repeated_lesson",
+      severity: Math.min(1, 0.4 + repeatedLessons * 0.12),
+      evidence: lang === "en" ? `The same lesson has repeated ${repeatedLessons} times` : `\u041E\u0434\u0438\u043D \u0438 \u0442\u043E\u0442 \u0436\u0435 \u0443\u0440\u043E\u043A \u043F\u043E\u0432\u0442\u043E\u0440\u0438\u043B\u0441\u044F ${repeatedLessons} \u0440\u0430\u0437`,
+      source: "pattern_engine"
+    });
+  }
+  const disciplineScore = analytics?.discipline?.score?.value;
+  if (disciplineScore != null && disciplineScore < 50) {
+    factors.push({
+      type: "decreased_discipline",
+      severity: Math.min(1, (50 - disciplineScore) / 50),
+      evidence: lang === "en" ? `Discipline score is at ${Math.round(disciplineScore)}/100` : `\u041F\u043E\u043A\u0430\u0437\u0430\u0442\u0435\u043B\u044C \u0434\u0438\u0441\u0446\u0438\u043F\u043B\u0438\u043D\u044B \u2014 ${Math.round(disciplineScore)}/100`,
+      source: "pattern_engine"
+    });
+  }
+  const lastSleepCal = (calibrationHistory || []).find((h) => h.answers?.sleep);
+  if (lastSleepCal && lastSleepCal.answers.sleep.score <= -1) {
+    factors.push({
+      type: "poor_sleep",
+      severity: lastSleepCal.answers.sleep.score === -2 ? 0.7 : 0.4,
+      evidence: lang === "en" ? "Reported poor sleep at a recent calibration" : "\u0412 \u043F\u0440\u0435\u0434\u044B\u0434\u0443\u0449\u0435\u0439 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0435 \u043E\u0442\u043C\u0435\u0447\u0435\u043D \u043F\u043B\u043E\u0445\u043E\u0439 \u0441\u043E\u043D",
+      source: "calibration_history"
+    });
+  }
+  const reflectionSnippets = lastSession.map((e) => [e.pull, e.lesson].filter((v) => v && v !== "\u2014").join(" / ")).filter(Boolean);
+  if (reflectionSnippets.length) {
+    factors.push({
+      type: "reflection_note",
+      severity: 0.5,
+      evidence: reflectionSnippets.slice(0, 2).join(" | ").slice(0, 220),
+      source: "journal"
+    });
+  }
+  return factors;
+}
+function caBuildContext(entries, analytics, adaptiveFactors, calibrationHistory, lang) {
+  const closedSorted = (entries || []).filter(isEntryClosed).slice().sort((a, b) => (a.exitDate || a.date) - (b.exitDate || b.date));
+  const { list: lastSession } = caLastSessionEntries(closedSorted);
+  const closeCounts = { tp: 0, sl: 0, manual: 0 };
+  lastSession.forEach((e) => {
+    if (e.closeType && closeCounts[e.closeType] != null) closeCounts[e.closeType]++;
+  });
+  const last7 = closedSorted.filter((e) => {
+    const days = ((/* @__PURE__ */ new Date()).getTime() - (e.exitDate || e.date).getTime()) / 864e5;
+    return days <= 7;
+  });
+  return {
+    lang: lang === "en" ? "en" : "ru",
+    todayDate: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
+    yesterday: lastSession.length ? {
+      trades: lastSession.length,
+      wins: lastSession.filter((e) => e.outcome === "Win").length,
+      losses: lastSession.filter((e) => e.outcome === "Loss").length,
+      totalR: aiSafeNum(st_round2(lastSession.reduce((s, e) => s + (e.realizedRR || 0), 0))),
+      closeTypes: closeCounts
+    } : null,
+    recent: {
+      last7DaysTrades: last7.length,
+      winRate: last7.length ? Math.round(last7.filter((e) => e.outcome === "Win").length / last7.length * 100) : null,
+      awarenessScore: aiSafeNum(analytics?.awareness?.score?.value)
+    },
+    patterns: (analytics?.patterns || []).slice(0, 3).map(aiSummarizePattern).filter(Boolean),
+    adaptiveFactors: adaptiveFactors.map((f) => ({ type: f.type, severity: Math.round(f.severity * 100) / 100, evidence: f.evidence })),
+    recentQuestions: (calibrationHistory || []).slice(0, 5).flatMap((h) => h.questions || []).filter((q) => q.source === "adaptive").map((q) => ({ factor: q.factor, text: q.text })).slice(0, 12)
+  };
+}
+var AI_CALIBRATION_TASK = `You are generating a pre-session trading-psychology calibration for mind.exe. You will
+receive ADAPTIVE_CONTEXT: a compact JSON with yesterday's trading facts, a short recent window, detected
+patterns, a list of adaptiveFactors (each with type/severity/evidence, already computed by the app \u2014
+never invent new ones), and recentQuestions already asked in previous calibrations.
+
+Pick the 2 to 4 adaptiveFactors that are most relevant RIGHT NOW (prefer higher severity, but rotate away
+from factors that already dominate recentQuestions \u2014 don't ask essentially the same question again).
+For each chosen factor, write ONE short, concrete, specific question that references the actual evidence
+(a number, a time gap, a streak \u2014 whatever is in the context) rather than a generic mood question. Cover
+both directions: a loss-related factor implies possible revenge/fear, a win-streak factor implies possible
+euphoria/overconfidence, a no-trades factor implies possible FOMO \u2014 match the question's tone to the
+factor's actual direction, don't treat everything as a problem.
+
+Rules:
+- Never diagnose or label the person ("you have a problem with...", "you are addicted to..."). Use the
+  observation \u2192 question \u2192 awareness pattern instead.
+- Never phrase a question so there's an obviously "correct" answer to pick \u2014 it must honestly probe the
+  person's actual state, not lead them.
+- Do not calculate any score, tier, or awareness value yourself \u2014 only write the question text.
+- Each question must be a single sentence or two, in plain conversational language, in the language given
+  by ADAPTIVE_CONTEXT.lang ("ru" \u2192 Russian, "en" \u2192 English).
+- Return ONLY a JSON array, no markdown fences, no commentary: [{"question": "...", "factor": "...",
+  "category": "adaptive", "priority": 0.0}]. "factor" must be one of the adaptiveFactors' type values you
+  were given. "priority" is 0-1, how relevant this question is right now.`;
+async function aiGenerateCalibrationQuestions(context) {
+  if (!context.adaptiveFactors.length) return [];
+  const prompt = `${AI_CALIBRATION_TASK}
+
+ADAPTIVE_CONTEXT:
+${JSON.stringify(context)}`;
+  const raw = await aiCallGemini(prompt);
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+  if (!Array.isArray(parsed)) throw new Error("ai_calibration_bad_shape");
+  return parsed.filter((q) => q && typeof q.question === "string" && q.question.trim() && typeof q.factor === "string").slice(0, 4).map((q, i) => ({
+    id: `adaptive_${i}`,
+    text: q.question.trim(),
+    factor: q.factor,
+    category: "adaptive",
+    source: "adaptive",
+    priority: typeof q.priority === "number" ? q.priority : 0.5
+  }));
+}
+function caLocalFallbackQuestions(adaptiveFactors, lang) {
+  const bank = lang === "en" ? {
+    consecutive_losses: "Given the recent losing trades, how comfortable would you be pausing for a while after your next loss today, if it happens?",
+    euphoria_risk: "After the recent winning trades, how confident are you that you'll keep your usual risk size even if today starts well too?",
+    revenge_risk: "If a trade goes against you today, how easy will it be to wait before entering the next one, instead of re-entering quickly?",
+    increased_risk: "How committed are you to keeping your normal risk size today, regardless of how the first trade goes?",
+    overtrading_risk: "If today gives fewer setups than usual, how comfortable are you trading less than you did recently?",
+    early_exit_pattern: "If a position moves in your favor today, how easy will it be to wait for your planned exit instead of closing early?",
+    fomo_risk: "If today doesn't offer a clean setup for a while, how comfortable are you ending the session without a trade?",
+    repeated_lesson: "A similar lesson has come up more than once recently \u2014 how present is that lesson for you as you start today?",
+    decreased_discipline: "How closely do you expect to follow your written plan today, entry to exit?",
+    poor_sleep: "Given you weren't well rested recently, how ready do you feel to make clear-headed decisions today?",
+    reflection_note: "Thinking back to your notes from the last session, how much is that still on your mind as you start today?"
+  } : {
+    consecutive_losses: "\u0421 \u0443\u0447\u0451\u0442\u043E\u043C \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0445 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u0435\u0431\u0435 \u0431\u0443\u0434\u0435\u0442 \u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E \u0441\u0434\u0435\u043B\u0430\u0442\u044C \u043F\u0430\u0443\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0435\u0433\u043E \u0443\u0431\u044B\u0442\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F, \u0435\u0441\u043B\u0438 \u043E\u043D \u0441\u043B\u0443\u0447\u0438\u0442\u0441\u044F?",
+    euphoria_risk: "\u041F\u043E\u0441\u043B\u0435 \u043D\u0435\u0434\u0430\u0432\u043D\u0438\u0445 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u044B \u0443\u0432\u0435\u0440\u0435\u043D, \u0447\u0442\u043E \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0448\u044C \u043E\u0431\u044B\u0447\u043D\u044B\u0439 \u0440\u0430\u0437\u043C\u0435\u0440 \u0440\u0438\u0441\u043A\u0430, \u0434\u0430\u0436\u0435 \u0435\u0441\u043B\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0442\u043E\u0436\u0435 \u043D\u0430\u0447\u043D\u0451\u0442\u0441\u044F \u0443\u0434\u0430\u0447\u043D\u043E?",
+    revenge_risk: "\u0415\u0441\u043B\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0441\u0434\u0435\u043B\u043A\u0430 \u0443\u0439\u0434\u0451\u0442 \u043D\u0435 \u0432 \u0442\u0432\u043E\u044E \u0441\u0442\u043E\u0440\u043E\u043D\u0443 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043B\u0435\u0433\u043A\u043E \u0431\u0443\u0434\u0435\u0442 \u0432\u044B\u0434\u0435\u0440\u0436\u0430\u0442\u044C \u043F\u0430\u0443\u0437\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u043C \u0432\u0445\u043E\u0434\u043E\u043C, \u0432\u043C\u0435\u0441\u0442\u043E \u0442\u043E\u0433\u043E \u0447\u0442\u043E\u0431\u044B \u0431\u044B\u0441\u0442\u0440\u043E \u0432\u0435\u0440\u043D\u0443\u0442\u044C\u0441\u044F?",
+    increased_risk: "\u041D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u044B \u0433\u043E\u0442\u043E\u0432 \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u043E\u0431\u044B\u0447\u043D\u044B\u0439 \u0440\u0430\u0437\u043C\u0435\u0440 \u0440\u0438\u0441\u043A\u0430, \u043D\u0435\u0437\u0430\u0432\u0438\u0441\u0438\u043C\u043E \u043E\u0442 \u0442\u043E\u0433\u043E, \u043A\u0430\u043A \u043F\u0440\u043E\u0439\u0434\u0451\u0442 \u043F\u0435\u0440\u0432\u0430\u044F \u0441\u0434\u0435\u043B\u043A\u0430?",
+    overtrading_risk: "\u0415\u0441\u043B\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0441\u0435\u0442\u0430\u043F\u043E\u0432 \u0431\u0443\u0434\u0435\u0442 \u043C\u0435\u043D\u044C\u0448\u0435 \u043E\u0431\u044B\u0447\u043D\u043E\u0433\u043E \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E \u0442\u0435\u0431\u0435 \u0442\u043E\u0440\u0433\u043E\u0432\u0430\u0442\u044C \u043C\u0435\u043D\u044C\u0448\u0435, \u0447\u0435\u043C \u043E\u0431\u044B\u0447\u043D\u043E?",
+    early_exit_pattern: "\u0415\u0441\u043B\u0438 \u043F\u043E\u0437\u0438\u0446\u0438\u044F \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u043F\u043E\u0439\u0434\u0451\u0442 \u0432 \u043F\u043B\u044E\u0441 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043B\u0435\u0433\u043A\u043E \u0431\u0443\u0434\u0435\u0442 \u0434\u043E\u0436\u0434\u0430\u0442\u044C\u0441\u044F \u0437\u0430\u043F\u043B\u0430\u043D\u0438\u0440\u043E\u0432\u0430\u043D\u043D\u043E\u0433\u043E \u0432\u044B\u0445\u043E\u0434\u0430, \u0430 \u043D\u0435 \u0437\u0430\u043A\u0440\u044B\u0432\u0430\u0442\u044C \u0440\u0430\u043D\u044C\u0448\u0435?",
+    fomo_risk: "\u0415\u0441\u043B\u0438 \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0434\u043E\u043B\u0433\u043E \u043D\u0435 \u0431\u0443\u0434\u0435\u0442 \u0447\u0451\u0442\u043A\u043E\u0433\u043E \u0441\u0435\u0442\u0430\u043F\u0430 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E \u0437\u0430\u043A\u043E\u043D\u0447\u0438\u0442\u044C \u0441\u0435\u0441\u0441\u0438\u044E \u0431\u0435\u0437 \u0441\u0434\u0435\u043B\u043A\u0438?",
+    repeated_lesson: "\u041F\u043E\u0445\u043E\u0436\u0438\u0439 \u0443\u0440\u043E\u043A \u0432\u0441\u0442\u0440\u0435\u0447\u0430\u043B\u0441\u044F \u0443\u0436\u0435 \u043D\u0435 \u0432 \u043F\u0435\u0440\u0432\u044B\u0439 \u0440\u0430\u0437 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043E\u043D \u0441\u0435\u0439\u0447\u0430\u0441 \u0443 \u0442\u0435\u0431\u044F \u0432 \u0433\u043E\u043B\u043E\u0432\u0435, \u043A\u043E\u0433\u0434\u0430 \u0442\u044B \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0448\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F\u0448\u043D\u0438\u0439 \u0434\u0435\u043D\u044C?",
+    decreased_discipline: "\u041D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0442\u043E\u0447\u043D\u043E \u0442\u044B \u043F\u043B\u0430\u043D\u0438\u0440\u0443\u0435\u0448\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F \u0441\u043B\u0435\u0434\u043E\u0432\u0430\u0442\u044C \u0441\u0432\u043E\u0435\u043C\u0443 \u043F\u0438\u0441\u044C\u043C\u0435\u043D\u043D\u043E\u043C\u0443 \u043F\u043B\u0430\u043D\u0443 \u043E\u0442 \u0432\u0445\u043E\u0434\u0430 \u0434\u043E \u0432\u044B\u0445\u043E\u0434\u0430?",
+    poor_sleep: "\u0423\u0447\u0438\u0442\u044B\u0432\u0430\u044F, \u0447\u0442\u043E \u0442\u044B \u043D\u0435\u0434\u0430\u0432\u043D\u043E \u043F\u043B\u043E\u0445\u043E \u0432\u044B\u0441\u043F\u0430\u043B\u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0433\u043E\u0442\u043E\u0432 \u0442\u0432\u043E\u0439 \u0443\u043C \u043A \u044F\u0441\u043D\u044B\u043C \u0440\u0435\u0448\u0435\u043D\u0438\u044F\u043C \u0441\u0435\u0433\u043E\u0434\u043D\u044F?",
+    reflection_note: "\u0412\u0441\u043F\u043E\u043C\u043D\u0438 \u0441\u0432\u043E\u0438 \u0437\u0430\u043C\u0435\u0442\u043A\u0438 \u043F\u043E \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043E\u043D\u0438 \u0435\u0449\u0451 \u0441 \u0442\u043E\u0431\u043E\u0439, \u043A\u043E\u0433\u0434\u0430 \u0442\u044B \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0448\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F?"
+  };
+  return adaptiveFactors.filter((f) => bank[f.type]).sort((a, b) => b.severity - a.severity).slice(0, 4).map((f, i) => ({
+    id: `fallback_${i}`,
+    text: bank[f.type],
+    factor: f.type,
+    category: "adaptive",
+    source: "fallback",
+    priority: f.severity
+  }));
+}
+function assembleCalibrationQuestions(adaptiveQuestions, lang) {
+  const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
+  const scale = lang === "en" ? CALIBRATION_READINESS_SCALE_EN : CALIBRATION_READINESS_SCALE;
+  const baseline = questions.filter((q) => q.id === "sleep" || q.id === "emotion").map((q) => ({ ...q, category: "baseline", source: "baseline" }));
+  const adaptive = adaptiveQuestions.slice(0, 4).map((q) => ({ ...q, options: scale }));
+  return [...baseline, ...adaptive];
+}
+function calibHistoryKey(userId) {
+  return `mind-exe-calib-history:${userId}`;
+}
+async function caLoadCalibrationHistory(userId) {
+  if (!window.storage || !userId) return [];
+  try {
+    const res = await storageGet(calibHistoryKey(userId), false);
+    return res?.value ? JSON.parse(res.value) : [];
+  } catch (_) {
+    return [];
+  }
+}
+async function caSaveCalibrationHistory(userId, history) {
+  if (!window.storage || !userId) return;
+  try {
+    await storageSet(calibHistoryKey(userId), JSON.stringify(history.slice(0, 14)), false);
+  } catch (_) {
+  }
 }
 
 function Coach({ entries, analytics, accent, userId, lang, t }) {
@@ -7943,7 +8407,7 @@ function MindExe() {
             }
           }),
           tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics, t, lang }),
-          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t }),
+          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t, entries, analytics, userId }),
           tab === "simulator" && /* @__PURE__ */ jsx(Simulator, { accent, onWin: () => {
             awardCoins(5, lang === "en" ? "Win in the game" : "\u041F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
             showToast(lang === "en" ? "+5 MindCoin \u2014 win in the game" : "+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
