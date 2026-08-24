@@ -1,3 +1,18 @@
+// mind.exe V2.5 — two Coach-screen fixes. (1) Chat card layout: it had `minHeight` instead of a
+// fixed `height`, so the card grew to fit the whole conversation instead of scrolling internally
+// — pushed the input off-screen and blew past the bottom nav, exactly like the "стало резиновым"
+// screenshot showed. Reverted to a fixed height (52vh, capped at 560px) plus `min-h-0` on the
+// inner scroll div (a flexbox gotcha: a flex child needs min-h-0 for overflow-y-auto to actually
+// clip instead of growing its parent). (2) DecodeText felt like lag, not an effect: it drove a
+// requestAnimationFrame loop (60 ticks/sec) that rebuilt and re-rendered the *entire* string every
+// frame for up to 1100ms, and — because revealMs (90-260ms) was large relative to the tiny
+// per-char delay on long strings — most characters were mid-scramble simultaneously, i.e. the
+// whole paragraph flickering at once rather than a left-to-right sweep, which is real jank on a
+// phone with 10+ DecodeText instances live at once (title, labels, chips, messages...). Switched
+// the tick loop from rAF to a slower ~55ms setTimeout cadence (fewer re-renders) and cut default
+// maxTotalMs/revealMs roughly in half (900/260 -> 520/90), with the long-text call sites (analysis
+// paragraph, AI chat replies, quick-question chips) tuned down to match. Net effect: a quick,
+// calm settle instead of a sustained flicker.
 // mind.exe V2.4 — pilot: text on the Coach screen no longer just fades in, it "decodes" — the
 // full string renders immediately with every letter/digit scrambled to a random character from
 // its own script (cyrillic stays cyrillic, digits stay digits, so width never jumps), then
@@ -2993,10 +3008,10 @@ function decodeScrambleChar(ch) {
   return ch;
 }
 var decodeReduceMotion = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 900, revealMs = 260 }) {
+function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520, revealMs = 90 }) {
   const value = text == null ? "" : String(text);
   const [display, setDisplay] = useState(value);
-  const rafRef = useRef(null);
+  const timerRef = useRef(null);
   useEffect(() => {
     if (decodeReduceMotion && decodeReduceMotion.matches) {
       setDisplay(value);
@@ -3007,11 +3022,12 @@ function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 900
       return;
     }
     const len = value.length;
-    const charDelay = Math.max(2, Math.min(22, (maxTotalMs - revealMs) / len));
+    const charDelay = Math.max(2, Math.min(18, (maxTotalMs - revealMs) / len));
     const totalMs = (len - 1) * charDelay + revealMs;
+    const tickMs = 55;
     const start = performance.now();
-    const tick = (now) => {
-      const elapsed = now - start;
+    const tick = () => {
+      const elapsed = performance.now() - start;
       let out = "";
       for (let i = 0; i < len; i++) {
         const ch = value[i];
@@ -3023,14 +3039,14 @@ function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 900
       }
       setDisplay(out);
       if (elapsed < totalMs) {
-        rafRef.current = requestAnimationFrame(tick);
+        timerRef.current = setTimeout(tick, tickMs);
       } else {
         setDisplay(value);
       }
     };
-    rafRef.current = requestAnimationFrame(tick);
+    timerRef.current = setTimeout(tick, tickMs);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [value, maxTotalMs, revealMs]);
   return /* @__PURE__ */ jsx(as, { className, style, children: display });
@@ -5783,7 +5799,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
       /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeTitle }) }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-4 mb-4", children: [
-        /* @__PURE__ */ jsx("div", { className: "flex-1", children: analyzing ? /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 py-1", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 20, accent }) }) : analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { as: "span", text: analysis, maxTotalMs: 1100 }) }) : /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeDesc }) }) }),
+        /* @__PURE__ */ jsx("div", { className: "flex-1", children: analyzing ? /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 py-1", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 20, accent }) }) : analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { as: "span", text: analysis, maxTotalMs: 750 }) }) : /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeDesc }) }) }),
         /* @__PURE__ */ jsxs("div", { className: "relative shrink-0 w-16 h-16 rounded-full flex items-center justify-center", style: { background: `radial-gradient(circle at 35% 30%, ${accent}30, transparent 72%)`, border: `1px solid ${accent}35`, boxShadow: ring(accent) }, children: [
           /* @__PURE__ */ jsx("div", { className: "absolute inset-2 rounded-full", style: { border: `1px solid ${accent}25` } }),
           /* @__PURE__ */ jsx(Sparkles, { size: 20, style: { color: accent } })
@@ -5807,10 +5823,10 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
         /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeScopeInfo })
       ] })
     ] }),
-    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { minHeight: "48vh" }, children: [
+    /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { height: "52vh", maxHeight: 560 }, children: [
       /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-1", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatDesc }) }),
-      /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 overflow-y-auto mb-3 pr-1", children: [
+      /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 min-h-0 overflow-y-auto mb-3 pr-1", children: [
         chatMessages.length === 0 && /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: quickQuestions.map((q, i) => /* @__PURE__ */ jsxs(
           "button",
           {
@@ -5820,7 +5836,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
             style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink },
             children: [
               /* @__PURE__ */ jsx("span", { className: "shrink-0 w-6 h-6 rounded-lg flex items-center justify-center", style: { background: `${accent}14`, color: accent }, children: /* @__PURE__ */ jsx(q.icon, { size: 13 }) }),
-              /* @__PURE__ */ jsx(DecodeText, { text: q.text, maxTotalMs: 700 })
+              /* @__PURE__ */ jsx(DecodeText, { text: q.text, maxTotalMs: 420 })
             ]
           },
           i
@@ -5830,7 +5846,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
           {
             className: `mt-2.5 max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap ${m.role === "user" ? "ml-auto" : ""}`,
             style: m.role === "user" ? { background: `${accent}14`, color: BASE.ink } : { background: BASE.surface2, color: BASE.ink },
-            children: m.role === "assistant" ? /* @__PURE__ */ jsx(DecodeText, { text: m.content, maxTotalMs: 1100 }) : m.content
+            children: m.role === "assistant" ? /* @__PURE__ */ jsx(DecodeText, { text: m.content, maxTotalMs: 750 }) : m.content
           },
           i
         ))
