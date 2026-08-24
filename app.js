@@ -1,3 +1,16 @@
+// mind.exe V2.8 — EmotionGrid (the entry-mood pad in New Entry / Edit Trade) reworked. It used
+// to classify the tapped point into just 4 quadrant states via a >=50/<50 split on each axis.
+// Replaced with a 3x3 banding (fear/neutral/confidence × on-edge/balanced/calm) giving 9 distinct
+// written states, so a point near the center now reads as "even, neutral" instead of being forced
+// into whichever quadrant it's barely closer to. Visual pass: added two faint tertile grid lines
+// per axis (in addition to the bold center cross) so the 9 zones are visible, not just implied;
+// the placed dot and its state text now use a continuous LOSS→WARN→WIN color blend
+// (emotionPositionColor/emotionLerpHex, new) based on actual position instead of 3 fixed colors;
+// dot gets a two-layer glow (soft ring + blur) instead of a flat halo; card background/shadow
+// deepened slightly (inset shadow, warmer center glow) for more depth. Also: all of EmotionGrid's
+// text (axis labels, hint, all 9 states) was hardcoded Russian with no English path even though
+// the rest of the app is bilingual — moved into t.newEntry.emotionGrid (RU/EN) and the component
+// now takes `t` like its siblings.
 // mind.exe V2.7 — renamed the "Coach" tab to "Analysis" everywhere it's user-visible: bottom nav
 // label, screen title, chat section title ("Спросить ИИ" / "Ask AI"), and the online-status line.
 // Internal identifiers (Coach component, t.coach.* keys, aiCoach-adjacent functions) intentionally
@@ -327,7 +340,25 @@ var STRINGS = {
       lessonQuestion: "\u0427\u0442\u043E \u0431\u044B \u0442\u044B \u0441\u043A\u0430\u0437\u0430\u043B \u0441\u0435\u0431\u0435 \u0432 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437?",
       lessonPlaceholder: "\u041E\u0434\u043D\u0430 \u0444\u0440\u0430\u0437\u0430, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u0442\u044B \u043F\u0440\u0430\u0432\u0434\u0430 \u0437\u0430\u043F\u043E\u043C\u043D\u0438\u0448\u044C.",
       emotionQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0432 \u043C\u043E\u043C\u0435\u043D\u0442 \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0434\u0435\u043B\u043A\u0443?",
-      save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C"
+      save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C",
+      emotionGrid: {
+        axisTop: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
+        axisBottom: "\u0421\u043F\u043E\u043A\u043E\u0435\u043D",
+        axisLeft: "\u0421\u0442\u0440\u0430\u0445",
+        axisRight: "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C",
+        hint: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0433\u0434\u0435 \u0431\u044B\u043B \u0442\u044B, \u0430 \u043D\u0435 \u0433\u0434\u0435 \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u043B \u0431\u044B\u0442\u044C",
+        states: [
+          "\u0421\u0442\u0440\u0430\u0448\u043D\u043E \u0438 \u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
+          "\u0422\u0440\u0435\u0432\u043E\u0436\u043D\u043E, \u0431\u0435\u0437 \u0447\u0451\u0442\u043A\u043E\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438",
+          "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E, \u043D\u043E \u043D\u0430 \u0432\u0437\u0432\u043E\u0434\u0435",
+          "\u0415\u0441\u0442\u044C \u0441\u043E\u043C\u043D\u0435\u043D\u0438\u044F, \u043D\u043E \u0434\u0435\u0440\u0436\u0438\u0448\u044C\u0441\u044F",
+          "\u0420\u043E\u0432\u043D\u043E\u0435, \u043D\u0435\u0439\u0442\u0440\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435",
+          "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E \u0438 \u0441\u043E\u0431\u0440\u0430\u043D\u043D\u043E",
+          "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E, \u043D\u043E \u043D\u0435\u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E",
+          "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E \u0438 \u0440\u043E\u0432\u043D\u043E",
+          "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E \u0438 \u0441\u043F\u043E\u043A\u043E\u0439\u043D\u043E"
+        ]
+      }
     },
     log: {
       title: "\u0416\u0443\u0440\u043D\u0430\u043B \u0441\u0434\u0435\u043B\u043E\u043A",
@@ -558,7 +589,25 @@ var STRINGS = {
       lessonQuestion: "What would you tell yourself next time?",
       lessonPlaceholder: "One line you'll actually remember.",
       emotionQuestion: "What did you feel the moment you entered?",
-      save: "Save entry"
+      save: "Save entry",
+      emotionGrid: {
+        axisTop: "On edge",
+        axisBottom: "Calm",
+        axisLeft: "Fear",
+        axisRight: "Confidence",
+        hint: "Mark where you actually were, not where you should've been",
+        states: [
+          "Scared and on edge",
+          "Uneasy, no clear footing",
+          "Confident, but wound up",
+          "Some doubt, but holding steady",
+          "Even, neutral state",
+          "Confident and composed",
+          "Calm, but unsure",
+          "Calm and steady",
+          "Confident and calm"
+        ]
+      }
     },
     log: {
       title: "Trade journal",
@@ -3689,10 +3738,22 @@ function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
     }
   ) });
 }
-function EmotionGrid({ x, y, onChange, accent }) {
+function emotionLerpHex(c1, c2, t) {
+  const a = parseInt(c1.slice(1), 16), b = parseInt(c2.slice(1), 16);
+  const ar = a >> 16 & 255, ag = a >> 8 & 255, ab = a & 255;
+  const br = b >> 16 & 255, bg = b >> 8 & 255, bb = b & 255;
+  const r = Math.round(ar + (br - ar) * t), g = Math.round(ag + (bg - ag) * t), bl = Math.round(ab + (bb - ab) * t);
+  return `#${((1 << 24) + (r << 16) + (g << 8) + bl).toString(16).slice(1)}`;
+}
+function emotionPositionColor(x, y) {
+  const positivity = Math.max(0, Math.min(100, (x + (100 - y)) / 2)) / 100;
+  return positivity < 0.5 ? emotionLerpHex(LOSS, WARN, positivity * 2) : emotionLerpHex(WARN, WIN, (positivity - 0.5) * 2);
+}
+function EmotionGrid({ x, y, onChange, accent, t }) {
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [justPlaced, setJustPlaced] = useState(false);
+  const eg = t.newEntry.emotionGrid;
   const place = (e) => {
     const rect = ref.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -3721,18 +3782,16 @@ function EmotionGrid({ x, y, onChange, accent }) {
   };
   const has = x !== null && y !== null;
   const label = "text-[10px] uppercase tracking-wide";
-  const quadrantText = () => {
-    if (!has) return null;
-    if (x >= 50 && y >= 50) return "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E \u0438 \u0441\u043F\u043E\u043A\u043E\u0439\u043D\u043E";
-    if (x >= 50 && y < 50) return "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E, \u043D\u043E \u043D\u0430 \u0432\u0437\u0432\u043E\u0434\u0435";
-    if (x < 50 && y >= 50) return "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E, \u043D\u043E \u043D\u0435\u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E";
-    return "\u0421\u0442\u0440\u0430\u0448\u043D\u043E \u0438 \u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445";
-  };
-  const quadrantColor = has ? x >= 50 && y >= 50 ? WIN : x < 50 && y < 50 ? LOSS : BASE.inkDim : BASE.inkFaint;
+  // 3x3 banding (fear/neutral/confidence x nervous/balanced/calm) instead of the old 4-quadrant
+  // split, so the written-out state actually reflects a middling position instead of forcing it
+  // into one of two extremes either axis is closest to.
+  const band = (v) => v < 34 ? 0 : v < 67 ? 1 : 2;
+  const stateText = has ? eg.states[band(y) * 3 + band(x)] : null;
+  const stateColor = has ? emotionPositionColor(x, y) : BASE.inkFaint;
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsx("div", { className: "text-center mb-1.5", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445" }) }),
+    /* @__PURE__ */ jsx("div", { className: "text-center mb-1.5", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisTop }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2.5", children: [
-      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl", transform: "rotate(180deg)" }, children: "\u0421\u0442\u0440\u0430\u0445" }),
+      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl", transform: "rotate(180deg)" }, children: eg.axisLeft }),
       /* @__PURE__ */ jsxs(
         "div",
         {
@@ -3742,30 +3801,36 @@ function EmotionGrid({ x, y, onChange, accent }) {
           onPointerUp: onUp,
           onPointerLeave: onUp,
           className: "relative flex-1 aspect-square rounded-2xl cursor-crosshair touch-none select-none overflow-hidden",
-          style: { background: `radial-gradient(circle at 10% 10%, ${LOSS}0D 0%, transparent 45%), radial-gradient(circle at 90% 90%, ${WIN}0D 0%, transparent 45%), ${BASE.surface2}`, border: `1px solid ${BASE.line}` },
+          style: {
+            background: `radial-gradient(circle at 10% 10%, ${LOSS}1A 0%, transparent 50%), radial-gradient(circle at 90% 90%, ${WIN}1A 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${WARN}0D 0%, transparent 55%), ${BASE.surface2}`,
+            border: `1px solid ${BASE.line}`,
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), inset 0 0 24px rgba(0,0,0,0.25)"
+          },
           children: [
+            [33.333, 66.667].map((p) => /* @__PURE__ */ jsx("div", { className: "absolute top-0 bottom-0 w-px", style: { left: `${p}%`, background: BASE.line, opacity: 0.4 } }, `v${p}`)),
+            [33.333, 66.667].map((p) => /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0 h-px", style: { top: `${p}%`, background: BASE.line, opacity: 0.4 } }, `h${p}`)),
             /* @__PURE__ */ jsx("div", { className: "absolute left-1/2 top-0 bottom-0 w-px", style: { background: BASE.line } }),
             /* @__PURE__ */ jsx("div", { className: "absolute top-1/2 left-0 right-0 h-px", style: { background: BASE.line } }),
             has && /* @__PURE__ */ jsxs(Fragment, { children: [
               /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0", style: { top: `${y}%`, borderTop: `1px dashed ${accent}45`, transition: dragging ? "none" : "top 0.15s ease-out" } }),
               /* @__PURE__ */ jsx("div", { className: "absolute top-0 bottom-0", style: { left: `${x}%`, borderLeft: `1px dashed ${accent}45`, transition: dragging ? "none" : "left 0.15s ease-out" } }),
-              justPlaced && /* @__PURE__ */ jsx("div", { className: "absolute rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none emotion-ripple", style: { left: `${x}%`, top: `${y}%`, border: `1.5px solid ${accent}` } }),
+              justPlaced && /* @__PURE__ */ jsx("div", { className: "absolute rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none emotion-ripple", style: { left: `${x}%`, top: `${y}%`, border: `1.5px solid ${stateColor}` } }),
               /* @__PURE__ */ jsx(
                 "div",
                 {
                   className: "absolute w-3 h-3 rounded-full -translate-x-1/2 -translate-y-1/2",
-                  style: { left: `${x}%`, top: `${y}%`, background: accent, boxShadow: `0 0 0 4px ${accent}25`, transition: dragging ? "none" : "left 0.15s ease-out, top 0.15s ease-out" }
+                  style: { left: `${x}%`, top: `${y}%`, background: stateColor, boxShadow: `0 0 0 5px ${stateColor}28, 0 0 14px ${stateColor}55`, transition: dragging ? "none" : "left 0.15s ease-out, top 0.15s ease-out, background 0.15s ease-out" }
                 }
               )
             ] }),
-            !has && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center text-center px-6 text-xs", style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0433\u0434\u0435 \u0431\u044B\u043B \u0442\u044B, \u0430 \u043D\u0435 \u0433\u0434\u0435 \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u043B \u0431\u044B\u0442\u044C" })
+            !has && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center text-center px-6 text-xs", style: { color: BASE.inkFaint }, children: eg.hint })
           ]
         }
       ),
-      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl" }, children: "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C" })
+      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl" }, children: eg.axisRight })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "text-center mt-1.5 mb-1", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: "\u0421\u043F\u043E\u043A\u043E\u0435\u043D" }) }),
-    has && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-1", style: { color: quadrantColor }, children: quadrantText() })
+    /* @__PURE__ */ jsx("div", { className: "text-center mt-1.5 mb-1", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisBottom }) }),
+    has && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-1", style: { color: stateColor }, children: stateText })
   ] });
 }
 function PickerField({ value, onChange, options, placeholder, accent, allowCustom, flat, mono, onCustomAdd }) {
@@ -4030,7 +4095,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     ] }),
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
-    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent })
+    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent, t })
     ] })
     ] }),
     /* @__PURE__ */ jsx(
@@ -4407,7 +4472,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
-    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent }),
+    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent, t }),
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: "EXIT" }),
     hasPlanNow && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
       /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
