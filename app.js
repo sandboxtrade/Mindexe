@@ -1,3 +1,11 @@
+// mind.exe V3.2 — two fixes on the sticky mobile header from V3.0. (1) The hard 1px bottom
+// border was clearly visible as a sharp cut line under the logo bar — removed it, replaced with
+// a soft ~20px gradient fade (header's own translucent color fading to transparent) that extends
+// just past the header's bottom edge, so it blends into the scrolling content instead of a crisp
+// edge. (2) The small accent gradient divider under the logo used to live outside the sticky
+// header, in normal document flow — so it scrolled away on the very first pixel of scroll while
+// the header itself stayed pinned, an obvious mismatch. Moved it inside the sticky header (right
+// under the logo row) so it now scrolls/sticks as one unit with the rest of the bar.
 // mind.exe V3.1 — fixed the "странный блюр" on long AI replies: DecodeText's per-word cascade
 // computed its stagger step as maxTotalMs/wordCount, and for a long paragraph (a full AI answer
 // can be 150+ words) that step collapsed toward its floor — meaning dozens of words ended up
@@ -8397,27 +8405,29 @@ function MindExe() {
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
       /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-32 md:pb-16 relative`, children: [
-        /* @__PURE__ */ jsx(
+        /* @__PURE__ */ jsxs(
           "div",
           {
-            className: "sticky top-0 z-30 -mx-5 px-5 pt-8 pb-3 md:hidden",
+            className: "sticky top-0 z-30 -mx-5 px-5 pt-8 pb-8 relative md:hidden",
             style: {
               background: accentPreset.cosmic ? "rgba(4,4,5,0.88)" : `${BASE.bg}E0`,
               backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              borderBottom: `1px solid ${BASE.line}60`
+              WebkitBackdropFilter: "blur(10px)"
             },
-            children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
-              /* @__PURE__ */ jsx("div", {}),
-              /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
-                /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
-                /* @__PURE__ */ jsx(Wordmark, { accent })
+            children: [
+              /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
+                /* @__PURE__ */ jsx("div", {}),
+                /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
+                  /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
+                  /* @__PURE__ */ jsx(Wordmark, { accent })
+                ] }),
+                /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
               ] }),
-              /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
-            ] })
+              /* @__PURE__ */ jsx("div", { className: "mx-auto mt-3", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
+              /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0 bottom-0 h-5 pointer-events-none translate-y-full", style: { background: `linear-gradient(to bottom, ${accentPreset.cosmic ? "rgba(4,4,5,0.35)" : `${BASE.bg}59`}, transparent)` } })
+            ]
           }
         ),
-        /* @__PURE__ */ jsx("div", { className: "mx-auto mb-8", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
           tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }),
           tab === "new" && /* @__PURE__ */ jsx(
