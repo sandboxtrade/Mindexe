@@ -1,3 +1,27 @@
+// mind.exe V3.0 — two changes. (1) DecodeText replaced entirely: the per-character random-glyph
+// "decrypt" animation is gone (it was still reading as jittery/artificial even after V2.5's
+// tuning). New version is a calm word-by-word blur+fade cascade — each word starts blurred,
+// dimmed and offset by a few px, and settles into place left-to-right via a single CSS animation
+// per word (browser-driven via animation-delay, no JS timer loop, no per-frame re-renders at
+// all). Same external API (text/as/className/style/maxTotalMs) so every call site across Coach/
+// Analysis needed zero changes. New `softReveal` keyframe added to the global stylesheet.
+// (2) The mobile top bar (logo + wordmark + wallet badge) is now `sticky top-0` with its own
+// translucent/blurred background (matching the existing bottom-nav glass treatment) and a hairline
+// bottom border, so it stays pinned while the page scrolls instead of scrolling away with the
+// content. Moved that bar's top padding off the outer content wrapper and onto the sticky bar
+// itself so spacing looks identical whether it's stuck or not. Desktop is unaffected (that header
+// row is md:hidden; desktop already has its own fixed sidebar).
+// mind.exe V2.9 — fixed the black-screen crash on Calibration. Root cause: the same-day cache
+// record saved to Firestore (calibHistoryKey) stored each question's id/text/factor/category/
+// source but NOT its `options` array. On a same-day reopen the cached (option-less) questions
+// were loaded straight into state, and the quiz screen's `q.options.map(...)` threw on an
+// undefined array — with no error boundary that unmounts the whole tree, leaving just the plain
+// black body background from index.html. Fixed at the source (the saved history record now
+// includes `options`) and defensively: prepareAndStart now validates every cached question has a
+// non-empty options array before trusting the cache (so an already-corrupted record saved by V2.6
+// self-heals into a fresh generation instead of crashing again), and the quiz-stage render bails
+// to a small error state + restart button if `q` or `q.options` is ever missing for any other
+// reason, instead of letting the crash propagate.
 // mind.exe V2.8 — EmotionGrid (the entry-mood pad in New Entry / Edit Trade) reworked. It used
 // to classify the tapped point into just 4 quadrant states via a >=50/<50 split on each axis.
 // Replaced with a 3x3 banding (fear/neutral/confidence × on-edge/balanced/calm) giving 9 distinct
@@ -3139,69 +3163,26 @@ function LogoSpinner({ size = 22, color, accent }) {
   return /* @__PURE__ */ jsx("span", { style: { display: "inline-flex", animation: "logoPulseFade 1.1s ease-in-out infinite" }, children: /* @__PURE__ */ jsx(LogoMark, { size, color, accent }) });
 }
 // ---- DecodeText.js -----------------------------------------------------------
-// Reveal effect for text/numbers: instead of a plain fade-in, the full string is shown
-// immediately but every non-space character is randomly scrambled (matching its own
-// script/case/digit-ness so cyrillic stays cyrillic, digits stay digits — no layout shift,
-// no width jump) and characters "lock in" to their real value left-to-right over time, like
-// text decrypting on a terminal. Total animation length is capped via maxTotalMs regardless
-// of string length, so a 6-word label and a 300-character AI paragraph both settle in roughly
-// the same perceived time. Respects prefers-reduced-motion by skipping straight to final text.
-var DECODE_POOL_CYR_UP = "\u0410\u0411\u0412\u0413\u0414\u0415\u0416\u0417\u0418\u0419\u041A\u041B\u041C\u041D\u041E\u041F\u0420\u0421\u0422\u0423\u0424\u0425\u0426\u0427\u0428\u0429\u042A\u042B\u042C\u042D\u042E\u042F";
-var DECODE_POOL_CYR_LO = "\u0430\u0431\u0432\u0433\u0434\u0435\u0436\u0437\u0438\u0439\u043A\u043B\u043C\u043D\u043E\u043F\u0440\u0441\u0442\u0443\u0444\u0445\u0446\u0447\u0448\u0449\u044A\u044B\u044C\u044D\u044E\u044F";
-var DECODE_POOL_LAT_UP = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-var DECODE_POOL_LAT_LO = "abcdefghijklmnopqrstuvwxyz";
-var DECODE_POOL_DIGIT = "0123456789";
-function decodeScrambleChar(ch) {
-  if (ch >= "0" && ch <= "9") return DECODE_POOL_DIGIT[Math.floor(Math.random() * 10)];
-  if (ch >= "\u0410" && ch <= "\u042F") return DECODE_POOL_CYR_UP[Math.floor(Math.random() * 32)];
-  if (ch >= "\u0430" && ch <= "\u044F") return DECODE_POOL_CYR_LO[Math.floor(Math.random() * 32)];
-  if (ch >= "A" && ch <= "Z") return DECODE_POOL_LAT_UP[Math.floor(Math.random() * 26)];
-  if (ch >= "a" && ch <= "z") return DECODE_POOL_LAT_LO[Math.floor(Math.random() * 26)];
-  return ch;
-}
+// Reveal effect for text/numbers. Was a per-character random-glyph "decrypt" animation; replaced
+// with a calmer word-by-word blur+fade cascade — each word starts slightly blurred, dimmed and
+// offset, and settles into place left-to-right. No random noise, no per-frame re-renders (it's a
+// single CSS animation per word via animation-delay, so the browser drives it, not JS timers).
+// Total cascade length is capped via maxTotalMs regardless of word count, so a short label and a
+// long AI paragraph both settle in roughly the same perceived time. Respects
+// prefers-reduced-motion by skipping straight to the final text with no animation.
 var decodeReduceMotion = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
-function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520, revealMs = 90 }) {
+function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520 }) {
   const value = text == null ? "" : String(text);
-  const [display, setDisplay] = useState(value);
-  const timerRef = useRef(null);
-  useEffect(() => {
-    if (decodeReduceMotion && decodeReduceMotion.matches) {
-      setDisplay(value);
-      return;
-    }
-    if (!value) {
-      setDisplay("");
-      return;
-    }
-    const len = value.length;
-    const charDelay = Math.max(2, Math.min(18, (maxTotalMs - revealMs) / len));
-    const totalMs = (len - 1) * charDelay + revealMs;
-    const tickMs = 55;
-    const start = performance.now();
-    const tick = () => {
-      const elapsed = performance.now() - start;
-      let out = "";
-      for (let i = 0; i < len; i++) {
-        const ch = value[i];
-        if (ch === " " || ch === "\n" || ch === "\t") {
-          out += ch;
-          continue;
-        }
-        out += elapsed >= i * charDelay + revealMs ? ch : decodeScrambleChar(ch);
-      }
-      setDisplay(out);
-      if (elapsed < totalMs) {
-        timerRef.current = setTimeout(tick, tickMs);
-      } else {
-        setDisplay(value);
-      }
-    };
-    timerRef.current = setTimeout(tick, tickMs);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [value, maxTotalMs, revealMs]);
-  return /* @__PURE__ */ jsx(as, { className, style, children: display });
+  const reduced = decodeReduceMotion && decodeReduceMotion.matches;
+  const tokens = useMemo(() => value.split(/(\s+)/), [value]);
+  const wordCount = useMemo(() => tokens.filter((w) => w.trim()).length || 1, [tokens]);
+  const stepMs = Math.max(10, Math.min(38, maxTotalMs / wordCount));
+  let wordIndex = -1;
+  return /* @__PURE__ */ jsx(as, { className, style, children: reduced ? value : tokens.map((w, i) => {
+    if (!w.trim()) return w;
+    wordIndex++;
+    return /* @__PURE__ */ jsx("span", { style: { display: "inline-block", animation: `softReveal 0.5s cubic-bezier(0.22,0.61,0.36,1) ${wordIndex * stepMs}ms both` }, children: w }, i);
+  }) });
 }
 function Wordmark({ accent, size = 15, animated = false, wide = false }) {
   return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: BASE.ink, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
@@ -5147,7 +5128,11 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
       historyRef.current = history;
       const todayKey = (/* @__PURE__ */ new Date()).toDateString();
       const cached = history[0] && new Date(history[0].date).toDateString() === todayKey ? history[0] : null;
-      if (cached && Array.isArray(cached.questions) && cached.questions.length) {
+      // Guard against a same-day cache record saved by an older version of this code path that
+      // didn't persist `options` (would otherwise crash the quiz render on `q.options.map`).
+      // Any such stale/malformed record is treated as a cache miss and a fresh set is generated.
+      const cachedValid = cached && Array.isArray(cached.questions) && cached.questions.length && cached.questions.every((qq) => Array.isArray(qq.options) && qq.options.length);
+      if (cachedValid) {
         setQuestions(cached.questions);
         setAdaptiveActive(cached.questions.some((qq) => qq.category === "adaptive"));
         setStage("quiz");
@@ -5186,7 +5171,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
         onComplete({ pct: r.pct, tierColor: r.tier.color, date: (/* @__PURE__ */ new Date()).toISOString(), riskFactors: r.riskFactors });
         const record = {
           date: (/* @__PURE__ */ new Date()).toISOString(),
-          questions: questions.map((qq) => ({ id: qq.id, text: qq.text, factor: qq.factor || null, category: qq.category, source: qq.source })),
+          questions: questions.map((qq) => ({ id: qq.id, text: qq.text, factor: qq.factor || null, category: qq.category, source: qq.source, options: qq.options })),
           answers: next,
           pct: r.pct,
           riskFactors: r.riskFactors
@@ -5226,6 +5211,12 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
     ] });
   }
   if (stage === "quiz") {
+    if (!q || !Array.isArray(q.options) || !q.options.length) {
+      return /* @__PURE__ */ jsxs("div", { className: "text-center py-16", children: [
+        /* @__PURE__ */ jsx("p", { className: "text-sm mb-4", style: { color: BASE.inkFaint }, children: t.coach.error }),
+        /* @__PURE__ */ jsx("button", { onClick: restart, className: "text-sm", style: { color: accent }, children: t.calibration.restart })
+      ] });
+    }
     return /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2 text-xs", style: { color: BASE.inkFaint }, children: [
         /* @__PURE__ */ jsx("span", { children: t.calibration.questionOf(qIndex + 1, questions.length) }),
@@ -8247,6 +8238,7 @@ function MindExe() {
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes logoPulseFade { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.04); } }
+        @keyframes softReveal { from { opacity: 0; filter: blur(5px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
         @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
         @keyframes ripple { from { width: 14px; height: 14px; opacity: 0.6; } to { width: 32px; height: 32px; opacity: 0; } }
         @keyframes drawMark { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
@@ -8385,15 +8377,27 @@ function MindExe() {
       /* @__PURE__ */ jsx(Toast, { text: toast }),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
-      /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-8 md:pt-10 pb-32 md:pb-16 relative`, children: [
-        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center mb-3 md:hidden", children: [
-          /* @__PURE__ */ jsx("div", {}),
-          /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
-            /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
-            /* @__PURE__ */ jsx(Wordmark, { accent })
-          ] }),
-          /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
-        ] }),
+      /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-32 md:pb-16 relative`, children: [
+        /* @__PURE__ */ jsx(
+          "div",
+          {
+            className: "sticky top-0 z-30 -mx-5 px-5 pt-8 pb-3 md:hidden",
+            style: {
+              background: accentPreset.cosmic ? "rgba(4,4,5,0.88)" : `${BASE.bg}E0`,
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              borderBottom: `1px solid ${BASE.line}60`
+            },
+            children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
+              /* @__PURE__ */ jsx("div", {}),
+              /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
+                /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
+                /* @__PURE__ */ jsx(Wordmark, { accent })
+              ] }),
+              /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
+            ] })
+          }
+        ),
         /* @__PURE__ */ jsx("div", { className: "mx-auto mb-8", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
           tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }),
