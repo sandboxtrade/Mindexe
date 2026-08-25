@@ -1,3 +1,14 @@
+// mind.exe V4.0 — two fixes. (1) PickerField (instrument/setup-type dropdowns in NewEntry/
+// EditTrade) had no click-outside handling, so opening a second field left the first one open
+// underneath it — both stayed open at once, and tapping anywhere else on the screen did nothing.
+// Added a document mousedown/touchstart listener while a picker is open that closes it (and
+// clears the search query) on any click outside its own container; picking a value already closed
+// it as before. (2) Fonts across the whole app have referenced 'Space Grotesk' and 'JetBrains
+// Mono' by name since the beginning, but neither was ever actually loaded — index.html had no
+// font <link> at all, so every label/number silently fell back to the system sans-serif this
+// whole time. Added the Google Fonts stylesheet for both (weights 400–700) plus a body-level
+// font-family/weight default (500, up from the browser's 400) so untagged text reads a bit
+// heavier too. No change needed in app.js itself for this part — see index.html.
 // mind.exe V3.9 — fixed voice input losing text after pressing stop: some Safari builds call
 // stop()/abort() without ever emitting a final (isFinal:true) result for the phrase in progress,
 // so the old code — which only committed on isFinal — silently dropped whatever was said right
@@ -3911,8 +3922,24 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
+  const containerRef = useRef(null);
   useEffect(() => {
     if (open && inputRef.current) inputRef.current.focus();
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const closeIfOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", closeIfOutside);
+    document.addEventListener("touchstart", closeIfOutside);
+    return () => {
+      document.removeEventListener("mousedown", closeIfOutside);
+      document.removeEventListener("touchstart", closeIfOutside);
+    };
   }, [open]);
   const flatOptions = flat ? options : options.flatMap((g) => g.items);
   const filtered = query.trim() ? flatOptions.filter((o) => o.toLowerCase().includes(query.trim().toLowerCase())) : null;
@@ -3927,7 +3954,7 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     onCustomAdd && onCustomAdd(val);
   };
   const rowStyle = (o) => ({ color: BASE.ink, fontFamily: mono ? "'JetBrains Mono', monospace" : "inherit", background: value === o ? `${accent}12` : "transparent" });
-  return /* @__PURE__ */ jsx("div", { className: "relative", children: !open ? /* @__PURE__ */ jsxs("button", { type: "button", onClick: () => setOpen(true), className: "w-full flex items-center justify-between border-b py-2.5 text-sm text-left", style: { borderColor: BASE.line }, children: [
+  return /* @__PURE__ */ jsx("div", { ref: containerRef, className: "relative", children: !open ? /* @__PURE__ */ jsxs("button", { type: "button", onClick: () => setOpen(true), className: "w-full flex items-center justify-between border-b py-2.5 text-sm text-left", style: { borderColor: BASE.line }, children: [
     /* @__PURE__ */ jsx("span", { style: { color: value ? BASE.ink : BASE.inkDim, fontFamily: value && mono ? "'JetBrains Mono', monospace" : "inherit" }, children: value || placeholder }),
     /* @__PURE__ */ jsx(ChevronDown, { size: 14, style: { color: BASE.inkFaint } })
   ] }) : /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${accent}45`, background: BASE.surface2, boxShadow: ring(accent) }, children: [
