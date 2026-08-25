@@ -1,3 +1,11 @@
+// mind.exe V3.7 — restyled the bottom nav to match the reference: dropped the floating-circle
+// look from V3.6 (it wasn't docked to the row and used the wrong colors). Every one of the 7 tabs
+// now gets its own static rounded-square icon badge (subtle border, accent tint when active) with
+// the label below it, instead of a shared sliding highlight box — closer to the reference's flat
+// tile grid. "Запись" (primary) keeps its own branch: a taller near-white badge with a black icon
+// and a soft white glow, pulled up slightly (-mt-3) so it visibly sits a notch above its
+// neighbors without floating free of the bar; label goes bold white instead of accent-colored.
+// Removed the now-unused activeIndex slider calc. Desktop sidebar untouched (not part of the ask).
 // mind.exe V3.6 — bottom nav restructure. "new" (formerly mislabeled "Дневник") is now the
 // centered, elevated primary button — a bigger accent-filled circle popping above the bar (own
 // branch in the nav.map, marked via nav[].primary, sliding highlight box skipped for that slot
@@ -8510,7 +8518,6 @@ function MindExe() {
     { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
-  const activeIndex = Math.max(0, nav.findIndex((n) => n.id === tab));
   const wideTab = ["home", "log", "patterns"].includes(tab);
   const formTab = ["new", "edit", "close"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
@@ -8800,28 +8807,21 @@ function MindExe() {
           )
         ] }, tab)
       ] }) }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[22px] overflow-hidden", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 m-1", children: [
-        tab !== "new" && /* @__PURE__ */ jsx(
-          "div",
-          {
-            className: "absolute top-0 bottom-0 rounded-2xl transition-all duration-300 ease-out",
-            style: { left: `calc(${activeIndex} * (100% / 7) + 3px)`, width: `calc(100% / 7 - 6px)`, background: `${accent}12`, border: `1px solid ${accent}35` }
-          }
-        ),
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[22px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-1 m-1", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
-            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center justify-center gap-1 -mt-5 min-w-0 transition-transform duration-150 active:scale-90", children: [
-              /* @__PURE__ */ jsx("div", { className: "w-12 h-12 rounded-full flex items-center justify-center", style: { background: accent, boxShadow: `0 4px 14px ${accent}55, 0 0 0 4px rgba(19,19,21,0.94)` }, children: /* @__PURE__ */ jsx(n.icon, { size: 20, strokeWidth: 2.2, style: { color: "#06120F" } }) }),
-              /* @__PURE__ */ jsx("span", { className: "text-[8px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
+            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1.5 -mt-3 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
+              /* @__PURE__ */ jsx("div", { className: "w-12 h-12 rounded-2xl flex items-center justify-center", style: { background: "#F2F2F5", boxShadow: "0 0 22px 4px rgba(255,255,255,0.3), 0 6px 14px rgba(0,0,0,0.45)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 20, strokeWidth: 2.3, style: { color: "#0A0A0B" } }) }),
+              /* @__PURE__ */ jsx("span", { className: "text-[10px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
             ] }, n.id);
           }
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center justify-center gap-1 py-2.5 rounded-2xl min-w-0 transition-transform duration-150 active:scale-90", children: [
-            /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease" } }),
-            /* @__PURE__ */ jsx("span", { className: "text-[8px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1.5 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
+            /* @__PURE__ */ jsx("div", { className: "w-11 h-11 rounded-2xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}14` : "rgba(255,255,255,0.045)", border: `1px solid ${active ? accent + "40" : "rgba(255,255,255,0.07)"}` }, children: /* @__PURE__ */ jsx(n.icon, { size: 17, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint } }) }),
+            /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
           ] }, n.id);
         })
-      ] }) }) })
+      }) }) })
     ] })
   ] });
 }
