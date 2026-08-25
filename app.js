@@ -1,3 +1,12 @@
+// mind.exe V4.5 — splash animations weren't visible: Ken Burns was a 26s cycle and the shimmer a
+// 7s cycle, but the splash only stays on screen for ~7.2s total (see the setTimeout in MindExe), so
+// almost nothing had time to play. Sped Ken Burns up to 9s (scale 1.0->1.1, was 1.06) and the
+// shimmer sweep to 3.2s with a wider, brighter band, so both are now clearly visible within the
+// splash's actual lifetime. Also added a new .splash2-bh-glow layer: a warm radial highlight pinned
+// to the measured event-horizon center (47%/41%) that pulses size+opacity on its own faster 2.6s
+// cycle (screen blend mode), giving the hole a distinct "breathing" glow independent of the shimmer
+// sweep; it shares the same Ken Burns transform as the photo so it stays in registration while
+// zooming instead of drifting off the hole.
 // mind.exe V4.4 — splash screen now uses the user's own black-hole-with-candlestick photo directly
 // (base64 JPEG, quality 75, no re-generation, no CSS-drawn black hole) in place of the earlier
 // landscape stock photo. A matching SPLASH_BLACKHOLE_MASK was computed from this exact image (PIL:
@@ -3365,7 +3374,8 @@ function Splash({ accent, fading }) {
   return /* @__PURE__ */ jsxs("div", { className: "splash2-root fixed inset-0 z-50 transition-opacity duration-500", style: { opacity: fading ? 0 : 1, pointerEvents: fading ? "none" : "auto" }, children: [
     /* @__PURE__ */ jsxs("div", { className: "splash2-bh-scene", children: [
       /* @__PURE__ */ jsx("img", { className: "splash2-bh-img", src: SPLASH_BLACKHOLE_IMG, alt: "" }),
-      /* @__PURE__ */ jsx("div", { className: "splash2-bh-shimmer" })
+      /* @__PURE__ */ jsx("div", { className: "splash2-bh-shimmer" }),
+      /* @__PURE__ */ jsx("div", { className: "splash2-bh-glow" })
     ] }),
     /* @__PURE__ */ jsx("div", { className: "splash2-vignette" }),
     /* @__PURE__ */ jsxs("div", { className: "splash2-content", children: [
@@ -8804,26 +8814,36 @@ function MindExe() {
         .splash2-root { background: #000; overflow: hidden; }
         @keyframes splash2RiseFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes splash2RingExpand { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
-        @keyframes splash2KenBurns { from { transform: scale(1.0); } to { transform: scale(1.06); } }
+        @keyframes splash2KenBurns { from { transform: scale(1.0); } to { transform: scale(1.1); } }
         @keyframes splash2Shimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes splash2Glow { 0%, 100% { opacity: 0.35; transform: scale(0.92); } 50% { opacity: 0.95; transform: scale(1.18); } }
 
         .splash2-bh-scene { position: absolute; inset: 0; height: 100%; overflow: hidden; }
         .splash2-bh-img {
           width: 100%; height: 100%; object-fit: cover; object-position: 47% 41%; display: block;
-          animation: splash2KenBurns 26s ease-in-out infinite alternate;
+          animation: splash2KenBurns 9s ease-in-out infinite alternate;
         }
         /* Same Ken Burns animation as the photo (so the mask never drifts out of registration while
-           zooming) plus a slow diagonal sweep. mask-image/-webkit-mask-image use the alpha channel of
-           SPLASH_BLACKHOLE_MASK directly \u2014 no mask-mode needed, so this works on older Safari too. */
+           zooming) plus a fast diagonal sweep, widened and brightened so it actually reads on a
+           splash screen that's only on-screen for ~7s. mask-image/-webkit-mask-image use the alpha
+           channel of SPLASH_BLACKHOLE_MASK directly \u2014 no mask-mode needed, works on older Safari. */
         .splash2-bh-shimmer {
           position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
-          background-image: linear-gradient(115deg, transparent 34%, rgba(255,250,235,0.95) 49%, rgba(255,250,235,0.95) 51%, transparent 66%);
-          background-size: 300% 300%;
+          background-image: linear-gradient(115deg, transparent 20%, rgba(255,246,222,0.55) 38%, rgba(255,250,235,1) 50%, rgba(255,246,222,0.55) 62%, transparent 80%);
+          background-size: 260% 260%;
           -webkit-mask-image: url(${SPLASH_BLACKHOLE_MASK}); mask-image: url(${SPLASH_BLACKHOLE_MASK});
           -webkit-mask-size: cover; mask-size: cover;
           -webkit-mask-position: 47% 41%; mask-position: 47% 41%;
           -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-          animation: splash2KenBurns 26s ease-in-out infinite alternate, splash2Shimmer 7s ease-in-out infinite;
+          animation: splash2KenBurns 9s ease-in-out infinite alternate, splash2Shimmer 3.2s ease-in-out infinite;
+        }
+        /* Extra breathing halo pinned to the event horizon (measured center, 47%/41%) \u2014 a soft warm
+           radial glow that pulses in size and brightness on its own faster cycle, layered on top of
+           the shimmer so the hole itself visibly "breathes" even where the shimmer sweep is dim. */
+        .splash2-bh-glow {
+          position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+          background: radial-gradient(circle at 47% 41%, rgba(255,241,214,0.9) 0%, rgba(255,214,150,0.5) 10%, transparent 24%);
+          animation: splash2KenBurns 9s ease-in-out infinite alternate, splash2Glow 2.6s ease-in-out infinite;
         }
         .splash2-vignette {
           position: absolute; inset: 0;
