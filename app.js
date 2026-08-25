@@ -1,3 +1,19 @@
+// mind.exe V3.6 — bottom nav restructure. "new" (formerly mislabeled "Дневник") is now the
+// centered, elevated primary button — a bigger accent-filled circle popping above the bar (own
+// branch in the nav.map, marked via nav[].primary, sliding highlight box skipped for that slot
+// since the circle itself is the active indicator) — reordered to sit in the middle of the 7-tab
+// row. Renamed labels: "new" -> "Запись" (short, still clear it's for logging a trade), "log"
+// (the actual trade list, NotebookText icon) -> "Дневник" (was wrongly "Заметки"). Same nav array
+// feeds the desktop sidebar too, so labels/order stay consistent there.
+// mind.exe V3.5 — fixed voice input: (1) the "stop" control was a 10px pill that easily read as
+// "nothing happened" when tapped — it's now a full red bar with explicit "Запись… нажми, чтобы
+// остановить" text while recording. (2) guarded against double-start (a stray second tap while
+// already recording could throw "already started" repeatedly); (3) wrapped the SpeechRecognition
+// constructor itself in try/catch — some restricted/insecure contexts throw synchronously there
+// instead of firing a normal error event, which was an uncaught exception before; (4) added an
+// unmount cleanup that stops any recognition still running if the user switches tabs mid-recording
+// — previously it kept firing in the background against a stale component and could throw
+// repeatedly with no way to stop it from the UI, which is what looked like "breaks the app".
 // mind.exe V3.4 — added a "Очистить" reset button to the Coach chat card header (next to
 // chatTitle, shown only when chatMessages.length > 0). Clears local chatMessages state; the
 // existing persistence useEffect (already keyed on chatMessages) then overwrites the stored
@@ -328,7 +344,7 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", log: "\u0417\u0430\u043C\u0435\u0442\u043A\u0438", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0417\u0430\u043F\u0438\u0441\u044C", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
     coach: {
       title: "\u0418\u0418-\u0430\u043D\u0430\u043B\u0438\u0437",
       subtitle: "\u0422\u0432\u043E\u0439 \u043B\u0438\u0447\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041F\u043E\u043D\u0438\u043C\u0430\u0435\u0442 \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
@@ -578,7 +594,7 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "Home", new: "Journal", log: "Notes", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
+    nav: { home: "Home", new: "Entry", log: "Journal", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
     coach: {
       title: "AI Analysis",
       subtitle: "Your personal analyst. Understands your trading style.",
@@ -3917,17 +3933,39 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
 // Browser-native only — no Gemini/Firebase involved, no separate speech-to-text service.
 // Falls back to a notify() message if unsupported (iOS Safari, some Firefox builds, etc.)
 // instead of breaking; regular typing always keeps working alongside it.
+// V3.5 fix: guard against double-start (recRef.current check), wrap the SR constructor in
+// try/catch (some browsers throw synchronously in insecure/restricted contexts instead of
+// firing an error event), and stop() + null out the recognition on unmount — previously a
+// recognition left running after the user switched tabs kept firing onresult against a stale
+// closure and could throw repeatedly with no way to stop it from the UI.
 function useSpeechToText(onFinal, onErr) {
   const recRef = useRef(null);
   const [listening, setListening] = useState(false);
   const SR = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
-  const toggle = () => {
-    if (!SR) return;
-    if (listening) {
+  useEffect(() => {
+    return () => {
+      try {
+        recRef.current?.stop();
+      } catch {
+      }
+      recRef.current = null;
+    };
+  }, []);
+  const stop = () => {
+    try {
       recRef.current?.stop();
+    } catch {
+    }
+  };
+  const start = () => {
+    if (!SR || recRef.current) return;
+    let rec;
+    try {
+      rec = new SR();
+    } catch {
+      onErr?.("unsupported");
       return;
     }
-    const rec = new SR();
     rec.lang = "ru-RU";
     rec.continuous = true;
     rec.interimResults = false;
@@ -3937,33 +3975,48 @@ function useSpeechToText(onFinal, onErr) {
       if (text.trim()) onFinal(text.trim());
     };
     rec.onerror = (e) => {
+      recRef.current = null;
       setListening(false);
-      onErr?.(e.error);
+      if (e.error !== "no-speech" && e.error !== "aborted") onErr?.(e.error);
     };
-    rec.onend = () => setListening(false);
+    rec.onend = () => {
+      recRef.current = null;
+      setListening(false);
+    };
     recRef.current = rec;
     try {
       rec.start();
       setListening(true);
     } catch {
+      recRef.current = null;
     }
   };
+  const toggle = () => listening ? stop() : start();
   return { supported: !!SR, listening, toggle };
 }
 function MicButton({ accent, notify, onText }) {
   const { supported, listening, toggle } = useSpeechToText(
     (text) => onText(text),
-    (err) => notify?.(err === "not-allowed" || err === "service-not-allowed" ? "\u0420\u0430\u0437\u0440\u0435\u0448\u0438 \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0438\u043A\u0440\u043E\u0444\u043E\u043D\u0443 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B")
+    (err) => notify?.(err === "not-allowed" || err === "service-not-allowed" ? "\u0420\u0430\u0437\u0440\u0435\u0448\u0438 \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0438\u043A\u0440\u043E\u0444\u043E\u043D\u0443 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." : err === "unsupported" ? "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435." : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B")
   );
-  return /* @__PURE__ */ jsx(
+  return /* @__PURE__ */ jsxs(
     "button",
     {
       type: "button",
       onClick: () => supported ? toggle() : notify?.("\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435."),
       title: listening ? "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C" : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434",
-      className: "shrink-0 flex items-center gap-1 px-2 h-6 rounded-full text-[10px] transition-all active:scale-90",
-      style: { background: listening ? `${LOSS}18` : `${accent}12`, color: listening ? LOSS : accent, border: `1px solid ${listening ? LOSS + "50" : accent + "30"}` },
-      children: [/* @__PURE__ */ jsx(Mic, { size: 11 }), listening ? "\u0417\u0430\u043F\u0438\u0441\u044C\u2026" : ""]
+      className: "shrink-0 flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[11px] transition-all active:scale-90",
+      style: {
+        background: listening ? LOSS : `${accent}12`,
+        color: listening ? "#fff" : accent,
+        border: `1px solid ${listening ? LOSS : accent + "30"}`,
+        boxShadow: listening ? `0 0 0 3px ${LOSS}25` : "none",
+        fontWeight: listening ? 600 : 400
+      },
+      children: [
+        /* @__PURE__ */ jsx(Mic, { size: 12 }),
+        listening ? "\u0417\u0430\u043F\u0438\u0441\u044C\u2026 \u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C" : ""
+      ]
     }
   );
 }
@@ -8450,9 +8503,9 @@ function MindExe() {
   const addCustomTag = (v) => setCustomTags((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
   const nav = [
     { id: "home", label: t.nav.home, icon: Sparkles },
-    { id: "new", label: t.nav.new, icon: BookOpen },
     { id: "log", label: t.nav.log, icon: NotebookText },
     { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
+    { id: "new", label: t.nav.new, icon: BookOpen, primary: true },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
@@ -8748,7 +8801,7 @@ function MindExe() {
         ] }, tab)
       ] }) }),
       /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[22px] overflow-hidden", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsxs("div", { className: "relative grid grid-cols-7 m-1", children: [
-        /* @__PURE__ */ jsx(
+        tab !== "new" && /* @__PURE__ */ jsx(
           "div",
           {
             className: "absolute top-0 bottom-0 rounded-2xl transition-all duration-300 ease-out",
@@ -8757,6 +8810,12 @@ function MindExe() {
         ),
         nav.map((n) => {
           const active = tab === n.id;
+          if (n.primary) {
+            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center justify-center gap-1 -mt-5 min-w-0 transition-transform duration-150 active:scale-90", children: [
+              /* @__PURE__ */ jsx("div", { className: "w-12 h-12 rounded-full flex items-center justify-center", style: { background: accent, boxShadow: `0 4px 14px ${accent}55, 0 0 0 4px rgba(19,19,21,0.94)` }, children: /* @__PURE__ */ jsx(n.icon, { size: 20, strokeWidth: 2.2, style: { color: "#06120F" } }) }),
+              /* @__PURE__ */ jsx("span", { className: "text-[8px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
+            ] }, n.id);
+          }
           return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center justify-center gap-1 py-2.5 rounded-2xl min-w-0 transition-transform duration-150 active:scale-90", children: [
             /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease" } }),
             /* @__PURE__ */ jsx("span", { className: "text-[8px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
