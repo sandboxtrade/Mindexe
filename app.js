@@ -1,3 +1,9 @@
+// mind.exe V3.9 — fixed voice input losing text after pressing stop: some Safari builds call
+// stop()/abort() without ever emitting a final (isFinal:true) result for the phrase in progress,
+// so the old code — which only committed on isFinal — silently dropped whatever was said right
+// before stopping. Now every onresult also keeps the still-interim tail in pendingRef; that gets
+// flushed into the field on session end (including mid-restart chunks) and, as a safety net, 300ms
+// after stop() even if onend never fires. Final chunks still commit immediately as before.
 // mind.exe V3.8 — two fixes. (1) Voice input on iOS Safari: webkitSpeechRecognition there ends
 // the session after every short pause even with continuous:true — a known platform quirk, not
 // something continuous:true can override. useSpeechToText now tracks the user's actual intent
@@ -3961,8 +3967,14 @@ function useSpeechToText(onFinal, onErr) {
   const recRef = useRef(null);
   const wantRef = useRef(false);
   const restartTimerRef = useRef(null);
+  const pendingRef = useRef("");
   const [listening, setListening] = useState(false);
   const SR = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+  const flushPending = () => {
+    const text = pendingRef.current.trim();
+    pendingRef.current = "";
+    if (text) onFinal(text);
+  };
   const buildRec = () => {
     let rec;
     try {
@@ -3975,9 +3987,18 @@ function useSpeechToText(onFinal, onErr) {
     rec.continuous = true;
     rec.interimResults = true;
     rec.onresult = (e) => {
-      let text = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript;
-      if (text.trim()) onFinal(text.trim());
+      // Commit fully finalized chunks right away. The still-interim tail (if any) is kept in
+      // pendingRef rather than discarded — some Safari builds call stop()/abort() without ever
+      // emitting a final result for the phrase in progress, so without this the last thing said
+      // before pressing stop just vanished.
+      let finalChunk = "";
+      let interimTail = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalChunk += e.results[i][0].transcript;
+        else interimTail += e.results[i][0].transcript;
+      }
+      if (finalChunk.trim()) onFinal(finalChunk.trim());
+      pendingRef.current = interimTail;
     };
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -3988,13 +4009,15 @@ function useSpeechToText(onFinal, onErr) {
     rec.onend = () => {
       recRef.current = null;
       if (!wantRef.current) {
+        flushPending();
         setListening(false);
         return;
       }
       // iOS Safari (and some other engines) end the recognition session on every pause even with
       // continuous:true — this is a known platform quirk, not a bug in the app. As long as the
-      // user hasn't pressed stop, silently spin up a fresh session so it feels continuous instead
-      // of dying after ~1 second.
+      // user hasn't pressed stop, flush whatever this chunk had and silently spin up a fresh
+      // session so it feels continuous instead of dying after ~1 second.
+      flushPending();
       restartTimerRef.current = setTimeout(() => {
         if (!wantRef.current) return;
         const next = buildRec();
@@ -4033,6 +4056,9 @@ function useSpeechToText(onFinal, onErr) {
       recRef.current?.stop();
     } catch {
     }
+    // Safety net: if stop()/onend never delivers a final result (a known Safari quirk), flush
+    // the last known interim text after a short grace period instead of silently losing it.
+    setTimeout(flushPending, 300);
     setListening(false);
   };
   const start = () => {
