@@ -1,3 +1,14 @@
+// mind.exe V4.3 — market insight diagnostics + fallback, since the polish button (plain Gemini
+// call, no tools) worked but the market snapshot (grounded call, tools:[{googleSearch:{}}]) never
+// visibly updated. Two changes: (1) aiFetchMarketSnapshot now tries the grounded call first and,
+// if it throws for any reason (tool unsupported by this model/SDK combo, grounding refusing strict
+// JSON output, etc.), logs the real error to console and retries once with a second plain model
+// (no search tool) so the insight still updates from Gemini's own knowledge instead of silently
+// doing nothing \u2014 this also isolates whether the bug is the search tool specifically or
+// something else in the pipeline. (2) The manual refresh button on Home now surfaces the actual
+// failure via a toast (notify, wired through from App) and console.error, instead of swallowing it
+// \u2014 open devtools after pressing refresh to see exactly what's failing if it still doesn't
+// update.
 // mind.exe V4.2 — two changes. (1) Voice input removed entirely (useSpeechToText/MicButton and
 // the unused Mic icon import deleted) and replaced with PolishButton: a small Gemini-backed
 // "\u2728" button next to the same 4 reflection fields (pull in NewEntry/EditTrade, lesson in
@@ -3533,7 +3544,7 @@ function Sparkline({ points, color, width = 68, height = 26 }) {
   const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
   return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
 }
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset }) {
+function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
@@ -3546,7 +3557,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     let cancelled = false;
     getMarketSnapshot(tradingAsset, lang).then((snap) => {
       if (!cancelled && snap) setMarketSnapshot(snap);
-    }).catch(() => {
+    }).catch((err) => {
+      console.error("mind.exe market snapshot (auto) failed:", err);
     });
     return () => {
       cancelled = true;
@@ -3560,7 +3572,9 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       const withBucket = { ...fresh, hourBucket: marketHourBucket() };
       saveCachedMarketSnapshot(tradingAsset, withBucket);
       setMarketSnapshot(withBucket);
-    } catch {
+    } catch (err) {
+      console.error("mind.exe market snapshot (manual) failed:", err);
+      notify?.(`\u041E\u0448\u0438\u0431\u043A\u0430 \u0438\u043D\u0441\u0430\u0439\u0442\u0430: ${err?.message || err}`);
     } finally {
       setMarketRefreshing(false);
     }
@@ -6312,17 +6326,29 @@ function aiGetMarketModel() {
   }
   return aiMarketModel;
 }
+var aiMarketModelPlain = null;
+function aiGetMarketModelPlain() {
+  if (!aiMarketModelPlain) {
+    aiMarketModelPlain = getGenerativeModel(aiLogic, {
+      model: AI_MODEL,
+      generationConfig: { temperature: 0.3, maxOutputTokens: 400 }
+    });
+  }
+  return aiMarketModelPlain;
+}
 function marketFocusText(assetClass) {
   if (assetClass === "forex") return "the FX/forex market \u2014 DXY direction, major pairs, central bank policy and macro data releases that could move currencies in the next few hours";
   if (assetClass === "stocks") return "the stock market \u2014 major indices, macro catalysts, earnings or data releases that could move equities in the next few hours";
   return "the crypto market (BTC, ETH and majors) \u2014 price action, the dominant narrative, and anything that could move prices in the next few hours";
 }
-async function aiFetchMarketSnapshot(assetClass, lang) {
-  const model = aiGetMarketModel();
+function buildMarketPrompt(assetClass, lang, grounded) {
   const langName = lang === "en" ? "English" : "Russian";
-  const prompt = `Using current, real information from the web, summarize ${marketFocusText(assetClass)} right now.
+  const lead = grounded ? "Using current, real information from the web, summarize" : "Summarize, using your best current knowledge,";
+  return `${lead} ${marketFocusText(assetClass)} right now.
 Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
 {"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 concise sentences in ${langName}>","btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
+}
+async function aiRunMarketModel(model, prompt) {
   const result = await model.generateContent(prompt);
   const text = result?.response?.text?.();
   if (!text || !text.trim()) throw new Error("ai_empty_response");
@@ -6336,6 +6362,18 @@ Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
     sentimentScore: num(parsed.sentimentScore),
     sentimentLabel: typeof parsed.sentimentLabel === "string" && parsed.sentimentLabel.trim() ? parsed.sentimentLabel.trim() : null
   };
+}
+async function aiFetchMarketSnapshot(assetClass, lang) {
+  try {
+    return await aiRunMarketModel(aiGetMarketModel(), buildMarketPrompt(assetClass, lang, true));
+  } catch (groundedErr) {
+    // Google Search grounding (tools:[{googleSearch:{}}]) may not be supported for this
+    // model/SDK combo, or may refuse strict-JSON output while grounded — either way, fall back to
+    // a plain (non-grounded) call so the insight still updates with Gemini's own knowledge instead
+    // of silently doing nothing. Logged clearly so the actual cause is visible in devtools.
+    console.error("mind.exe market snapshot: grounded call failed, retrying without Search tool:", groundedErr);
+    return await aiRunMarketModel(aiGetMarketModelPlain(), buildMarketPrompt(assetClass, lang, false));
+  }
 }
 function marketHourBucket() {
   return Math.floor(Date.now() / 36e5);
@@ -8890,7 +8928,7 @@ function MindExe() {
           }
         ),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset }),
+          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify: showToast }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
