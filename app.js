@@ -1,3 +1,15 @@
+// mind.exe V4.2 — two changes. (1) Voice input removed entirely (useSpeechToText/MicButton and
+// the unused Mic icon import deleted) and replaced with PolishButton: a small Gemini-backed
+// "\u2728" button next to the same 4 reflection fields (pull in NewEntry/EditTrade, lesson in
+// CloseTrade/EditTrade) that lightly copyedits whatever the trader already typed \u2014 grammar/
+// flow only, meaning and facts untouched, no advice, not answered as a question \u2014 via a
+// separate aiGetPolishModel() instance (same Firebase AI Logic client, different config/no system
+// instruction, since the coaching model's instruction is the wrong fit for a copyedit task). (2)
+// Home's Insight card gets a manual refresh control (RotateCcw icon, spins while busy) next to the
+// pulsing dot, shown only when a trading asset is selected in Settings \u2014 calls
+// aiFetchMarketSnapshot directly (bypassing the hourly cache check) and writes the result back
+// into both the shared Firestore cache and local state, so a stale/failed automatic fetch can be
+// retried on demand instead of waiting up to an hour.
 // mind.exe V4.1 — Home's "Инсайт" card is now Gemini-backed instead of purely local. New
 // aiFetchMarketSnapshot uses a separate getGenerativeModel() config with the Google Search
 // grounding tool (tools:[{googleSearch:{}}]) — same Firebase AI Logic client, not a second
@@ -359,7 +371,6 @@ import {
   RotateCcw,
   Zap,
   Info,
-  Mic,
   Camera
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
@@ -435,6 +446,7 @@ var STRINGS = {
       calibrationToday: (pct) => `\u041A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0430 \u0441\u0435\u0433\u043E\u0434\u043D\u044F: ${pct}%`,
       calibrationCta: "\u041F\u0440\u043E\u0439\u0442\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439",
       insight: "\u0418\u043D\u0441\u0430\u0439\u0442",
+      marketRefresh: "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C",
       moodPrefix: "\u041D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435 \u0440\u044B\u043D\u043A\u0430: ",
       insightConfident: "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442, \u0447\u0442\u043E \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u043E\u043A\u0443\u043F\u0430\u0435\u0442\u0441\u044F \u2014 \u0434\u0435\u0440\u0436\u0438 \u043E\u0431\u044A\u0451\u043C \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C.",
       insightFocus: "\u0421\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u044F\u0432\u0438\u043B\u0441\u044F \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D.",
@@ -690,6 +702,7 @@ var STRINGS = {
       calibrationToday: (pct) => `Today's calibration: ${pct}%`,
       calibrationCta: "Calibrate before your session",
       insight: "Insight",
+      marketRefresh: "Refresh",
       moodPrefix: "Market mood: ",
       insightConfident: "Recent trades show confidence is paying off \u2014 keep your size consistent.",
       insightFocus: "Focus on consistency. Add a few more trades for a real pattern to show up.",
@@ -3524,6 +3537,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
+  const [marketRefreshing, setMarketRefreshing] = useState(false);
   useEffect(() => {
     if (!tradingAsset) {
       setMarketSnapshot(null);
@@ -3538,6 +3552,19 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       cancelled = true;
     };
   }, [tradingAsset, lang]);
+  const refreshMarketSnapshot = async () => {
+    if (!tradingAsset || marketRefreshing) return;
+    setMarketRefreshing(true);
+    try {
+      const fresh = await aiFetchMarketSnapshot(tradingAsset, lang);
+      const withBucket = { ...fresh, hourBucket: marketHourBucket() };
+      saveCachedMarketSnapshot(tradingAsset, withBucket);
+      setMarketSnapshot(withBucket);
+    } catch {
+    } finally {
+      setMarketRefreshing(false);
+    }
+  };
   const closedEntries = useMemo(() => entries.filter(isEntryClosed), [entries]);
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const calibratedToday = lastCalibration && isToday(lastCalibration.date);
@@ -3611,7 +3638,21 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
           " ",
           t.home.insight
         ] }),
-        /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: accent } })
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+          tradingAsset && /* @__PURE__ */ jsx(
+            "button",
+            {
+              type: "button",
+              onClick: refreshMarketSnapshot,
+              disabled: marketRefreshing,
+              title: t.home.marketRefresh,
+              className: "flex items-center justify-center w-5 h-5 rounded-full transition-all active:scale-90",
+              style: { color: accent, opacity: marketRefreshing ? 0.5 : 1 },
+              children: /* @__PURE__ */ jsx(RotateCcw, { size: 11, className: marketRefreshing ? "animate-spin" : void 0 })
+            }
+          ),
+          /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: accent } })
+        ] })
       ] }),
       /* @__PURE__ */ jsxs("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: [
         t.home.moodPrefix,
@@ -4020,153 +4061,61 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     ] }, g.category)) })
   ] }) });
 }
-// ---- Voice input (Web Speech API) ---------------------------------------------
-// Browser-native only — no Gemini/Firebase involved, no separate speech-to-text service.
-// Falls back to a notify() message if unsupported (iOS Safari, some Firefox builds, etc.)
-// instead of breaking; regular typing always keeps working alongside it.
-// V3.5 fix: guard against double-start (recRef.current check), wrap the SR constructor in
-// try/catch (some browsers throw synchronously in insecure/restricted contexts instead of
-// firing an error event), and stop() + null out the recognition on unmount — previously a
-// recognition left running after the user switched tabs kept firing onresult against a stale
-// closure and could throw repeatedly with no way to stop it from the UI.
-function useSpeechToText(onFinal, onErr) {
-  const recRef = useRef(null);
-  const wantRef = useRef(false);
-  const restartTimerRef = useRef(null);
-  const pendingRef = useRef("");
-  const [listening, setListening] = useState(false);
-  const SR = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
-  const flushPending = () => {
-    const text = pendingRef.current.trim();
-    pendingRef.current = "";
-    if (text) onFinal(text);
-  };
-  const buildRec = () => {
-    let rec;
-    try {
-      rec = new SR();
-    } catch {
-      onErr?.("unsupported");
-      return null;
-    }
-    rec.lang = "ru-RU";
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.onresult = (e) => {
-      // Commit fully finalized chunks right away. The still-interim tail (if any) is kept in
-      // pendingRef rather than discarded — some Safari builds call stop()/abort() without ever
-      // emitting a final result for the phrase in progress, so without this the last thing said
-      // before pressing stop just vanished.
-      let finalChunk = "";
-      let interimTail = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) finalChunk += e.results[i][0].transcript;
-        else interimTail += e.results[i][0].transcript;
-      }
-      if (finalChunk.trim()) onFinal(finalChunk.trim());
-      pendingRef.current = interimTail;
-    };
-    rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-        wantRef.current = false;
-        onErr?.(e.error);
-      }
-    };
-    rec.onend = () => {
-      recRef.current = null;
-      if (!wantRef.current) {
-        flushPending();
-        setListening(false);
-        return;
-      }
-      // iOS Safari (and some other engines) end the recognition session on every pause even with
-      // continuous:true — this is a known platform quirk, not a bug in the app. As long as the
-      // user hasn't pressed stop, flush whatever this chunk had and silently spin up a fresh
-      // session so it feels continuous instead of dying after ~1 second.
-      flushPending();
-      restartTimerRef.current = setTimeout(() => {
-        if (!wantRef.current) return;
-        const next = buildRec();
-        if (!next) {
-          wantRef.current = false;
-          setListening(false);
-          return;
-        }
-        recRef.current = next;
-        try {
-          next.start();
-        } catch {
-          recRef.current = null;
-          wantRef.current = false;
-          setListening(false);
-        }
-      }, 200);
-    };
-    return rec;
-  };
-  useEffect(() => {
-    return () => {
-      wantRef.current = false;
-      clearTimeout(restartTimerRef.current);
-      try {
-        recRef.current?.stop();
-      } catch {
-      }
-      recRef.current = null;
-    };
-  }, []);
-  const stop = () => {
-    wantRef.current = false;
-    clearTimeout(restartTimerRef.current);
-    try {
-      recRef.current?.stop();
-    } catch {
-    }
-    // Safety net: if stop()/onend never delivers a final result (a known Safari quirk), flush
-    // the last known interim text after a short grace period instead of silently losing it.
-    setTimeout(flushPending, 300);
-    setListening(false);
-  };
-  const start = () => {
-    if (!SR || recRef.current) return;
-    const rec = buildRec();
-    if (!rec) return;
-    recRef.current = rec;
-    wantRef.current = true;
-    try {
-      rec.start();
-      setListening(true);
-    } catch {
-      recRef.current = null;
-      wantRef.current = false;
-    }
-  };
-  const toggle = () => listening ? stop() : start();
-  return { supported: !!SR, listening, toggle };
+// ---- AI text polish (Gemini) ---------------------------------------------------
+// Replaces the old voice-input mic button. Lightly copyedits the trader's own typed reflection —
+// fixes grammar/flow, merges fragments into full sentences — without changing meaning, adding
+// advice, or answering as if it were a question. Separate model instance from aiGetModel(): that
+// one's system instruction is scoped to journal-analysis coaching, wrong fit for a copyedit task.
+var aiPolishModel = null;
+function aiGetPolishModel() {
+  if (!aiPolishModel) {
+    aiPolishModel = getGenerativeModel(aiLogic, {
+      model: AI_MODEL,
+      generationConfig: { temperature: 0.3, maxOutputTokens: 300 }
+    });
+  }
+  return aiPolishModel;
 }
-function MicButton({ accent, notify, onText }) {
-  const { supported, listening, toggle } = useSpeechToText(
-    (text) => onText(text),
-    (err) => notify?.(err === "not-allowed" || err === "service-not-allowed" ? "\u0420\u0430\u0437\u0440\u0435\u0448\u0438 \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0438\u043A\u0440\u043E\u0444\u043E\u043D\u0443 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." : err === "unsupported" ? "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435." : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B")
-  );
+var AI_POLISH_TASK = "Lightly copyedit the trader's own journal note below: fix grammar, punctuation and awkward phrasing, and merge fragments into smooth sentences. Preserve the original meaning, tone, facts and language exactly \u2014 do not add, remove, reinterpret, or answer it as if it were a question, and do not give advice. Return ONLY the edited text, no quotes, no commentary, no markdown.";
+async function aiPolishText(text) {
+  const trimmed = (text || "").trim();
+  if (!trimmed) throw new Error("ai_empty_text");
+  const model = aiGetPolishModel();
+  const result = await model.generateContent(`${AI_POLISH_TASK}
+
+TEXT:
+${trimmed}`);
+  const out = result?.response?.text?.();
+  if (!out || !out.trim()) throw new Error("ai_empty_response");
+  return out.trim();
+}
+function PolishButton({ accent, notify, text, onPolished }) {
+  const [busy, setBusy] = useState(false);
+  const handleClick = async () => {
+    if (!text || !text.trim()) {
+      notify?.("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043D\u0430\u043F\u0438\u0448\u0438 \u0442\u0435\u043A\u0441\u0442");
+      return;
+    }
+    setBusy(true);
+    try {
+      const polished = await aiPolishText(text);
+      onPolished(polished);
+    } catch {
+      notify?.("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442");
+    } finally {
+      setBusy(false);
+    }
+  };
   return /* @__PURE__ */ jsxs(
     "button",
     {
       type: "button",
-      onClick: () => supported ? toggle() : notify?.("\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435."),
-      title: listening ? "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C" : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434",
-      className: "shrink-0 flex items-center gap-1.5 px-2.5 h-7 rounded-full text-[11px] transition-all active:scale-90",
-      style: {
-        background: listening ? LOSS : `${accent}12`,
-        color: listening ? "#fff" : accent,
-        border: `1px solid ${listening ? LOSS : accent + "30"}`,
-        boxShadow: listening ? `0 0 0 3px ${LOSS}25` : "none",
-        fontWeight: listening ? 600 : 400
-      },
-      children: [
-        /* @__PURE__ */ jsx(Mic, { size: 12 }),
-        listening ? "\u0417\u0430\u043F\u0438\u0441\u044C\u2026 \u043D\u0430\u0436\u043C\u0438, \u0447\u0442\u043E\u0431\u044B \u043E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C" : ""
-      ]
+      onClick: handleClick,
+      disabled: busy,
+      title: "\u0423\u043B\u0443\u0447\u0448\u0438\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u0441 \u0418\u0418",
+      className: "shrink-0 flex items-center gap-1 px-2 h-6 rounded-full text-[10px] transition-all active:scale-90",
+      style: { background: `${accent}12`, color: accent, border: `1px solid ${accent}30`, opacity: busy ? 0.55 : 1 },
+      children: [/* @__PURE__ */ jsx(Sparkles, { size: 11 }), busy ? "\u2026" : ""]
     }
   );
 }
@@ -4424,7 +4373,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
-        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setPull((prev) => prev ? `${prev} ${txt}` : txt) })
+        /* @__PURE__ */ jsx(PolishButton, { accent, notify, text: pull, onPolished: setPull })
       ] }),
       /* @__PURE__ */ jsx(
         "textarea",
@@ -4612,7 +4561,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
-        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setLesson((prev) => prev ? `${prev} ${txt}` : txt) })
+        /* @__PURE__ */ jsx(PolishButton, { accent, notify, text: lesson, onPolished: setLesson })
       ] }),
       /* @__PURE__ */ jsx(
         "textarea",
@@ -4817,7 +4766,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
-        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setPull((prev) => prev ? `${prev} ${txt}` : txt) })
+        /* @__PURE__ */ jsx(PolishButton, { accent, notify, text: pull, onPolished: setPull })
       ] }),
       /* @__PURE__ */ jsx("textarea", { value: pull, onChange: (e) => setPull(e.target.value), rows: 2, placeholder: t.newEntry.pullPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
     ] })
@@ -4851,7 +4800,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
-        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setLesson((prev) => prev ? `${prev} ${txt}` : txt) })
+        /* @__PURE__ */ jsx(PolishButton, { accent, notify, text: lesson, onPolished: setLesson })
       ] }),
       /* @__PURE__ */ jsx("textarea", { value: lesson, onChange: (e) => setLesson(e.target.value), rows: 2, placeholder: t.newEntry.lessonPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
     ] })
