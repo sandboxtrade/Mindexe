@@ -1,3 +1,14 @@
+// mind.exe V3.8 — two fixes. (1) Voice input on iOS Safari: webkitSpeechRecognition there ends
+// the session after every short pause even with continuous:true — a known platform quirk, not
+// something continuous:true can override. useSpeechToText now tracks the user's actual intent
+// (wantRef) separately from the browser session; when a session ends but the user hasn't pressed
+// stop, it silently spins up a fresh recognition instance ~200ms later so it reads as one
+// continuous recording instead of dying after ~1 second. Also switched interimResults to true,
+// which several iOS builds need to keep the audio pipeline alive at all — only isFinal chunks are
+// still appended to the field. (2) Bottom nav tiles were too big/blocky — shrunk icon badges
+// (regular 44px -> 32px, primary 48px -> 36px), dropped the visible border on regular tiles (flat
+// background tint only when active), softer/smaller glow on the primary "Запись" tile, corners
+// rounded-2xl -> rounded-xl throughout for a lighter feel.
 // mind.exe V3.7 — restyled the bottom nav to match the reference: dropped the floating-circle
 // look from V3.6 (it wasn't docked to the row and used the wrong colors). Every one of the 7 tabs
 // now gets its own static rounded-square icon badge (subtle border, accent tint when active) with
@@ -3948,10 +3959,66 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
 // closure and could throw repeatedly with no way to stop it from the UI.
 function useSpeechToText(onFinal, onErr) {
   const recRef = useRef(null);
+  const wantRef = useRef(false);
+  const restartTimerRef = useRef(null);
   const [listening, setListening] = useState(false);
   const SR = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+  const buildRec = () => {
+    let rec;
+    try {
+      rec = new SR();
+    } catch {
+      onErr?.("unsupported");
+      return null;
+    }
+    rec.lang = "ru-RU";
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.onresult = (e) => {
+      let text = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript;
+      if (text.trim()) onFinal(text.trim());
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        wantRef.current = false;
+        onErr?.(e.error);
+      }
+    };
+    rec.onend = () => {
+      recRef.current = null;
+      if (!wantRef.current) {
+        setListening(false);
+        return;
+      }
+      // iOS Safari (and some other engines) end the recognition session on every pause even with
+      // continuous:true — this is a known platform quirk, not a bug in the app. As long as the
+      // user hasn't pressed stop, silently spin up a fresh session so it feels continuous instead
+      // of dying after ~1 second.
+      restartTimerRef.current = setTimeout(() => {
+        if (!wantRef.current) return;
+        const next = buildRec();
+        if (!next) {
+          wantRef.current = false;
+          setListening(false);
+          return;
+        }
+        recRef.current = next;
+        try {
+          next.start();
+        } catch {
+          recRef.current = null;
+          wantRef.current = false;
+          setListening(false);
+        }
+      }, 200);
+    };
+    return rec;
+  };
   useEffect(() => {
     return () => {
+      wantRef.current = false;
+      clearTimeout(restartTimerRef.current);
       try {
         recRef.current?.stop();
       } catch {
@@ -3960,43 +4027,26 @@ function useSpeechToText(onFinal, onErr) {
     };
   }, []);
   const stop = () => {
+    wantRef.current = false;
+    clearTimeout(restartTimerRef.current);
     try {
       recRef.current?.stop();
     } catch {
     }
+    setListening(false);
   };
   const start = () => {
     if (!SR || recRef.current) return;
-    let rec;
-    try {
-      rec = new SR();
-    } catch {
-      onErr?.("unsupported");
-      return;
-    }
-    rec.lang = "ru-RU";
-    rec.continuous = true;
-    rec.interimResults = false;
-    rec.onresult = (e) => {
-      let text = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript;
-      if (text.trim()) onFinal(text.trim());
-    };
-    rec.onerror = (e) => {
-      recRef.current = null;
-      setListening(false);
-      if (e.error !== "no-speech" && e.error !== "aborted") onErr?.(e.error);
-    };
-    rec.onend = () => {
-      recRef.current = null;
-      setListening(false);
-    };
+    const rec = buildRec();
+    if (!rec) return;
     recRef.current = rec;
+    wantRef.current = true;
     try {
       rec.start();
       setListening(true);
     } catch {
       recRef.current = null;
+      wantRef.current = false;
     }
   };
   const toggle = () => listening ? stop() : start();
@@ -8807,18 +8857,18 @@ function MindExe() {
           )
         ] }, tab)
       ] }) }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[22px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-1 m-1", children:
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[20px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-0.5 m-1", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
-            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1.5 -mt-3 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
-              /* @__PURE__ */ jsx("div", { className: "w-12 h-12 rounded-2xl flex items-center justify-center", style: { background: "#F2F2F5", boxShadow: "0 0 22px 4px rgba(255,255,255,0.3), 0 6px 14px rgba(0,0,0,0.45)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 20, strokeWidth: 2.3, style: { color: "#0A0A0B" } }) }),
-              /* @__PURE__ */ jsx("span", { className: "text-[10px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
+            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 -mt-2 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
+              /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-xl flex items-center justify-center", style: { background: "#EDEDF0", boxShadow: "0 0 12px 2px rgba(255,255,255,0.18), 0 3px 8px rgba(0,0,0,0.3)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2.1, style: { color: "#141416" } }) }),
+              /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
             ] }, n.id);
           }
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1.5 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
-            /* @__PURE__ */ jsx("div", { className: "w-11 h-11 rounded-2xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}14` : "rgba(255,255,255,0.045)", border: `1px solid ${active ? accent + "40" : "rgba(255,255,255,0.07)"}` }, children: /* @__PURE__ */ jsx(n.icon, { size: 17, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint } }) }),
-            /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
+            /* @__PURE__ */ jsx("div", { className: "w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}10` : "transparent" }, children: /* @__PURE__ */ jsx(n.icon, { size: 15, strokeWidth: 1.8, style: { color: active ? accent : BASE.inkFaint } }) }),
+            /* @__PURE__ */ jsx("span", { className: "text-[8.5px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
           ] }, n.id);
         })
       }) }) })
