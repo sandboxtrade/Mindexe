@@ -1,3 +1,24 @@
+// mind.exe V3.4 — added a "Очистить" reset button to the Coach chat card header (next to
+// chatTitle, shown only when chatMessages.length > 0). Clears local chatMessages state; the
+// existing persistence useEffect (already keyed on chatMessages) then overwrites the stored
+// aiState with an empty chat array via the existing saveAiState/storageSet — no new storage call,
+// no change to the analysis insight box, Firestore schema, or Auth.
+// mind.exe V3.3 — two additions to the Journal flow, both wired through existing systems only
+// (no new Firebase project, no new AI client, no changes to Auth/Firestore/Analytics/Pattern
+// Engine/Calibration). (1) AI trade recognition: NewEntry now has a "Распознать сделку по
+// скриншоту" button; the uploaded image is compressed with the existing compressImageFile and
+// added to the existing screenshots array (no duplicate storage), then sent to Gemini via a new
+// aiCallGeminiVision (same aiGeminiModel singleton, just called with an inlineData image part
+// instead of text-only). Prompt instructs Gemini to return null for anything not clearly visible
+// — never invented prices. Recognized fields only pre-fill the existing form inputs; RR is still
+// computed exclusively by the existing computePlannedRR, and nothing saves until the user presses
+// the existing "Сохранить запись" button. Direction is mapped LONG/SHORT -> Long/Short to match
+// the app's existing convention. (2) Voice input: a small mic button (new MicButton +
+// useSpeechToText, browser Web Speech API only, no network/AI call) sits next to the four
+// existing reflection labels (pull in NewEntry/EditTrade, lesson in CloseTrade/EditTrade) and
+// appends recognized speech into the existing pull/lesson textareas — manual typing/editing still
+// works exactly as before. Unsupported browsers or denied mic permission fall back to a toast via
+// the existing notify(), the app never blocks.
 // mind.exe V3.2 — two fixes on the sticky mobile header from V3.0. (1) The hard 1px bottom
 // border was clearly visible as a sharp cut line under the logo bar — removed it, replaced with
 // a soft ~20px gradient fade (header's own translucent color fading to transparent) that extends
@@ -271,7 +292,9 @@ import {
   Target,
   RotateCcw,
   Zap,
-  Info
+  Info,
+  Mic,
+  Camera
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var BASE = {
@@ -320,6 +343,7 @@ var STRINGS = {
       chatDesc: "\u0417\u0430\u0434\u0430\u0439 \u043B\u044E\u0431\u043E\u0439 \u0432\u043E\u043F\u0440\u043E\u0441 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0438\u043B\u0438 \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u044E \u0432 \u0446\u0435\u043B\u043E\u043C.",
       chatPlaceholder: "\u041D\u0430\u043F\u0438\u0448\u0438 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435\u2026",
       chatEmpty: "\u0421\u043F\u0440\u043E\u0441\u0438 \u043F\u0440\u043E \u0441\u0432\u043E\u0438 \u0441\u0434\u0435\u043B\u043A\u0438, \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u044B \u0438\u043B\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u044E \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
+      resetChat: "\u041E\u0447\u0438\u0441\u0442\u0438\u0442\u044C",
       quick: {
         lateCloses: "\u041F\u043E\u0447\u0435\u043C\u0443 \u044F \u0437\u0430\u043A\u0440\u044B\u0432\u0430\u044E \u0441\u0434\u0435\u043B\u043A\u0438 \u0440\u0430\u043D\u044C\u0448\u0435?",
         strengths: "\u041C\u043E\u0438 \u0441\u0438\u043B\u044C\u043D\u044B\u0435 \u0441\u0442\u043E\u0440\u043E\u043D\u044B",
@@ -569,6 +593,7 @@ var STRINGS = {
       chatDesc: "Ask anything about your trades, psychology, or trading in general.",
       chatPlaceholder: "Type a message\u2026",
       chatEmpty: "Ask about your trades, patterns, or trading psychology.",
+      resetChat: "Clear",
       quick: {
         lateCloses: "Why do I close trades too early?",
         strengths: "My strengths",
@@ -3888,6 +3913,60 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     ] }, g.category)) })
   ] }) });
 }
+// ---- Voice input (Web Speech API) ---------------------------------------------
+// Browser-native only — no Gemini/Firebase involved, no separate speech-to-text service.
+// Falls back to a notify() message if unsupported (iOS Safari, some Firefox builds, etc.)
+// instead of breaking; regular typing always keeps working alongside it.
+function useSpeechToText(onFinal, onErr) {
+  const recRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const SR = typeof window !== "undefined" ? window.SpeechRecognition || window.webkitSpeechRecognition : null;
+  const toggle = () => {
+    if (!SR) return;
+    if (listening) {
+      recRef.current?.stop();
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "ru-RU";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      let text = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) text += e.results[i][0].transcript;
+      if (text.trim()) onFinal(text.trim());
+    };
+    rec.onerror = (e) => {
+      setListening(false);
+      onErr?.(e.error);
+    };
+    rec.onend = () => setListening(false);
+    recRef.current = rec;
+    try {
+      rec.start();
+      setListening(true);
+    } catch {
+    }
+  };
+  return { supported: !!SR, listening, toggle };
+}
+function MicButton({ accent, notify, onText }) {
+  const { supported, listening, toggle } = useSpeechToText(
+    (text) => onText(text),
+    (err) => notify?.(err === "not-allowed" || err === "service-not-allowed" ? "\u0420\u0430\u0437\u0440\u0435\u0448\u0438 \u0434\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0438\u043A\u0440\u043E\u0444\u043E\u043D\u0443 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u0431\u0440\u0430\u0443\u0437\u0435\u0440\u0430." : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435 \u0441\u0440\u0430\u0431\u043E\u0442\u0430\u043B")
+  );
+  return /* @__PURE__ */ jsx(
+    "button",
+    {
+      type: "button",
+      onClick: () => supported ? toggle() : notify?.("\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434 \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435."),
+      title: listening ? "\u041E\u0441\u0442\u0430\u043D\u043E\u0432\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C" : "\u0413\u043E\u043B\u043E\u0441\u043E\u0432\u043E\u0439 \u0432\u0432\u043E\u0434",
+      className: "shrink-0 flex items-center gap-1 px-2 h-6 rounded-full text-[10px] transition-all active:scale-90",
+      style: { background: listening ? `${LOSS}18` : `${accent}12`, color: listening ? LOSS : accent, border: `1px solid ${listening ? LOSS + "50" : accent + "30"}` },
+      children: [/* @__PURE__ */ jsx(Mic, { size: 11 }), listening ? "\u0417\u0430\u043F\u0438\u0441\u044C\u2026" : ""]
+    }
+  );
+}
 function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify, t }) {
   const [instrument, setInstrument] = useState("");
   const [direction, setDirection] = useState("Long");
@@ -3898,8 +3977,44 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
   const [point, setPoint] = useState({ x: null, y: null });
   const [pull, setPull] = useState("");
   const [screenshots, setScreenshots] = useState([]);
+  const [recognizing, setRecognizing] = useState(false);
   const fileInputRef = useRef(null);
+  const recognizeInputRef = useRef(null);
   const MAX_SHOTS = 4;
+  const handleRecognizeFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      notify(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
+      return;
+    }
+    if (screenshots.length >= MAX_SHOTS) {
+      notify(`\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
+      return;
+    }
+    setRecognizing(true);
+    try {
+      const dataUrl = await compressImageFile(file);
+      setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev);
+      const rec = await aiRecognizeTradeFromImage(dataUrl);
+      if (rec.asset) setInstrument(rec.asset);
+      if (rec.direction) setDirection(rec.direction);
+      if (rec.entryPrice != null) setEntryPrice(String(rec.entryPrice));
+      if (rec.stopLoss != null) setStopLoss(String(rec.stopLoss));
+      if (rec.takeProfit != null) setTakeProfit(String(rec.takeProfit));
+      if (rec.entryPrice != null && rec.stopLoss != null && rec.takeProfit != null) {
+        const check = computePlannedRR(rec.direction || direction, rec.entryPrice, rec.stopLoss, rec.takeProfit);
+        notify(check.ok ? "\u0421\u0434\u0435\u043B\u043A\u0430 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u0430 \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F" : "\u041F\u0440\u043E\u0432\u0435\u0440\u044C \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F");
+      } else {
+        notify("\u0421\u0434\u0435\u043B\u043A\u0430 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u0430 \u0447\u0430\u0441\u0442\u0438\u0447\u043D\u043E \u2014 \u0434\u043E\u0437\u0430\u043F\u043E\u043B\u043D\u0438 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u043E\u0435 \u0432\u0440\u0443\u0447\u043D\u0443\u044E");
+      }
+    } catch {
+      notify("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443. \u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0432\u0440\u0443\u0447\u043D\u0443\u044E.");
+    } finally {
+      setRecognizing(false);
+    }
+  };
   const plannedRRResult = useMemo(() => {
     const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
     if (entryPrice === "" || stopLoss === "" || takeProfit === "" || isNaN(en) || isNaN(sl) || isNaN(tp)) return { ok: false, error: null };
@@ -3981,6 +4096,23 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-x-8 lg:items-start", children: [
     /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsxs(
+        "button",
+        {
+          type: "button",
+          onClick: () => recognizeInputRef.current?.click(),
+          disabled: recognizing,
+          className: "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs transition-all active:scale-95",
+          style: { border: `1px solid ${accent}40`, color: accent, background: `${accent}0d`, opacity: recognizing ? 0.6 : 1, fontFamily: "'Space Grotesk', sans-serif" },
+          children: [
+            /* @__PURE__ */ jsx(Camera, { size: 13 }),
+            recognizing ? "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u043C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u2026" : "\u0420\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443 \u043F\u043E \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0443"
+          ]
+        }
+      ),
+      /* @__PURE__ */ jsx("input", { ref: recognizeInputRef, type: "file", accept: "image/*", onChange: handleRecognizeFile, className: "hidden" })
+    ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.instrument }),
@@ -4087,7 +4219,10 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
       /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setPull((prev) => prev ? `${prev} ${txt}` : txt) })
+      ] }),
       /* @__PURE__ */ jsx(
         "textarea",
         {
@@ -4272,7 +4407,10 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       /* @__PURE__ */ jsx("input", { ref: fileInputRef, type: "file", accept: "image/*", multiple: true, onChange: handleFiles, className: "hidden" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
+        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setLesson((prev) => prev ? `${prev} ${txt}` : txt) })
+      ] }),
       /* @__PURE__ */ jsx(
         "textarea",
         {
@@ -4474,7 +4612,10 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       /* @__PURE__ */ jsx(ShotRow, { list: screenshots, setList: setScreenshots, fileRef: entryFileRef, onFiles: makeHandleFiles(screenshots, setScreenshots) })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.pullQuestion }),
+        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setPull((prev) => prev ? `${prev} ${txt}` : txt) })
+      ] }),
       /* @__PURE__ */ jsx("textarea", { value: pull, onChange: (e) => setPull(e.target.value), rows: 2, placeholder: t.newEntry.pullPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
     ] })
     ] }),
@@ -4505,7 +4646,10 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       /* @__PURE__ */ jsx(ShotRow, { list: exitScreenshots, setList: setExitScreenshots, fileRef: exitFileRef, onFiles: makeHandleFiles(exitScreenshots, setExitScreenshots) })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-2", children: [
+        /* @__PURE__ */ jsx(L, { children: t.newEntry.lessonQuestion }),
+        /* @__PURE__ */ jsx(MicButton, { accent, notify, onText: (txt) => setLesson((prev) => prev ? `${prev} ${txt}` : txt) })
+      ] }),
       /* @__PURE__ */ jsx("textarea", { value: lesson, onChange: (e) => setLesson(e.target.value), rows: 2, placeholder: t.newEntry.lessonPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
     ] })
     ] })
@@ -5952,6 +6096,47 @@ USER_QUESTION:
 ${question}`;
   return aiCallGemini(prompt);
 }
+// ---- aiService.js: Vision (trade screenshot recognition) ----------------------
+// Reuses the same aiGeminiModel singleton — Gemini flash-lite is multimodal, no second
+// client/model is created. Called only from an explicit user action (NewEntry "Распознать").
+var AI_VISION_TRADE_TASK = `You are analyzing a screenshot of a trading platform or chart (TradingView,
+Binance, Bybit, or similar — light or dark theme, desktop or mobile). Extract ONLY information that is
+clearly and visibly present in the image: asset/instrument symbol, trade direction, entry price, stop
+loss, take profit. Do NOT guess, calculate, or infer any value not directly visible. If a field is
+missing, ambiguous, or poorly readable, its value must be null. Do not give trading advice or interpret
+future price scenarios. Return ONLY this JSON shape, no markdown fences, no commentary:
+{"asset":{"value":string|null,"confidence":0-1},"direction":{"value":"LONG"|"SHORT"|null,"confidence":0-1},"entryPrice":{"value":number|null,"confidence":0-1},"stopLoss":{"value":number|null,"confidence":0-1},"takeProfit":{"value":number|null,"confidence":0-1}}`;
+async function aiCallGeminiVision(prompt, base64Data, mimeType) {
+  const model = aiGetModel();
+  const result = await model.generateContent([
+    { text: prompt },
+    { inlineData: { mimeType, data: base64Data } }
+  ]);
+  const text = result?.response?.text?.();
+  if (!text || !text.trim()) throw new Error("ai_empty_response");
+  return text.trim();
+}
+async function aiRecognizeTradeFromImage(dataUrl) {
+  const m = /^data:(image\/[a-zA-Z]+);base64,(.+)$/.exec(dataUrl || "");
+  if (!m) throw new Error("ai_bad_image");
+  const raw = await aiCallGeminiVision(AI_VISION_TRADE_TASK, m[2], m[1]);
+  const cleaned = raw.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+  const val = (f) => parsed?.[f]?.value ?? null;
+  const num = (f) => {
+    const v = val(f);
+    return typeof v === "number" && isFinite(v) ? v : null;
+  };
+  const dir = val("direction");
+  const asset = val("asset");
+  return {
+    asset: typeof asset === "string" && asset.trim() ? asset.trim() : null,
+    direction: dir === "LONG" ? "Long" : dir === "SHORT" ? "Short" : null,
+    entryPrice: num("entryPrice"),
+    stopLoss: num("stopLoss"),
+    takeProfit: num("takeProfit")
+  };
+}
 
 // ============================================================================
 // ---- Adaptive Calibration Engine ---------------------------------------------
@@ -6371,7 +6556,23 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { height: "52vh", maxHeight: 560 }, children: [
-      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-1", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
+        /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
+        chatMessages.length > 0 && /* @__PURE__ */ jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setChatMessages([]);
+              setError("");
+            },
+            className: "flex items-center gap-1 text-[10px] transition-all active:scale-95",
+            style: { color: BASE.inkFaint },
+            title: t.coach.resetChat,
+            children: [/* @__PURE__ */ jsx(Trash2, { size: 11 }), t.coach.resetChat]
+          }
+        )
+      ] }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatDesc }) }),
       /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 min-h-0 overflow-y-auto mb-3 pr-1", children: [
         chatMessages.length === 0 && /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: quickQuestions.map((q, i) => /* @__PURE__ */ jsxs(
