@@ -1,3 +1,17 @@
+// mind.exe V4.1 — Home's "Инсайт" card is now Gemini-backed instead of purely local. New
+// aiFetchMarketSnapshot uses a separate getGenerativeModel() config with the Google Search
+// grounding tool (tools:[{googleSearch:{}}]) — same Firebase AI Logic client, not a second
+// integration — to read the real current market and return {moodLabel, summary, btcDominance,
+// sentimentScore, sentimentLabel}. Cached in Firestore per asset class (shared:true) for one hour
+// so every user trading the same asset class reads the same cached snapshot instead of each
+// triggering their own Gemini+Search call on every Home visit. Added a "Что ты торгуешь"
+// (crypto/forex/stocks) selector in Settings — persisted through the same profile save/load/
+// backup/reset paths as measureMode/currency — that both narrows the Gemini prompt's focus and
+// controls whether the BTC.D chip shows in Home's footer ticker (F&G/sentiment chip stays for all
+// asset classes as a general risk-sentiment read). Any fetch failure (unsupported tool, quota,
+// network, bad JSON) falls back to the last cached snapshot, then silently to the previous
+// local-only insight/static BTC_DOMINANCE/FEAR_GREED constants — nothing breaks if a user hasn't
+// picked an asset class yet or Gemini/grounding is unavailable.
 // mind.exe V4.0 — two fixes. (1) PickerField (instrument/setup-type dropdowns in NewEntry/
 // EditTrade) had no click-outside handling, so opening a second field left the first one open
 // underneath it — both stayed open at once, and tapping anywhere else on the screen did nothing.
@@ -495,6 +509,11 @@ var STRINGS = {
       languageNote: "\u041C\u0435\u043D\u044F\u0435\u0442 \u044F\u0437\u044B\u043A \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430. \u0417\u0430\u043F\u0438\u0441\u0438 \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 \u043E\u0441\u0442\u0430\u043D\u0443\u0442\u0441\u044F \u0442\u0430\u043A\u0438\u043C\u0438, \u043A\u0430\u043A \u0442\u044B \u0438\u0445 \u043D\u0430\u043F\u0438\u0441\u0430\u043B.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
       english: "English",
+      tradingAssetLabel: "\u0427\u0442\u043E \u0442\u044B \u0442\u043E\u0440\u0433\u0443\u0435\u0448\u044C",
+      tradingAssetCrypto: "\u041A\u0440\u0438\u043F\u0442\u0430",
+      tradingAssetForex: "\u0412\u0430\u043B\u044E\u0442\u0430",
+      tradingAssetStocks: "\u0410\u043A\u0446\u0438\u0438",
+      tradingAssetNote: "\u0412\u043B\u0438\u044F\u0435\u0442 \u043D\u0430 \u0442\u043E, \u043A\u0430\u043A\u043E\u0439 \u0440\u044B\u043D\u043E\u043A \u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u0418\u0418 \u0434\u043B\u044F \u0438\u043D\u0441\u0430\u0439\u0442\u0430 \u043D\u0430 \u0413\u043B\u0430\u0432\u043D\u043E\u0439.",
       account: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442",
       logout: "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430",
       localAccountNote: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0447\u0435\u0440\u0435\u0437 \u043E\u0431\u043B\u0430\u043A\u043E \u0438 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u0441 \u043B\u044E\u0431\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043F\u043E\u0441\u043B\u0435 \u0432\u0445\u043E\u0434\u0430.",
@@ -745,6 +764,11 @@ var STRINGS = {
       languageNote: "Changes the interface language. Your journal entries stay exactly as you wrote them.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
       english: "English",
+      tradingAssetLabel: "What you trade",
+      tradingAssetCrypto: "Crypto",
+      tradingAssetForex: "Forex",
+      tradingAssetStocks: "Stocks",
+      tradingAssetNote: "Controls which market the AI insight on Home analyzes.",
       account: "Account",
       logout: "Log out",
       localAccountNote: "Account syncs to the cloud and is available from any device after logging in.",
@@ -3496,9 +3520,24 @@ function Sparkline({ points, color, width = 68, height = 26 }) {
   const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
   return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
 }
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }) {
+function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
+  const [marketSnapshot, setMarketSnapshot] = useState(null);
+  useEffect(() => {
+    if (!tradingAsset) {
+      setMarketSnapshot(null);
+      return;
+    }
+    let cancelled = false;
+    getMarketSnapshot(tradingAsset, lang).then((snap) => {
+      if (!cancelled && snap) setMarketSnapshot(snap);
+    }).catch(() => {
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [tradingAsset, lang]);
   const closedEntries = useMemo(() => entries.filter(isEntryClosed), [entries]);
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const calibratedToday = lastCalibration && isToday(lastCalibration.date);
@@ -3508,7 +3547,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const riskStabilityScore = analytics.risk.stability.value;
   const level = calculateTraderLevel(total);
   const { streak, week } = useStreak(entries, lang);
-  const moodKey = consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive;
+  const moodKey = marketSnapshot?.moodLabel || (consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive);
   const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
   const cumResult = withR.reduce((s, e) => s + e.r, 0);
   const heroTarget = measureMode === "currency" ? startingCapital + cumResult : cumResult;
@@ -3579,7 +3618,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         /* @__PURE__ */ jsx("span", { style: { color: accent }, children: moodKey }),
         ".",
         " ",
-        total >= 4 ? t.home.insightConfident : t.home.insightFocus
+        marketSnapshot?.summary || (total >= 4 ? t.home.insightConfident : t.home.insightFocus)
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
@@ -3706,19 +3745,19 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     )) })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
-      /* @__PURE__ */ jsxs("span", { children: [
+      (!tradingAsset || tradingAsset === "crypto") && /* @__PURE__ */ jsxs("span", { children: [
         "BTC.D ",
         /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink }, children: [
-          BTC_DOMINANCE,
+          marketSnapshot?.btcDominance ?? BTC_DOMINANCE,
           "%"
         ] })
       ] }),
       /* @__PURE__ */ jsxs("span", { children: [
         "F&G ",
         /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink }, children: [
-          FEAR_GREED.score,
+          marketSnapshot?.sentimentScore ?? FEAR_GREED.score,
           " \xB7 ",
-          FEAR_GREED.label
+          marketSnapshot?.sentimentLabel || FEAR_GREED.label
         ] })
       ] }),
       /* @__PURE__ */ jsxs("span", { style: { fontFamily: "'Space Grotesk', sans-serif" }, children: [
@@ -6301,6 +6340,88 @@ async function aiRecognizeTradeFromImage(dataUrl) {
     takeProfit: num("takeProfit")
   };
 }
+// ---- aiService.js: Market snapshot (hourly, Google Search-grounded) -----------
+// Separate model instance from aiGetModel(): the journal-analysis model's system instruction
+// explicitly forbids inventing facts not present in the user's own data, which is the right rule
+// for coaching but wrong here — this one needs to go out and read the actual current market via
+// Gemini's Google Search grounding tool. Same aiLogic/Firebase AI Logic client, same Gemini
+// Developer API key setup, just a different getGenerativeModel() config — not a second AI
+// integration. Result is cached in Firestore (storageGet/storageSet, shared:true) once per hour
+// PER ASSET CLASS, not per user — everyone trading the same asset class reads the same cached
+// snapshot for that hour instead of triggering a fresh Gemini+Search call each time someone opens
+// the Home tab. Any failure (unsupported tool, quota, network, bad JSON) falls back to the last
+// cached snapshot, then to null — the Home screen already has its own local-only fallback text for
+// that case, so nothing breaks if this never succeeds.
+var aiMarketModel = null;
+function aiGetMarketModel() {
+  if (!aiMarketModel) {
+    aiMarketModel = getGenerativeModel(aiLogic, {
+      model: AI_MODEL,
+      tools: [{ googleSearch: {} }],
+      generationConfig: { temperature: 0.3, maxOutputTokens: 400 }
+    });
+  }
+  return aiMarketModel;
+}
+function marketFocusText(assetClass) {
+  if (assetClass === "forex") return "the FX/forex market \u2014 DXY direction, major pairs, central bank policy and macro data releases that could move currencies in the next few hours";
+  if (assetClass === "stocks") return "the stock market \u2014 major indices, macro catalysts, earnings or data releases that could move equities in the next few hours";
+  return "the crypto market (BTC, ETH and majors) \u2014 price action, the dominant narrative, and anything that could move prices in the next few hours";
+}
+async function aiFetchMarketSnapshot(assetClass, lang) {
+  const model = aiGetMarketModel();
+  const langName = lang === "en" ? "English" : "Russian";
+  const prompt = `Using current, real information from the web, summarize ${marketFocusText(assetClass)} right now.
+Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
+{"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 concise sentences in ${langName}>","btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
+  const result = await model.generateContent(prompt);
+  const text = result?.response?.text?.();
+  if (!text || !text.trim()) throw new Error("ai_empty_response");
+  const cleaned = text.replace(/```json|```/g, "").trim();
+  const parsed = JSON.parse(cleaned);
+  const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
+  return {
+    moodLabel: typeof parsed.moodLabel === "string" && parsed.moodLabel.trim() ? parsed.moodLabel.trim() : null,
+    summary: typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : null,
+    btcDominance: num(parsed.btcDominance),
+    sentimentScore: num(parsed.sentimentScore),
+    sentimentLabel: typeof parsed.sentimentLabel === "string" && parsed.sentimentLabel.trim() ? parsed.sentimentLabel.trim() : null
+  };
+}
+function marketHourBucket() {
+  return Math.floor(Date.now() / 36e5);
+}
+function marketSnapshotKey(assetClass) {
+  return `market-snapshot:${assetClass}`;
+}
+async function loadCachedMarketSnapshot(assetClass) {
+  try {
+    const res = await storageGet(marketSnapshotKey(assetClass), true);
+    return res?.value ? JSON.parse(res.value) : null;
+  } catch {
+    return null;
+  }
+}
+async function saveCachedMarketSnapshot(assetClass, snapshot) {
+  try {
+    await storageSet(marketSnapshotKey(assetClass), JSON.stringify(snapshot), true);
+  } catch {
+  }
+}
+async function getMarketSnapshot(assetClass, lang) {
+  if (!assetClass) return null;
+  const bucket = marketHourBucket();
+  const cached = await loadCachedMarketSnapshot(assetClass);
+  if (cached && cached.hourBucket === bucket) return cached;
+  try {
+    const fresh = await aiFetchMarketSnapshot(assetClass, lang);
+    const withBucket = { ...fresh, hourBucket: bucket };
+    saveCachedMarketSnapshot(assetClass, withBucket);
+    return withBucket;
+  } catch {
+    return cached || null;
+  }
+}
 
 // ============================================================================
 // ---- Adaptive Calibration Engine ---------------------------------------------
@@ -7315,6 +7436,8 @@ function Settings({
   setMeasureMode,
   currency,
   setCurrency,
+  tradingAsset,
+  setTradingAsset,
   startingCapital,
   setStartingCapital,
   username,
@@ -7350,6 +7473,24 @@ function Settings({
         l.id
       )) }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.languageNote })
+    ] }),
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.tradingAssetLabel }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2 flex-wrap", children: [
+        { id: "crypto", label: t.settings.tradingAssetCrypto },
+        { id: "forex", label: t.settings.tradingAssetForex },
+        { id: "stocks", label: t.settings.tradingAssetStocks }
+      ].map((o) => /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: () => setTradingAsset(o.id),
+          className: "px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+          style: { background: tradingAsset === o.id ? `${accent}12` : "transparent", color: tradingAsset === o.id ? accent : BASE.inkDim, border: `1px solid ${tradingAsset === o.id ? accent + "40" : BASE.line}` },
+          children: o.label
+        },
+        o.id
+      )) }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.tradingAssetNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.account }),
@@ -8220,6 +8361,7 @@ function MindExe() {
   const [lang, setLang] = useState("ru");
   const [measureMode, setMeasureMode] = useState("R");
   const [currency, setCurrency] = useState("USD");
+  const [tradingAsset, setTradingAsset] = useState(null);
   const [startingCapital, setStartingCapital] = useState(1e3);
   const [customInstruments, setCustomInstruments] = useState([]);
   const [customTags, setCustomTags] = useState([]);
@@ -8251,6 +8393,7 @@ function MindExe() {
     setWeeklyGoal(5);
     setMeasureMode("R");
     setCurrency("USD");
+    setTradingAsset(null);
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -8339,6 +8482,7 @@ function MindExe() {
           if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
           if (settings.measureMode) setMeasureMode(settings.measureMode);
           if (settings.currency) setCurrency(settings.currency);
+          if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
           if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
           if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
           if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
@@ -8362,7 +8506,7 @@ function MindExe() {
     };
   }, [authStatus, userId, migrateFor]);
   const buildPayload = (overrides = {}) => {
-    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
+    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
     return {
       version: SCHEMA_VERSION,
       user: { name: src.name, anonId },
@@ -8376,6 +8520,7 @@ function MindExe() {
         lang: src.lang,
         measureMode: src.measureMode,
         currency: src.currency,
+        tradingAsset: src.tradingAsset,
         startingCapital: src.startingCapital,
         customInstruments: src.customInstruments,
         customTags: src.customTags
@@ -8402,7 +8547,7 @@ function MindExe() {
   useEffect(() => {
     if (!loaded || authStatus !== "authenticated" || !userId) return;
     persistNow();
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => {
     if (!loaded || authStatus !== "authenticated" || !userId) return;
     const flush = () => {
@@ -8414,7 +8559,7 @@ function MindExe() {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
     };
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
   const showToast = (text) => {
     setToast(text);
@@ -8537,6 +8682,7 @@ function MindExe() {
         if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
         if (settings.measureMode) setMeasureMode(settings.measureMode);
         if (settings.currency) setCurrency(settings.currency);
+        if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
         if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
         if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
         if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
@@ -8553,6 +8699,7 @@ function MindExe() {
           lang: settings.lang ?? lang,
           measureMode: settings.measureMode ?? measureMode,
           currency: settings.currency ?? currency,
+          tradingAsset: settings.tradingAsset ?? tradingAsset,
           startingCapital: settings.startingCapital ?? startingCapital,
           customInstruments: settings.customInstruments ?? customInstruments,
           customTags: settings.customTags ?? customTags,
@@ -8600,6 +8747,7 @@ function MindExe() {
     setLang("ru");
     setMeasureMode("R");
     setCurrency("USD");
+    setTradingAsset(null);
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -8793,7 +8941,7 @@ function MindExe() {
           }
         ),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang }),
+          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
@@ -8898,6 +9046,8 @@ function MindExe() {
               setMeasureMode,
               currency,
               setCurrency,
+              tradingAsset,
+              setTradingAsset,
               startingCapital,
               setStartingCapital,
               username: authUser?.username,
