@@ -95,6 +95,12 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="module" src="./app.js"></script>
+  <!-- V5.8: added a ?v= cache-buster. Without it, a browser (especially an iOS PWA added to the
+       home screen) can keep serving a previously cached app.js indefinitely after a new version is
+       uploaded to the same path — every fix in a release can be silently invisible even though the
+       file on the server is correct. Bump this number on every new app.js version; the query string
+       is otherwise ignored by the server, it only exists to change the URL so the browser treats it
+       as a different resource and re-fetches. -->
+  <script type="module" src="./app.js?v=5.8"></script>
 </body>
 </html>

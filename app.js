@@ -1,3 +1,25 @@
+// mind.exe V5.8 \u2014 fixes two "nothing changed after update" causes: a same-day calibration
+// cache with no schema check, and index.html serving app.js with no cache-busting query.
+// index.html DOES change this version \u2014 deploy the paired V5.8 index.html (still the same full
+// importmap as V5.3) alongside this file and splash.mp4.
+//
+// 1) CALIBRATION CACHE HAD NO SCHEMA CHECK. prepareAndStart's same-day cache validity check only
+//    verified `options` was a non-empty array \u2014 it never checked whether that array's CONTENT
+//    matched the current question/scale format. A record saved earlier the same day, before
+//    V5.7's per-question scaleType existed, still has a perfectly well-formed non-empty `options`
+//    array, so it passed the check and got replayed verbatim for the rest of that day regardless
+//    of what changed in the code \u2014 this is why the V5.7 calibration fix could look like it had no
+//    effect during same-day testing. Every cached record now carries `schema: CALIBRATION_CACHE_SCHEMA`
+//    (bumped to 2 for the V5.7 scale-set change); a missing or mismatched schema is now treated as
+//    a cache miss, same as a malformed record already was.
+// 2) INDEX.HTML HAD NO CACHE-BUSTING ON app.js. `<script src="./app.js">` never changes its own
+//    URL between versions, so a browser \u2014 especially an iOS PWA added to the home screen, which
+//    caches far more aggressively than a normal tab \u2014 can keep serving a previously fetched
+//    app.js indefinitely after a new one is uploaded to the same path. This affects EVERY past
+//    version, not just calibration: any fix could be invisible until a hard reload happened to
+//    clear the cache. index.html now loads `./app.js?v=5.8`; bump that number on every future
+//    version so the URL actually changes and the browser is forced to re-fetch.
+//
 // mind.exe V5.7 \u2014 calibration answer options fitted to question shape, exit emotion grid
 // redesigned around reaction-to-result, remaining scrollbars hidden.
 // index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
@@ -6111,6 +6133,11 @@ function CalibrationRing({ pct, color, size = 172 }) {
     ] })
   ] });
 }
+// Bump this whenever the shape of a stored calibration record (its questions/options) changes, so
+// a same-day cache written by an older build is treated as a miss instead of being replayed
+// unchanged for the rest of the day. V5.8: bumped for CALIBRATION_SCALE_SETS (readiness/
+// confidence/calm/impact) replacing the single hardcoded yes/no scale.
+var CALIBRATION_CACHE_SCHEMA = 2;
 function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }) {
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
@@ -6134,7 +6161,15 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
       // Guard against a same-day cache record saved by an older version of this code path that
       // didn't persist `options` (would otherwise crash the quiz render on `q.options.map`).
       // Any such stale/malformed record is treated as a cache miss and a fresh set is generated.
-      const cachedValid = cached && Array.isArray(cached.questions) && cached.questions.length && cached.questions.every((qq) => Array.isArray(qq.options) && qq.options.length);
+      //
+      // V5.8: also guard against a schema MISMATCH, not just missing options. A record written
+      // before scaleType existed (or before any future calibration format change) still has a
+      // perfectly well-formed, non-empty `options` array \u2014 it would pass the check above and
+      // get replayed verbatim for the rest of that day, silently hiding whatever changed in the
+      // question/scale logic until the cache ages out tomorrow. Every record now carries the
+      // schema it was generated under; a mismatch (including a record with none at all) is a
+      // cache miss, same as a malformed one.
+      const cachedValid = cached && cached.schema === CALIBRATION_CACHE_SCHEMA && Array.isArray(cached.questions) && cached.questions.length && cached.questions.every((qq) => Array.isArray(qq.options) && qq.options.length);
       if (cachedValid) {
         setQuestions(cached.questions);
         setAdaptiveActive(cached.questions.some((qq) => qq.category === "adaptive"));
@@ -6174,6 +6209,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
         onComplete({ pct: r.pct, tierColor: r.tier.color, date: (/* @__PURE__ */ new Date()).toISOString(), riskFactors: r.riskFactors });
         const record = {
           date: (/* @__PURE__ */ new Date()).toISOString(),
+          schema: CALIBRATION_CACHE_SCHEMA,
           questions: questions.map((qq) => ({ id: qq.id, text: qq.text, factor: qq.factor || null, category: qq.category, source: qq.source, options: qq.options })),
           answers: next,
           pct: r.pct,
