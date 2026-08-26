@@ -1,3 +1,54 @@
+// mind.exe V5.5 \u2014 adds the missing half of the emotional loop: state AFTER the trade.
+// index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
+//
+// WHAT WAS MISSING: the journal recorded how the trader felt at ENTRY (x/y) but nothing at EXIT, so
+// no part of the app \u2014 analytics, psychology or Gemini \u2014 could see how a trader reacts to their
+// own result. Two new optional fields, exitX/exitY, on the same axes as x/y
+// (x = fear 0 .. confidence 100, y = on edge 0 .. calm 100).
+//   \u2022 CloseTrade: an EmotionGrid under the lesson field. Deliberately NOT required to save \u2014
+//     forcing it would make people tap something arbitrary to close a trade, which is worse data
+//     than a null.
+//   \u2022 EditTrade: the same pad, prefilled, so trades closed before this existed can be completed.
+//   \u2022 Log: the expanded EXIT block now shows "state before \u2192 state after" in the same words the
+//     trader saw on the pad (emotionStateText, extracted from EmotionGrid so there is one wording).
+//   \u2022 Persistence: buildPayload spreads ...rest and load spreads ...e, so the fields round-trip
+//     through Firestore with no schema change; migrateEntry normalises them to null, and JSON
+//     import/export carry them.
+//   \u2022 analytics.emotionalShift (new emotionalShiftAnalysis): the SHIFT between the two points,
+//     split by outcome and by close type, plus wins that still end with low calm and losses taken
+//     calmly. Needs both points on the same trade; reports its own sample and coverage and returns
+//     available:false rather than guessing.
+//   \u2022 Gemini: stateAfter on every compact trade, emotionalShift in the context, after-state on
+//     early exits in exitBehavior, and the insight prompt now names these as sources of links.
+//   \u2022 Awareness: new component stateAfterTracking (weight 0.08). It is null \u2014 not 0 \u2014 until the
+//     trader has recorded the after-state at least 3 times, and the V5.4 renormalisation excludes
+//     null components, so every existing journal scores exactly as it did before.
+//
+// ---- V5.4 (still in force) ------------------------------------------------------------------
+// 1) TRADER LEVEL. Was `min(9, 3 + floor(entriesCount/3))`: a brand-new empty account showed level
+//    3 and every third entry bumped it regardless of how the trade went. Now
+//    calculateTraderLevel(entries, analytics): an experience CAP from closed-trade count (0 closed
+//    trades => level 1, always) and, inside that cap, a weighted behaviour score from awareness,
+//    discipline, risk stability, reflection, journal completeness and adherence to the trader's own
+//    plan. PnL is deliberately not an input.
+// 2) AWARENESS. Was 55% on an empty journal and substituted the constant 50 for every component it
+//    could not compute, so one entry produced ~50%. Now: uncomputable components are EXCLUDED and
+//    the remaining weights renormalised; the result is multiplied by an evidence ramp (closed +
+//    fully filled-in trades, target 40) so it grows gradually; a repeated-lesson brake stops the
+//    score drifting up on usage alone. Empty account => 0%. rawScore (pre-ramp) drives the trend.
+// 3) GEMINI. Context gained exitBehavior (TP reached vs SL respected vs manual, early-exit count,
+//    RR actually lost to early exits), afterStreakBehavior (risk change and manual-close share
+//    after two wins / two losses), holdTime, a journal digest, the calibration stated-vs-actual
+//    comparison, the app's own grounded insights, and recentClosedSequence. The tasks and system
+//    instruction require a link between fields with a named number, ban universal advice outright,
+//    and make "not enough data yet" an explicitly preferred answer.
+// 4) HOME. Awareness now starts at 0, so the mood fallback no longer labels a trader with no
+//    history as "Reactive"; the generic insight sentence is used only after the market snapshot and
+//    the app's own fact-based insights have been tried.
+// 5) SCROLL. overflow-x:auto with overflow-y:visible forces overflow-y to auto per spec \u2014 the
+//    filter/screenshot/leverage strips were each a few-pixel-tall nested VERTICAL scroll container,
+//    which is what made them jump when a pill was held and dragged. New .hscroll pins
+//    overflow-y:hidden, contains overscroll, keeps touch scrolling, hides the scrollbar.
 // mind.exe V5.3 \u2014 fixes the black screen introduced by V5.1.
 // CAUSE: the V5.1 index.html was rebuilt from the wrong source file \u2014 the project directory held
 // Market Sandbox's index.html, not mind.exe's. That file has no importmap entries for recharts or
@@ -670,6 +721,10 @@ var STRINGS = {
       lessonQuestion: "\u0427\u0442\u043E \u0431\u044B \u0442\u044B \u0441\u043A\u0430\u0437\u0430\u043B \u0441\u0435\u0431\u0435 \u0432 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437?",
       lessonPlaceholder: "\u041E\u0434\u043D\u0430 \u0444\u0440\u0430\u0437\u0430, \u043A\u043E\u0442\u043E\u0440\u0443\u044E \u0442\u044B \u043F\u0440\u0430\u0432\u0434\u0430 \u0437\u0430\u043F\u043E\u043C\u043D\u0438\u0448\u044C.",
       emotionQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0432 \u043C\u043E\u043C\u0435\u043D\u0442 \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0434\u0435\u043B\u043A\u0443?",
+      emotionExitQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0441\u0440\u0430\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F?",
+      emotionExitOptional: "\u041C\u043E\u0436\u043D\u043E \u043F\u0440\u043E\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u2014 \u043D\u043E \u0438\u043C\u0435\u043D\u043D\u043E \u0440\u0430\u0437\u043D\u0438\u0446\u0430 \u0434\u043E/\u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0440\u0435\u0430\u043A\u0446\u0438\u044E \u043D\u0430 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442.",
+      stateBeforeLabel: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0434\u043E",
+      stateAfterLabel: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043F\u043E\u0441\u043B\u0435",
       save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C",
       emotionGrid: {
         axisTop: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
@@ -926,6 +981,10 @@ var STRINGS = {
       lessonQuestion: "What would you tell yourself next time?",
       lessonPlaceholder: "One line you'll actually remember.",
       emotionQuestion: "What did you feel the moment you entered?",
+      emotionExitQuestion: "What did you feel right after closing?",
+      emotionExitOptional: "Optional \u2014 but the before/after gap is what shows your reaction to the result.",
+      stateBeforeLabel: "State before",
+      stateAfterLabel: "State after",
       save: "Save entry",
       emotionGrid: {
         axisTop: "On edge",
@@ -1131,6 +1190,12 @@ function migrateEntry(e) {
     plannedRR: typeof e.plannedRR === "number" && !isNaN(e.plannedRR) ? e.plannedRR : null,
     closeType: ["tp", "sl", "manual"].includes(e.closeType) ? e.closeType : null,
     realizedRR: typeof e.realizedRR === "number" && !isNaN(e.realizedRR) ? e.realizedRR : null,
+    // V5.5: state AFTER the trade closed. Same axes as x/y (the entry-mood pad): exitX =
+    // fear(0)..confidence(100), exitY = on edge(0)..calm(100). Optional \u2014 stays null on every
+    // pre-V5.5 entry and on any close where the trader skipped it, and every consumer must handle
+    // null rather than assume it is present.
+    exitX: typeof e.exitX === "number" && !isNaN(e.exitX) ? e.exitX : null,
+    exitY: typeof e.exitY === "number" && !isNaN(e.exitY) ? e.exitY : null,
     exitScreenshots: Array.isArray(e.exitScreenshots) ? e.exitScreenshots : []
   };
 }
@@ -1221,8 +1286,69 @@ function useIsDesktop(breakpoint = 900) {
   }, [breakpoint]);
   return isDesktop;
 }
-function calculateTraderLevel(entriesCount) {
-  return Math.min(9, 3 + Math.floor(entriesCount / 3));
+// V5.4: the level used to be `3 + floor(entriesCount / 3)`, so a brand-new account with an empty
+// journal already displayed level 3 and every third entry bumped it regardless of HOW the trader
+// behaved. Level is now (a) hard-capped by how much real closed history exists — an empty account
+// is level 1, always — and (b) inside that cap driven by a behavioural quality score, never by PnL.
+// Signature changed from (entriesCount) to (entries, analytics); both call sites are updated.
+var TRADER_LEVEL_WEIGHTS = {
+  awareness: 0.22,
+  discipline: 0.2,
+  riskStability: 0.16,
+  reflection: 0.16,
+  journalCompleteness: 0.14,
+  planAdherence: 0.12
+};
+function tl_journalCompleteness(closedEntries) {
+  if (!closedEntries.length) return null;
+  const scored = closedEntries.map((e) => {
+    let f = 0;
+    if (e.x != null && e.y != null) f++;
+    if (e.pull && e.pull !== "\u2014") f++;
+    if (e.lesson && e.lesson !== "\u2014") f++;
+    if (typeof e.r === "number" && !isNaN(e.r)) f++;
+    if (typeof e.plannedRR === "number" && !isNaN(e.plannedRR)) f++;
+    return f / 5 * 100;
+  });
+  return st_mean(scored);
+}
+// "Did the trader execute their own plan?" — measured only on trades that actually HAVE a plan
+// (entry/SL/TP were filled in), so trades journalled without a plan neither help nor hurt.
+function tl_planAdherence(closedEntries) {
+  const planned = closedEntries.filter((e) => typeof e.plannedRR === "number" && e.plannedRR > 0 && typeof e.realizedRR === "number" && !isNaN(e.realizedRR));
+  if (planned.length < 3) return null;
+  const captures = planned.map((e) => {
+    if (e.realizedRR <= -1.05) return 0;
+    return Math.max(0, Math.min(1, e.realizedRR / e.plannedRR));
+  });
+  const respectedSL = closedEntries.filter((e) => e.closeType === "sl" || typeof e.realizedRR !== "number" || e.realizedRR >= -1.05).length / closedEntries.length;
+  return Math.max(0, Math.min(100, (st_mean(captures) * 0.6 + respectedSL * 0.4) * 100));
+}
+function calculateTraderLevel(entries, analytics) {
+  const list = Array.isArray(entries) ? entries : [];
+  const closed = list.filter(isEntryClosed);
+  const closedN = closed.length;
+  if (closedN === 0) return 1;
+  // Experience gate: no amount of good behaviour can push the level past what the sample supports.
+  const cap = Math.min(9, 1 + Math.floor(closedN / 5));
+  const parts = {
+    awareness: analytics?.awareness?.score?.value ?? null,
+    discipline: analytics?.discipline?.score?.value ?? null,
+    riskStability: analytics?.risk?.stability?.value ?? null,
+    reflection: analytics?.reflection?.score?.value ?? null,
+    journalCompleteness: tl_journalCompleteness(closed),
+    planAdherence: tl_planAdherence(closed)
+  };
+  let sum = 0, wsum = 0;
+  Object.entries(TRADER_LEVEL_WEIGHTS).forEach(([k, w]) => {
+    if (parts[k] == null || isNaN(parts[k])) return;
+    sum += parts[k] * w;
+    wsum += w;
+  });
+  if (wsum <= 0) return 1;
+  const quality = Math.max(0, Math.min(100, sum / wsum));
+  const earned = 1 + Math.round(quality / 100 * 8);
+  return Math.max(1, Math.min(cap, earned));
 }
 function calculateCalendarStats(dayEntries, closedDayEntries) {
   if (!dayEntries.length) return null;
@@ -2205,6 +2331,58 @@ function emotionalAnalysis(entries) {
   const worstState = ranked.length ? ranked.reduce((a, b) => b.medianR < a.medianR ? b : a) : null;
   return { average, volatility, zones, bestState, worstState, confidence: ta_confidence(complete.length) };
 }
+// V5.5 \u2014 exit-state analysis. The entry mood (x/y) was already tracked; exitX/exitY closes the
+// loop, so the interesting quantity is the SHIFT between them and how it depends on the outcome and
+// on how the trade was closed. Everything here needs both points on the same trade, so it reports
+// its own sample and returns nulls rather than guessing when a group is too thin. Nothing else in
+// the engine depends on this \u2014 scores, patterns and levels are unchanged by it \u2014 it is an added
+// read-only view fed to the UI and to Gemini.
+var EMOTION_SHIFT_MIN_GROUP = 3;
+function es_shiftStats(group) {
+  if (group.length < EMOTION_SHIFT_MIN_GROUP) return null;
+  return {
+    sample: group.length,
+    confidenceShift: Math.round(st_mean(group.map((e) => e.exitX - e.x))),
+    calmShift: Math.round(st_mean(group.map((e) => e.exitY - e.y))),
+    avgCalmAfter: Math.round(st_mean(group.map((e) => e.exitY))),
+    avgConfidenceAfter: Math.round(st_mean(group.map((e) => e.exitX)))
+  };
+}
+function emotionalShiftAnalysis(closedEntries) {
+  const both = (closedEntries || []).filter(
+    (e) => e.x != null && e.y != null && e.exitX != null && e.exitY != null
+  );
+  const coverage = closedEntries && closedEntries.length ? Math.round(both.length / closedEntries.length * 100) : null;
+  if (both.length < EMOTION_SHIFT_MIN_GROUP) {
+    return { available: false, sample: both.length, coveragePct: coverage, confidence: "insufficient" };
+  }
+  const byOutcome = {
+    win: es_shiftStats(both.filter((e) => e.outcome === "Win")),
+    loss: es_shiftStats(both.filter((e) => e.outcome === "Loss")),
+    breakeven: es_shiftStats(both.filter((e) => e.outcome === "Breakeven"))
+  };
+  const byCloseType = {
+    tp: es_shiftStats(both.filter((e) => e.closeType === "tp")),
+    sl: es_shiftStats(both.filter((e) => e.closeType === "sl")),
+    manual: es_shiftStats(both.filter((e) => e.closeType === "manual"))
+  };
+  // A win that still leaves the trader rattled is a different signal from a win that settles them.
+  const winsUncalm = both.filter((e) => e.outcome === "Win" && e.exitY < 40);
+  const lossesCalm = both.filter((e) => e.outcome === "Loss" && e.exitY >= 60);
+  return {
+    available: true,
+    sample: both.length,
+    coveragePct: coverage,
+    overall: es_shiftStats(both),
+    byOutcome,
+    byCloseType,
+    winsEndingUncalmCount: winsUncalm.length,
+    winsEndingUncalmPct: byOutcome.win ? Math.round(winsUncalm.length / byOutcome.win.sample * 100) : null,
+    lossesEndingCalmCount: lossesCalm.length,
+    lossesEndingCalmPct: byOutcome.loss ? Math.round(lossesCalm.length / byOutcome.loss.sample * 100) : null,
+    confidence: ta_confidence(both.length, { low: 5, moderate: 15, high: 25 })
+  };
+}
 function riskAnalysis(sortedEntries) {
   const withR = sortedEntries.filter((t) => typeof t.r === "number" && !isNaN(t.r));
   if (withR.length < 5) {
@@ -2337,26 +2515,74 @@ var AWARENESS_WEIGHTS = {
   behavioralConsistency: 0.15,
   reflectionQuality: 0.2,
   patternRecognition: 0.15,
-  processDiscipline: 0.15
+  processDiscipline: 0.15,
+  // V5.5. Safe to add BECAUSE of the V5.4 rewrite: a component that cannot be computed is excluded
+  // and the remaining weights are renormalised, so for every journal where the after-state was
+  // never recorded this evaluates to null and the awareness score is bit-for-bit what it was
+  // before. It only starts counting once the trader actually closes the loop on their own state.
+  stateAfterTracking: 0.08
 };
+// V5.4 rewrite. Three concrete problems with the old version:
+//   1. An empty journal returned 55% — a brand-new account was shown a score it had not earned.
+//   2. Every component that could not be computed yet was substituted with the constant 50, so a
+//      single entry produced ~50% out of essentially nothing. That is the "1 запись = 30%" jump.
+//   3. Nothing braked the score when the trader kept repeating the same mistake — patternRecognition
+//      was diluted to 1/6 of the total and the other five components kept drifting up with use.
+// Now: unavailable components are EXCLUDED and the remaining weights are renormalised (never
+// faked with 50); the renormalised value is then multiplied by an evidence ramp so the score grows
+// gradually with real, complete history instead of jumping; and repeated mistakes apply a direct
+// multiplicative brake. rawScore (pre-ramp) is returned separately so trend comparison between two
+// short windows stays meaningful — the ramp would otherwise flatten both windows to near zero.
+var AWARENESS_EVIDENCE_TARGET = 40;
 function awarenessAnalysis(entries, closedEntries, reflection, risk, discipline) {
-  const n = entries.length;
-  if (!n) return { score: ta_metric(55, 0), components: null };
-  const closedN = (closedEntries || []).length;
-  const selfObservation = closedN ? closedEntries.filter(
-    (e) => e.x != null && e.y != null && e.pull && e.pull !== "\u2014" && e.lesson && e.lesson !== "\u2014"
-  ).length / closedN * 100 : 50;
-  const emotionalAwareness = entries.filter((e) => e.x != null && e.y != null).length / n * 100;
-  const behavioralConsistency = risk.stability.value != null ? risk.stability.value : 50;
-  const reflectionQuality = reflection.score.value != null ? reflection.score.value : 50;
+  const n = (entries || []).length;
+  const closed = closedEntries || [];
+  const closedN = closed.length;
+  if (!n) return { score: ta_metric(0, 0), rawScore: null, components: null, evidence: 0 };
+  const emotionTagged = entries.filter((e) => e.x != null && e.y != null).length;
   const withLessons = entries.filter((e) => e.lesson && e.lesson !== "\u2014" && e.lesson.trim().length > 3).length;
-  const repeatedCount = reflection.repeatedLessons.reduce((s, c) => s + c.count, 0);
-  const patternRecognition = withLessons ? Math.max(0, 100 - repeatedCount / withLessons * 100) : 50;
-  const processDiscipline = discipline.score.value != null ? discipline.score.value : 50;
-  const components = { selfObservation, emotionalAwareness, behavioralConsistency, reflectionQuality, patternRecognition, processDiscipline };
-  const raw = Object.entries(AWARENESS_WEIGHTS).reduce((s, [k, w]) => s + (components[k] ?? 50) * w, 0);
-  const score = Math.round(Math.max(0, Math.min(100, raw)));
-  return { score: ta_metric(score, n), components };
+  const repeatedCount = (reflection.repeatedLessons || []).reduce((s, c) => s + c.count, 0);
+  const components = {
+    // Requires closed trades — an open trade has no lesson yet, so it cannot be judged.
+    selfObservation: closedN >= 1 ? closed.filter(
+      (e) => e.x != null && e.y != null && e.pull && e.pull !== "\u2014" && e.lesson && e.lesson !== "\u2014"
+    ).length / closedN * 100 : null,
+    emotionalAwareness: n >= 3 ? emotionTagged / n * 100 : null,
+    behavioralConsistency: risk?.stability?.value ?? null,
+    reflectionQuality: reflection?.score?.value ?? null,
+    // Needs at least 3 written lessons before "does he repeat himself" means anything.
+    patternRecognition: withLessons >= 3 ? Math.max(0, 100 - repeatedCount / withLessons * 100) : null,
+    processDiscipline: discipline?.score?.value ?? null,
+    // Null \u2014 not 0 \u2014 while the field is unused, otherwise every pre-V5.5 journal would be
+    // retroactively penalised for a field that did not exist when those trades were closed. It
+    // starts counting only once the trader has recorded the after-state at least 3 times.
+    stateAfterTracking: (() => {
+      const recorded = closed.filter((e) => e.exitX != null && e.exitY != null).length;
+      return closedN >= 3 && recorded >= 3 ? recorded / closedN * 100 : null;
+    })()
+  };
+  let sum = 0, wsum = 0;
+  Object.entries(AWARENESS_WEIGHTS).forEach(([k, w]) => {
+    const v = components[k];
+    if (v == null || isNaN(v)) return;
+    sum += v * w;
+    wsum += w;
+  });
+  if (wsum <= 0) return { score: ta_metric(0, n), rawScore: null, components, evidence: 0 };
+  const rawScore = Math.max(0, Math.min(100, sum / wsum));
+  // Evidence = how much genuinely usable material the score rests on. A journalled-but-empty entry
+  // contributes far less than a closed trade with emotion + reflection recorded.
+  const completeN = closed.filter(
+    (e) => e.x != null && e.y != null && e.lesson && e.lesson !== "\u2014"
+  ).length;
+  const evidence = closedN + completeN;
+  const ramp = Math.min(1, evidence / AWARENESS_EVIDENCE_TARGET);
+  // Repeated-mistake brake: if most written lessons are restatements of earlier ones, awareness is
+  // not actually growing — continued app usage alone must not lift the number.
+  const repeatShare = withLessons >= 3 ? Math.min(1, repeatedCount / withLessons) : 0;
+  const repeatBrake = 1 - repeatShare * 0.35;
+  const score = Math.round(Math.max(0, Math.min(100, rawScore * ramp * repeatBrake)));
+  return { score: ta_metric(score, n), rawScore: Math.round(rawScore), components, evidence };
 }
 function calibrationAnalysis(sortedEntries, lastCalibration, lang = "ru") {
   if (!lastCalibration || !lastCalibration.date) {
@@ -3023,6 +3249,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
   const reflection = reflectionAnalysis(validEntries);
   const discipline = disciplineAnalysis(sorted, seq, risk);
   const emotional = emotionalAnalysis(validEntries);
+  const emotionalShift = emotionalShiftAnalysis(closedEntries);
   const awareness = awarenessAnalysis(validEntries, closedEntries, reflection, risk, discipline);
   const patternsResult = patternEngineV2(closedEntries, lang);
   const calibration = calibrationAnalysis(sorted, lastCalibration, lang);
@@ -3037,7 +3264,9 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
     const rAwareness = awarenessAnalysis(recent, recent, rReflection, rRisk, rDiscipline);
     const pAwareness = awarenessAnalysis(previous, previous, pReflection, pRisk, pDiscipline);
     trend = {
-      awareness: ta_trend(rAwareness.score.value, pAwareness.score.value, 3, true),
+      // rawScore, not score: both windows hold only TA_TREND_WINDOW trades, so their evidence ramp
+      // is identical and tiny — comparing ramped values would report "stable" forever.
+      awareness: ta_trend(rAwareness.rawScore, pAwareness.rawScore, 3, true),
       discipline: ta_trend(rDiscipline.score.value, pDiscipline.score.value, 3, true),
       riskStability: ta_trend(rRisk.stability.value, pRisk.stability.value, 3, true),
       reflectionQuality: ta_trend(rReflection.score.value, pReflection.score.value, 3, true)
@@ -3047,6 +3276,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
     totalTrades: validEntries.length,
     completeTrades: validEntries.filter(pe_isEmotionallyComplete).length,
     missingEmotion: validEntries.filter((e) => e.x == null || e.y == null).length,
+    missingExitEmotion: closedEntries.filter((e) => e.exitX == null || e.exitY == null).length,
     missingReflection: validEntries.filter((e) => (!e.pull || e.pull === "\u2014") && (!e.lesson || e.lesson === "\u2014")).length,
     missingRisk: validEntries.filter((e) => typeof e.r !== "number" || isNaN(e.r)).length,
     missingScreenshots: validEntries.filter((e) => !Array.isArray(e.screenshots) || e.screenshots.length === 0).length
@@ -3055,6 +3285,7 @@ function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
   return {
     awareness: { ...awareness, trend: trend.awareness },
     emotionalState: emotional,
+    emotionalShift,
     discipline: { ...discipline, trend: trend.discipline },
     risk: { ...risk, stability: { ...risk.stability, trend: trend.riskStability } },
     execution: { score: discipline.score, consistency: risk.stability, confidence: discipline.score.confidence },
@@ -3804,13 +4035,21 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   const closedEntries = useMemo(() => entries.filter(isEntryClosed), [entries]);
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const calibratedToday = lastCalibration && isToday(lastCalibration.date);
-  const consciousScoreTarget = analytics.awareness.score.value ?? 55;
+  const consciousScoreTarget = analytics.awareness.score.value ?? 0;
   const reflectionScore = analytics.reflection.score.value;
   const disciplineScore = analytics.discipline.score.value;
   const riskStabilityScore = analytics.risk.stability.value;
-  const level = calculateTraderLevel(total);
+  const level = calculateTraderLevel(entries, analytics);
   const { streak, week } = useStreak(entries, lang);
-  const moodKey = marketSnapshot?.moodLabel || (consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive);
+  // V5.4: the local fallback used to derive a mood from consciousScoreTarget unconditionally.
+  // Awareness now legitimately starts at 0 for a new account, which made that expression print
+  // "Reactive" to someone who had not made a single trade yet — a psychological label invented
+  // out of no data. The fallback is only used once awareness actually rests on some history.
+  const awarenessKnown = analytics.awareness.score.value != null && (analytics.awareness.evidence ?? 0) >= 6;
+  const moodKey = marketSnapshot?.moodLabel || (!awarenessKnown ? t.home.moodStable : consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive);
+  // Prefer a fact-based insight computed from this user's own journal (analytics.insights are
+  // always backed by a real sample) over the two hardcoded generic sentences.
+  const localInsight = (analytics.insights || []).find((i) => i && i.text)?.text || null;
   const withR = entries.filter((e) => e.r !== null && e.r !== void 0);
   const cumResult = withR.reduce((s, e) => s + e.r, 0);
   const heroTarget = measureMode === "currency" ? startingCapital + cumResult : cumResult;
@@ -3900,7 +4139,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         /* @__PURE__ */ jsx("span", { style: { color: accent }, children: moodKey }),
         ".",
         " ",
-        marketSnapshot?.summary || (total >= 4 ? t.home.insightConfident : t.home.insightFocus)
+        marketSnapshot?.summary || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus)
       ] })
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
@@ -4155,6 +4394,16 @@ function emotionPositionColor(x, y) {
   const positivity = Math.max(0, Math.min(100, (x + (100 - y)) / 2)) / 100;
   return positivity < 0.5 ? emotionLerpHex(LOSS, WARN, positivity * 2) : emotionLerpHex(WARN, WIN, (positivity - 0.5) * 2);
 }
+// V5.5: the 3x3 band -> written state lookup used to live only inside EmotionGrid. It is now a
+// plain helper so the Log can label a stored point (before AND after) with exactly the same words
+// the trader saw when they placed it \u2014 one source of truth for the wording.
+function emotionBand(v) {
+  return v < 34 ? 0 : v < 67 ? 1 : 2;
+}
+function emotionStateText(x, y, t) {
+  if (x == null || y == null || isNaN(x) || isNaN(y)) return null;
+  return t.newEntry.emotionGrid.states[emotionBand(y) * 3 + emotionBand(x)] || null;
+}
 function EmotionGrid({ x, y, onChange, accent, t }) {
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
@@ -4191,8 +4440,7 @@ function EmotionGrid({ x, y, onChange, accent, t }) {
   // 3x3 banding (fear/neutral/confidence x nervous/balanced/calm) instead of the old 4-quadrant
   // split, so the written-out state actually reflects a middling position instead of forcing it
   // into one of two extremes either axis is closest to.
-  const band = (v) => v < 34 ? 0 : v < 67 ? 1 : 2;
-  const stateText = has ? eg.states[band(y) * 3 + band(x)] : null;
+  const stateText = has ? emotionStateText(x, y, t) : null;
   const stateColor = has ? emotionPositionColor(x, y) : BASE.inkFaint;
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx("div", { className: "text-center mb-1.5", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisTop }) }),
@@ -4661,6 +4909,9 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
   const [resultR, setResultR] = useState("");
   const [lesson, setLesson] = useState("");
   const [exitScreenshots, setExitScreenshots] = useState([]);
+  // V5.5: state after the trade. Deliberately NOT part of canSave \u2014 forcing it would push people
+  // to tap something arbitrary just to close a trade, which is worse than a null.
+  const [exitPoint, setExitPoint] = useState({ x: null, y: null });
   const fileInputRef = useRef(null);
   const MAX_SHOTS = 4;
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
@@ -4697,6 +4948,8 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       outcome: derivedOutcome,
       lesson: lesson.trim() || "\u2014",
       exitDate: /* @__PURE__ */ new Date(),
+      exitX: exitPoint.x,
+      exitY: exitPoint.y,
       exitScreenshots
     });
   };
@@ -4815,6 +5068,11 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
           style: { borderColor: BASE.line, color: BASE.ink }
         }
       )
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
+      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
     ] }),
@@ -4864,6 +5122,8 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   const [resultR, setResultR] = useState(entry?.r != null ? String(entry.r) : "");
   const [lesson, setLesson] = useState(entry?.lesson === "\u2014" ? "" : entry?.lesson || "");
   const [exitScreenshots, setExitScreenshots] = useState(entry?.exitScreenshots || []);
+  // V5.5: editable so a trade closed before this field existed can be completed retroactively.
+  const [exitPoint, setExitPoint] = useState({ x: entry?.exitX ?? null, y: entry?.exitY ?? null });
   const entryFileRef = useRef(null);
   const exitFileRef = useRef(null);
   const MAX_SHOTS = 4;
@@ -4948,6 +5208,8 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       r: resultNum,
       outcome: derivedOutcome,
       lesson: lesson.trim() || "\u2014",
+      exitX: exitPoint.x,
+      exitY: exitPoint.y,
       exitScreenshots
     });
   };
@@ -5044,6 +5306,11 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
         /* @__PURE__ */ jsx(PolishButton, { accent, notify, text: lesson, onPolished: setLesson })
       ] }),
       /* @__PURE__ */ jsx("textarea", { value: lesson, onChange: (e) => setLesson(e.target.value), rows: 2, placeholder: t.newEntry.lessonPlaceholder, className: "w-full bg-transparent border rounded-xl outline-none p-3 text-sm resize-none", style: { borderColor: BASE.line, color: BASE.ink } })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+      /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
+      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
     ] }),
@@ -5107,7 +5374,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       /* @__PURE__ */ jsx(Search, { size: 13, style: { color: BASE.inkFaint } }),
       /* @__PURE__ */ jsx("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: t.log.searchPlaceholder, className: "bg-transparent outline-none text-sm flex-1", style: { color: BASE.ink } })
     ] }) }),
-    /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 overflow-x-auto", children: logFilters.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
+    /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 hscroll", children: logFilters.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
     filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.log.empty }) : /* @__PURE__ */ jsx("div", { className: "space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start xl:grid-cols-3", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
       /* @__PURE__ */ jsxs("button", { onClick: () => setOpenId(openId === e.id ? null : e.id), className: "w-full text-left transition-colors duration-150", style: { background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-4 pt-3 pb-2.5", children: [
@@ -5134,7 +5401,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
             e.takeProfit != null && /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(e.takeProfit)] }),
             e.plannedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: accent }, children: ["\u041F\u043B\u0430\u043D 1:", e.plannedRR.toFixed(2)] })
           ] }),
-          e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 overflow-x-auto pb-1 mb-2", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
           /* @__PURE__ */ jsx("span", { className: "inline-block px-2 py-0.5 rounded-full text-[11px] mb-1", style: { border: `1px solid ${BASE.line}`, color: accent }, children: e.tag }),
           /* @__PURE__ */ jsxs("p", { children: [
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0417\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u2014 " }),
@@ -5148,7 +5415,18 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
             e.exitPrice != null && /* @__PURE__ */ jsxs("span", { children: ["Exit ", formatPriceValue(e.exitPrice)] }),
             e.realizedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: outcomeColor(e.outcome) }, children: [e.realizedRR >= 0 ? "+" : "", e.realizedRR.toFixed(2), "R"] })
           ] }),
-          e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 overflow-x-auto pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          (e.x != null || e.exitX != null) && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-[11px] mb-2 flex-wrap", children: [
+            e.x != null && /* @__PURE__ */ jsxs("span", { children: [
+              /* @__PURE__ */ jsxs("span", { style: { color: BASE.inkFaint }, children: [t.newEntry.stateBeforeLabel, " "] }),
+              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.x, e.y) }, children: emotionStateText(e.x, e.y, t) })
+            ] }),
+            e.x != null && e.exitX != null && /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u2192" }),
+            e.exitX != null && /* @__PURE__ */ jsxs("span", { children: [
+              /* @__PURE__ */ jsxs("span", { style: { color: BASE.inkFaint }, children: [t.newEntry.stateAfterLabel, " "] }),
+              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.exitX, e.exitY) }, children: emotionStateText(e.exitX, e.exitY, t) })
+            ] })
+          ] }),
+          e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
           /* @__PURE__ */ jsxs("p", { children: [
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u2014 " }),
             e.lesson
@@ -6209,7 +6487,7 @@ function OrderRadar({ engineRef, accent, t }) {
 function LeverageBar({ value, onChange, accent, disabled }) {
   return /* @__PURE__ */ jsxs("div", { className: "mb-3", children: [
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "\u041F\u043B\u0435\u0447\u043E" }),
-    /* @__PURE__ */ jsx("div", { className: "flex gap-1.5 overflow-x-auto no-scrollbar pb-0.5", children: LEVERAGE_OPTIONS.map((lv) => /* @__PURE__ */ jsxs(
+    /* @__PURE__ */ jsx("div", { className: "flex gap-1.5 hscroll pb-0.5", children: LEVERAGE_OPTIONS.map((lv) => /* @__PURE__ */ jsxs(
       "button",
       {
         disabled,
@@ -6315,6 +6593,135 @@ function aiSummarizePattern(p) {
     summary: p.description || null
   };
 }
+// ---- V5.4: extra AI context ---------------------------------------------------------------
+// The insight was generic because the context it was built from was thin: it carried aggregate
+// scores but almost none of the raw behavioural relationships the user actually wants named
+// ("3 of the last 7 were closed manually before TP"). Everything below is computed from data that
+// already exists on the entry objects — nothing new is stored, nothing is invented, and every
+// block returns null when its own minimum sample isn't met so the model can say "not enough data"
+// instead of guessing.
+function aiEntryMinutesHeld(e) {
+  if (!(e.date instanceof Date) || !(e.exitDate instanceof Date)) return null;
+  const m = (e.exitDate - e.date) / 6e4;
+  return isFinite(m) && m >= 0 ? Math.round(m) : null;
+}
+// How the trader exits: did they let their own TP/SL do the work, or step in early — and what did
+// stepping in cost them in RR terms.
+function aiComputeExitBehavior(closedEntries) {
+  const planned = closedEntries.filter((e) => typeof e.plannedRR === "number" && e.plannedRR > 0);
+  if (planned.length < 3) return null;
+  const byType = { tp: 0, sl: 0, manual: 0 };
+  planned.forEach((e) => {
+    if (e.closeType && byType[e.closeType] != null) byType[e.closeType]++;
+  });
+  const withBoth = planned.filter((e) => typeof e.realizedRR === "number" && !isNaN(e.realizedRR));
+  // "Early exit" = closed by hand, in profit, but noticeably short of the planned target.
+  const earlyExits = withBoth.filter((e) => e.closeType === "manual" && e.realizedRR > 0 && e.realizedRR < e.plannedRR * 0.9);
+  const shortfalls = earlyExits.map((e) => e.plannedRR - e.realizedRR);
+  // SL respected = the loss never went materially past 1R.
+  const losers = withBoth.filter((e) => e.realizedRR < 0);
+  const slRespected = losers.filter((e) => e.realizedRR >= -1.05).length;
+  const emotionOnEarlyExit = earlyExits.filter((e) => e.x != null && e.y != null);
+  const exitEmotionOnEarlyExit = earlyExits.filter((e) => e.exitX != null && e.exitY != null);
+  return {
+    plannedTradesSample: planned.length,
+    tpReachedPct: Math.round(byType.tp / planned.length * 100),
+    slHitPct: Math.round(byType.sl / planned.length * 100),
+    manualClosePct: Math.round(byType.manual / planned.length * 100),
+    slRespectedPct: losers.length ? Math.round(slRespected / losers.length * 100) : null,
+    slRespectedSample: losers.length,
+    earlyExitCount: earlyExits.length,
+    earlyExitOfManualPct: byType.manual ? Math.round(earlyExits.length / byType.manual * 100) : null,
+    avgRRLostToEarlyExit: shortfalls.length ? st_round2(st_mean(shortfalls)) : null,
+    avgPlannedRROnEarlyExits: earlyExits.length ? st_round2(st_mean(earlyExits.map((e) => e.plannedRR))) : null,
+    avgRealizedRROnEarlyExits: earlyExits.length ? st_round2(st_mean(earlyExits.map((e) => e.realizedRR))) : null,
+    avgConfidenceBeforeEarlyExit: emotionOnEarlyExit.length >= 2 ? Math.round(st_mean(emotionOnEarlyExit.map((e) => e.x))) : null,
+    avgCalmBeforeEarlyExit: emotionOnEarlyExit.length >= 2 ? Math.round(st_mean(emotionOnEarlyExit.map((e) => e.y))) : null,
+    emotionSampleOnEarlyExits: emotionOnEarlyExit.length,
+    avgCalmAfterEarlyExit: exitEmotionOnEarlyExit.length >= 2 ? Math.round(st_mean(exitEmotionOnEarlyExit.map((e) => e.exitY))) : null,
+    avgConfidenceAfterEarlyExit: exitEmotionOnEarlyExit.length >= 2 ? Math.round(st_mean(exitEmotionOnEarlyExit.map((e) => e.exitX))) : null,
+    exitEmotionSampleOnEarlyExits: exitEmotionOnEarlyExit.length
+  };
+}
+// What changes in the NEXT trade after two consecutive wins / two consecutive losses.
+function aiComputeAfterStreakBehavior(sortedClosed) {
+  const withR = sortedClosed.filter((e) => typeof e.r === "number" && !isNaN(e.r));
+  if (withR.length < 8) return null;
+  const baselineRisk = st_mean(withR.map((e) => Math.abs(e.r)));
+  const collect = (outcome) => {
+    const next = [];
+    for (let i = 2; i < sortedClosed.length; i++) {
+      if (sortedClosed[i - 1].outcome === outcome && sortedClosed[i - 2].outcome === outcome) next.push(sortedClosed[i]);
+    }
+    if (next.length < 2) return null;
+    const nWithR = next.filter((e) => typeof e.r === "number" && !isNaN(e.r));
+    const avgRisk = nWithR.length ? st_mean(nWithR.map((e) => Math.abs(e.r))) : null;
+    const manual = next.filter((e) => e.closeType === "manual").length;
+    return {
+      sample: next.length,
+      riskChangeVsBaselinePct: avgRisk != null && baselineRisk ? Math.round((avgRisk - baselineRisk) / baselineRisk * 100) : null,
+      manualClosePct: Math.round(manual / next.length * 100),
+      winRatePct: (() => {
+        const w = next.filter((e) => e.outcome === "Win").length;
+        const l = next.filter((e) => e.outcome === "Loss").length;
+        return w + l ? Math.round(w / (w + l) * 100) : null;
+      })()
+    };
+  };
+  return {
+    baselineAvgRiskR: st_round2(baselineRisk),
+    afterTwoWins: collect("Win"),
+    afterTwoLosses: collect("Loss")
+  };
+}
+function aiComputeHoldTimes(closedEntries) {
+  const held = closedEntries.map((e) => ({ m: aiEntryMinutesHeld(e), outcome: e.outcome, closeType: e.closeType })).filter((h) => h.m != null);
+  if (held.length < 4) return null;
+  const wins = held.filter((h) => h.outcome === "Win").map((h) => h.m);
+  const losses = held.filter((h) => h.outcome === "Loss").map((h) => h.m);
+  const manual = held.filter((h) => h.closeType === "manual").map((h) => h.m);
+  return {
+    sample: held.length,
+    medianMinutes: Math.round(st_median(held.map((h) => h.m))),
+    medianMinutesWins: wins.length >= 2 ? Math.round(st_median(wins)) : null,
+    medianMinutesLosses: losses.length >= 2 ? Math.round(st_median(losses)) : null,
+    medianMinutesManualCloses: manual.length >= 2 ? Math.round(st_median(manual)) : null
+  };
+}
+// The journal itself — regularity, how filled in entries are, and what the trader keeps writing.
+function aiJournalDigest(validEntries, analytics) {
+  const n = validEntries.length;
+  if (!n) return null;
+  const days = new Set(validEntries.map((e) => e.date.toDateString()));
+  const withReflection = validEntries.filter((e) => e.pull && e.pull !== "\u2014" || e.lesson && e.lesson !== "\u2014").length;
+  const withEmotion = validEntries.filter((e) => e.x != null && e.y != null).length;
+  const withPlan = validEntries.filter((e) => typeof e.plannedRR === "number").length;
+  return {
+    totalEntries: n,
+    distinctJournalDays: days.size,
+    entriesWithReflectionPct: Math.round(withReflection / n * 100),
+    entriesWithEmotionPct: Math.round(withEmotion / n * 100),
+    entriesWithPlanPct: Math.round(withPlan / n * 100),
+    reflectionQualityScore: aiSafeNum(analytics?.reflection?.score?.value),
+    repeatedLessons: (analytics?.reflection?.repeatedLessons || []).slice(0, 4).map((r) => ({
+      text: String(r.text || "").slice(0, 160),
+      timesRepeated: r.count
+    }))
+  };
+}
+function aiCalibrationDigest(analytics) {
+  const c = analytics?.calibration;
+  if (!c || !c.available) return { available: false, reason: "no_calibration_matched_to_a_trading_day" };
+  return {
+    available: true,
+    statedReadinessPct: aiSafeNum(c.statedPct),
+    statedRiskFactors: c.statedRiskFactors || [],
+    tradesThatDay: aiSafeNum(c.dayTradeCount),
+    actualSignals: c.actualSignals || null,
+    statedVsActualNote: c.divergenceNote || null,
+    confidence: c.confidence || null
+  };
+}
 function aiBuildContext(entries, analytics, lang) {
   const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
   const closedEntries = validEntries.filter(isEntryClosed);
@@ -6325,7 +6732,7 @@ function aiBuildContext(entries, analytics, lang) {
   const context = {
     lang: lang === "en" ? "en" : "ru",
     trader: {
-      level: calculateTraderLevel(validEntries.length),
+      level: calculateTraderLevel(validEntries, analytics),
       awarenessScore: aiSafeNum(analytics?.awareness?.score?.value),
       awarenessTrend: analytics?.awareness?.trend || null,
       currentStreakDays: aiComputeStreakDays(validEntries)
@@ -6378,8 +6785,21 @@ function aiBuildContext(entries, analytics, lang) {
         trades: aiSafeNum(analytics.emotionalState.worstState.trades)
       } : null
     } : null,
+    exitBehavior: aiComputeExitBehavior(closedEntries),
+    // How the trader's state moves between entry and exit, split by outcome and by how the trade
+    // was closed. Null-safe: reports available:false on journals where the after-state was never
+    // filled in, so the model says "not tracked yet" instead of inventing a shift.
+    emotionalShift: analytics?.emotionalShift?.available ? analytics.emotionalShift : { available: false, sample: analytics?.emotionalShift?.sample ?? 0, coveragePct: analytics?.emotionalShift?.coveragePct ?? null },
+    afterStreakBehavior: aiComputeAfterStreakBehavior(sortedClosed),
+    holdTime: aiComputeHoldTimes(closedEntries),
+    journal: aiJournalDigest(validEntries, analytics),
+    calibration: aiCalibrationDigest(analytics),
+    // The last closed trades in order, so the model can name a real sequence ("3 of the last 7")
+    // instead of only speaking in lifetime aggregates.
+    recentClosedSequence: aiCompactRecentEntries(sortedClosed, 12),
     patterns: (analytics?.patterns || []).slice(0, 5).map(aiSummarizePattern).filter(Boolean),
     healthyPatterns: (analytics?.healthyPatterns || []).slice(0, 3).map(aiSummarizePattern).filter(Boolean),
+    localInsights: (analytics?.insights || []).slice(0, 4).map((i) => ({ id: i.id, basis: i.basis, sampleSize: aiSafeNum(i.sampleSize), confidence: i.confidence || null, text: i.text })),
     dataQuality: analytics?.dataQuality || null
   };
   return context;
@@ -6407,6 +6827,12 @@ function aiCompactRecentEntries(entries, limit) {
     plannedRR: aiSafeNum(e.plannedRR),
     realizedRR: aiSafeNum(e.realizedRR),
     closeType: e.closeType || null,
+    // V5.4: state-before-entry and hold time were already on the entry but never reached the model,
+    // which is why it could not connect "anxious before the trade" to "closed it by hand early".
+    // Same axes as EmotionGrid/EMOTION_ZONES: x = doubt(0)..confidence(100), y = tension(0)..calm(100).
+    stateBefore: e.x != null && e.y != null ? { confidence: e.x, calm: e.y } : null,
+    stateAfter: e.exitX != null && e.exitY != null ? { confidence: e.exitX, calm: e.exitY } : null,
+    minutesHeld: aiEntryMinutesHeld(e),
     pull: e.pull && e.pull !== "\u2014" ? String(e.pull).slice(0, 200) : null,
     lesson: e.lesson && e.lesson !== "\u2014" ? String(e.lesson).slice(0, 200) : null
   }));
@@ -6437,14 +6863,54 @@ Rules:
 - Never reference the exact time period unless dates are present in the data — don't say "over the
   last few months" if you don't know the span.
 - Keep responses concise, concrete, and grounded in the numbers you were given.
+- Never pad an answer with advice that would be true for any trader ("stay disciplined", "manage
+  your risk", "be careful after a winning streak"). If you cannot attach a statement to a specific
+  number from this trader's own data, do not make the statement at all. Saying "there isn't enough
+  data for that yet" is always an acceptable and preferred answer.
+- You have no market data. Never describe current market conditions, sentiment, or price direction.
 - Respond in the language given by the context's "lang" field: "ru" \u2192 Russian, "en" \u2192 English.`;
-var AI_INSIGHT_TASK = `Write a short journal insight (3-6 sentences) for the Home/Coach screen, based only on
-the AGGREGATED_CONTEXT JSON below. Reference at least one concrete number from the data. If the
-sample size is too small anywhere relevant, say so instead of speculating. Do not use headers or
-bullet lists \u2014 plain prose.`;
+// V5.4: the previous task asked for "at least one concrete number", which the model satisfied with
+// a single stat wrapped in otherwise universal advice. It now has to build every sentence from a
+// relationship between fields, and is explicitly shown what a rejected answer looks like.
+var AI_INSIGHT_TASK = `Write a personal journal insight (3-6 sentences) for this specific trader, using ONLY the
+AGGREGATED_CONTEXT JSON below.
+
+Your job is to find a CONNECTION between two or more things in this trader's own data \u2014 not to
+describe the market and not to give advice that would fit any trader on any day.
+
+Hard requirements:
+- Every claim must be tied to a countable fact from the context: a count, a percentage, an average,
+  a change, or a comparison between two groups. Name the number.
+- Prefer linking fields to each other. Useful sources of links: exitBehavior (tpReachedPct vs
+  slRespectedPct, earlyExitCount, avgRRLostToEarlyExit, avgConfidenceBeforeEarlyExit),
+  afterStreakBehavior (riskChangeVsBaselinePct, manualClosePct after two wins or two losses),
+  recentClosedSequence (an actual run of recent trades \u2014 you may say "N of the last M"; each
+  carries stateBefore and, where the trader filled it in, stateAfter), emotionalShift (how
+  confidence and calm move between entry and exit, split by outcome and by close type \u2014 e.g. wins
+  that still end with low calm, or losses the trader takes calmly),
+  journal.repeatedLessons (the same lesson written repeatedly), calibration.statedVsActualNote
+  (stated state vs what actually happened), emotional.bestState/worstState, holdTime.
+- State the observation first, then at most one careful interpretation ("this may indicate...").
+- If a block you would need is null, or its sample is small (sample/sampleSize below ~5), do not
+  build an insight on it. If NOTHING in the context supports a specific observation yet, say plainly
+  and briefly what is still missing (e.g. how few closed trades or filled-in reflections there are)
+  and stop. A short honest "not enough data yet" answer is correct and preferred.
+- Do not describe market conditions, sentiment, or what the market is "waiting for" \u2014 you have no
+  market data here, only this trader's journal.
+
+Rejected (too generic, never write like this): "You sometimes make emotional decisions." /
+"Be careful after a winning streak." / "Watch your discipline." / "The market is consolidating."
+Accepted (this is the target): "In the last 7 closed trades you closed 3 by hand before TP; in all
+three the realized RR came out below the planned one, on average by 0.8R. Before two of those three
+you had marked low calm (below 40)."
+
+Plain prose. No headers, no bullet lists, no markdown.`;
 var AI_CHAT_TASK = `Answer the trader's USER_QUESTION using AGGREGATED_CONTEXT and, if provided,
 RECENT_TRADES as your only source of truth. Use CONVERSATION_SO_FAR for context on the ongoing
-chat. If the data doesn't support a confident answer, say so directly rather than guessing.`;
+chat. Ground the answer in named numbers from the data (counts, percentages, averages, comparisons
+between groups) rather than general trading advice. If the data doesn't support a confident answer
+\u2014 the relevant field is null, or its sample is under ~5 \u2014 say that plainly and name what is
+missing, instead of guessing or filling the gap with universal recommendations.`;
 
 // ---- aiService.js ------------------------------------------------------------
 var aiGeminiModel = null;
@@ -7495,7 +7961,7 @@ function Simulator({ accent, onWin, t, lang }) {
       /* @__PURE__ */ jsxs("div", { className: "mb-2.5", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 mb-1", children: [
           /* @__PURE__ */ jsx("span", { className: "text-[10px] w-6 shrink-0", style: { color: WIN }, children: "TP" }),
-          /* @__PURE__ */ jsx("div", { className: "flex gap-1 overflow-x-auto no-scrollbar", children: [null, 1, 2, 3, 5].map((v) => /* @__PURE__ */ jsx(
+          /* @__PURE__ */ jsx("div", { className: "flex gap-1 hscroll", children: [null, 1, 2, 3, 5].map((v) => /* @__PURE__ */ jsx(
             "button",
             {
               onClick: () => setTakeProfitPct(v),
@@ -7513,7 +7979,7 @@ function Simulator({ accent, onWin, t, lang }) {
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5", children: [
           /* @__PURE__ */ jsx("span", { className: "text-[10px] w-6 shrink-0", style: { color: LOSS }, children: "SL" }),
-          /* @__PURE__ */ jsx("div", { className: "flex gap-1 overflow-x-auto no-scrollbar", children: [null, 1, 2, 3, 5].map((v) => /* @__PURE__ */ jsx(
+          /* @__PURE__ */ jsx("div", { className: "flex gap-1 hscroll", children: [null, 1, 2, 3, 5].map((v) => /* @__PURE__ */ jsx(
             "button",
             {
               onClick: () => setStopLossPct(v),
@@ -7951,6 +8417,8 @@ function sanitizeImportedEntry(e, fallbackIndex) {
     tag: typeof e.tag === "string" && e.tag ? e.tag : "\u041E\u0431\u0449\u0435\u0435",
     x: clampCoord(e.x),
     y: clampCoord(e.y),
+    exitX: clampCoord(e.exitX),
+    exitY: clampCoord(e.exitY),
     pull: typeof e.pull === "string" && e.pull ? e.pull : "\u2014",
     lesson: typeof e.lesson === "string" && e.lesson ? e.lesson : "\u2014",
     date,
@@ -9383,6 +9851,27 @@ function MindExe() {
         .tab-content { animation: fadeIn 0.25s ease-out; }
         .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
+        /* V5.4 — horizontal strips (filter pills, screenshot rows, leverage/RR selectors).
+           Per the CSS overflow spec, setting overflow-x to auto while overflow-y stays
+           'visible' forces overflow-y to compute to 'auto' as well. Those rows are only a
+           couple of pixels taller than their content, so they became their own tiny
+           VERTICAL scroll container: holding a pill and dragging up/down scrolled that few
+           pixels instead of the page, and the row visibly jumped. Pinning overflow-y to
+           hidden removes the nested scroll area entirely; overscroll-behavior stops the
+           horizontal swipe from chaining into the page/back-gesture, and the scrollbar is
+           hidden without disabling scrolling itself. */
+        .hscroll {
+          overflow-x: auto;
+          overflow-y: hidden;
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-x: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .hscroll::-webkit-scrollbar { display: none; }
+        /* keeps the 300ms tap delay off and stops the pressed-state transform from being
+           held (and re-rendered) through a drag */
+        .hscroll > * { touch-action: manipulation; }
         .toast-in { animation: toastIn 0.2s ease-out; }
         .emotion-ripple { animation: ripple 0.5s ease-out; }
         .flame-flicker { animation: flicker 1.8s ease-in-out infinite; display: inline-block; }
