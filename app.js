@@ -1,609 +1,25 @@
-// mind.exe — V0.3
+// mind.exe — V0.7
 //
-// V0.3 — переработан блок «Инсайт» на главном экране (гибрид: рынок + статистика трейдера):
-//  1) buildMarketPrompt требует проверяемую конкретику (число / уровень / названное событие
-//     в каждом предложении) и явно запрещает типовые пустые формулировки. Снапшот теперь
-//     возвращает ещё facts[] — короткие фактические строки.
-//  2) Снапшот помечается grounded: true/false. Если Google Search недоступен и сводка получена
-//     без веба, под текстом показывается пометка t.home.marketStale.
-//  3) Новый второй слой: aiMarketPersonalDigest (выжимка из уже существующей аналитики) +
-//     aiGenerateMarketLink — одна фраза, связывающая рынок с реальными цифрами пользователя.
-//     Кэш приватный (users/{uid}/data, ключ market-link:{asset}), одна генерация в час,
-//     сбрасывается при смене сводки или статистики. Запрос только из useEffect по хэшу.
+// V0.7 — аудит Gemini и Firebase. Найдено и исправлено:
+//  1) Ни один вызов Gemini, кроме калибровки и совета на Главной, не имел таймаута.
+//     generateContent() у Firebase AI Logic при потере сети может не резолвиться никогда —
+//     значит «Анализирую…» в Coach, распознавание скриншота, полировка заметки и рыночная
+//     сводка могли висеть бесконечно. Таймаут теперь стоит внутри aiCallGemini (30с),
+//     aiCallGeminiVision (45с), aiPolishText (20с) и aiRunMarketModel (30с) — то есть в одной
+//     точке на каждый тип вызова, а не у каждого потребителя.
+// Проверено без замечаний: инициализация Firebase (app/auth/firestore/AI Logic/App Check),
+// один общий aiLogic на все модели, изоляция данных по uid в fsDocRef, сброс состояния Coach
+// при смене аккаунта, очистка state при logout, обработка ошибок и fallback во всех AI-путях.
 //
-// V0.2:
-//  1) Глобально скрыты полосы прокрутки.
-//  2) Чёрный экран «Аналитики»: в Patterns не была объявлена переменная withR (ReferenceError).
-//  3) Калибровка: caWithTimeout на Gemini (20с) и на чтение истории из Firestore (10с).
-//  4) Калибровка: 6 новых шкал ответов вместо всегдашнего «Да/Нет». CACHE_SCHEMA 2 → 3.
+// V0.6: сохранение черновика стратегии при уходе с экрана; висящие запятые в children;
+//       breakAfter для заголовков групп настроек.
+// V0.5: прозрачная шапка без sticky/blur; локализованы Stop Loss, Take Profit, ENTRY, EXIT,
+//       W/L/BE, «Average RR и Win Rate»; настройки сгруппированы.
+// V0.4: блок «Инсайт» — совет по собственному журналу; поле «Твоя стратегия» в настройках
+//       во всех AI-контекстах; правило «стиль торговли — не ошибка».
+// V0.3: промпт рыночной сводки требует конкретику, снапшот помечается grounded.
+// V0.2: скрыты полосы прокрутки; withR в Patterns; caWithTimeout в калибровке; 6 новых шкал.
 //
-// mind.exe V5.8 \u2014 fixes two "nothing changed after update" causes: a same-day calibration
-// cache with no schema check, and index.html serving app.js with no cache-busting query.
-// index.html DOES change this version \u2014 deploy the paired V5.8 index.html (still the same full
-// importmap as V5.3) alongside this file and splash.mp4.
-//
-// 1) CALIBRATION CACHE HAD NO SCHEMA CHECK. prepareAndStart's same-day cache validity check only
-//    verified `options` was a non-empty array \u2014 it never checked whether that array's CONTENT
-//    matched the current question/scale format. A record saved earlier the same day, before
-//    V5.7's per-question scaleType existed, still has a perfectly well-formed non-empty `options`
-//    array, so it passed the check and got replayed verbatim for the rest of that day regardless
-//    of what changed in the code \u2014 this is why the V5.7 calibration fix could look like it had no
-//    effect during same-day testing. Every cached record now carries `schema: CALIBRATION_CACHE_SCHEMA`
-//    (bumped to 2 for the V5.7 scale-set change); a missing or mismatched schema is now treated as
-//    a cache miss, same as a malformed record already was.
-// 2) INDEX.HTML HAD NO CACHE-BUSTING ON app.js. `<script src="./app.js">` never changes its own
-//    URL between versions, so a browser \u2014 especially an iOS PWA added to the home screen, which
-//    caches far more aggressively than a normal tab \u2014 can keep serving a previously fetched
-//    app.js indefinitely after a new one is uploaded to the same path. This affects EVERY past
-//    version, not just calibration: any fix could be invisible until a hard reload happened to
-//    clear the cache. index.html now loads `./app.js?v=5.8`; bump that number on every future
-//    version so the URL actually changes and the browser is forced to re-fetch.
-//
-// mind.exe V5.7 \u2014 calibration answer options fitted to question shape, exit emotion grid
-// redesigned around reaction-to-result, remaining scrollbars hidden.
-// index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
-//
-// 1) CALIBRATION ANSWER OPTIONS. Every adaptive (Gemini-written) question was forced onto one
-//    fixed yes/no scale ("\u041D\u0435\u0442/\u0421\u043a\u043e\u0440\u0435\u0435 \u043d\u0435\u0442/\u0421\u043a\u043e\u0440\u0435\u0435 \u0434\u0430/\u0414\u0430"), even when the question wasn't
-//    shaped as a yes/no at all (e.g. "how do you rate the impact of X on Y" answered with
-//    "\u0414\u0430/\u041d\u0435\u0442" reads as nonsense). CALIBRATION_SCALE_SETS now defines four app-owned
-//    label sets \u2014 readiness / confidence / calm / impact \u2014 all sharing the same fixed score
-//    positions (-2,-1,1,2; position 0 always least-favorable, position 3 always most-favorable).
-//    Gemini returns a scaleType NAME per question (validated against this exact enum, default
-//    "readiness" if missing/invalid) and picks whichever wording fits its own phrasing; it still
-//    never writes or scores an option itself, so the p.14 no-model-scoring guarantee is unchanged.
-//    assembleCalibrationQuestions looks up each question's own scale instead of one shared scale
-//    for all four; the local fallback bank is explicitly tagged "readiness" since it's already
-//    written as yes/no questions.
-// 2) EXIT EMOTION GRID REDESIGNED. CloseTrade/EditTrade's post-trade check-in used to be the exact
-//    same fear\u2194confidence, on-edge\u2194calm pad as entry \u2014 which describes a read on the SETUP, not
-//    a reaction to a RESULT; "confident and calm" says nothing about whether the trader is happy
-//    with what just happened. New exitEmotionGrid: axes disappointed\u2194pleased and stung\u2194at
-//    peace, with 9 states including resentment/anger and euphoria-still-wired \u2014 the shapes the
-//    person asked for. EmotionGrid and emotionStateText take a `variant` ("entry"/"exit") to pick
-//    the right label set; every call site (CloseTrade, EditTrade, Log's before\u2192after display) is
-//    updated.
-//
-//    CONSEQUENCE FOUND AND FIXED: since exitX now measures a different construct than entry x,
-//    `emotionalShiftAnalysis`'s old `confidenceShift = mean(exitX - x)` was subtracting two
-//    unrelated axes and calling the result a "shift" \u2014 removed. avgConfidenceAfter (which was
-//    always just a mean of exitX, never a comparison) is renamed avgSatisfactionAfter; same value,
-//    accurate name. calmShift is untouched \u2014 entry's on-edge\u2194calm and exit's stung\u2194at-peace
-//    are still the same kind of arousal measure on both ends, so that comparison stays valid. Added
-//    winsEndingUnsatisfied alongside the existing winsEndingUncalm (same-axis comparisons only).
-//    aiCompactRecentEntries.stateAfter is now keyed `satisfaction` instead of reusing `confidence`;
-//    aiComputeExitBehavior's post-exit figure is avgSatisfactionAfterEarlyExit (its pre-exit
-//    sibling, avgConfidenceBeforeEarlyExit, was already correctly named \u2014 it reads entry x).
-//    Gemini's prompt text updated to match.
-// 3) REMAINING SCROLLBARS HIDDEN. Two bottom-sheet pickers, the instrument/tag dropdown and the
-//    Coach chat panel still showed a vertical OS scrollbar (V5.4 only covered horizontal strips).
-//    New .vscroll class: scrolling, including touch, is unaffected \u2014 only the track is hidden.
-//
-// ---- V5.6 (still in force) ------------------------------------------------------------------
-// Full-code audit pass: fixed a duplicate Firestore write on every journal action (persistNow's
-// profile-write is now deduped against the last-written payload; saveMedia always runs regardless,
-// since buildPayload strips screenshots and an image-only change would otherwise be skipped
-// entirely), "recent trades" being last-inserted rather than last-by-date (broke after journal
-// import), and a daily-reward toast timer with no cleanup. Removed several dead functions.
-//
-// ---- V5.5 (still in force) ------------------------------------------------------------------
-// Added state AFTER the trade (exitX/exitY), round-tripped through Firestore and JSON import/
-// export, shown in the Log, and fed to analytics/Gemini. Awareness gained stateAfterTracking
-// (weight 0.08, null until recorded 3+ times so existing journals score exactly as before).
-//
-// ---- V5.4 (still in force) ------------------------------------------------------------------
-// Trader level rebuilt on behaviour instead of entry count (new account = level 1, always).
-// Awareness rebuilt to start at 0% and grow on an evidence ramp instead of defaulting components
-// to 50. Gemini's context and prompts rewired to require a named-number link between fields and
-// ban universal advice. Home's mood fallback and generic insight gated behind real evidence.
-// Horizontal filter/screenshot/leverage strips fixed to stop jumping under touch-drag (.hscroll).
-// mind.exe V5.6 \u2014 full-code audit pass. No feature changes; 3 real bugs fixed, dead code removed.
-// index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
-//
-// HOW IT WAS CHECKED: the file was parsed with acorn and walked for unused/undefined identifiers,
-// duplicate declarations and object keys, unreachable statements, hooks missing a dependency array,
-// effects that subscribe or start timers without a cleanup return, list renders missing a React key,
-// setState during the render phase, and async effects that setState without a cancel guard. The
-// pure calculation layer was then extracted and run against hostile inputs (empty journal, single
-// entry, open-only, r = 0 / -0 / 1e9, plannedRR = 0, entry = SL = TP = 0, empty lessons, mixed
-// nulls) and a 600-trade journal. Result: no NaN, no Infinity, no divide-by-zero anywhere;
-// 600 trades analyse in ~8ms.
-//
-// BUGS FIXED
-// 1) DUPLICATE FIRESTORE WRITE ON EVERY JOURNAL ACTION. Each onSave handler calls
-//    persistNow({ entries: next }) explicitly; setEntries then changed `entries`, the auto-save
-//    effect fired and persistNow() ran a SECOND time with identical data \u2014 two full profile
-//    writes plus two media writes (base64 screenshots) per saved trade. persistNow now compares the
-//    payload against rawProfileRef (the exact object it last wrote) and skips ONLY the profile
-//    document write when the two are byte-identical; the effect just debounces 900ms.
-//    Critically, saveMedia always runs: buildPayload strips screenshots out of journal entries, so
-//    an image-only change yields an identical payload \u2014 putting the skip in the effect (as this
-//    fix first did) would have silently dropped screenshot saves. rawProfileRef is only updated
-//    after a successful write, so a failed save stays pending and is retried on the next pass.
-//    Explicit handler calls still write instantly and the visibilitychange/pagehide flush still
-//    covers the app being backgrounded inside the debounce window.
-// 2) "RECENT TRADES" WERE THE LAST INSERTED, NOT THE MOST RECENT. aiCompactRecentEntries did
-//    slice(-limit) straight off the array. Normally created trades are chronological (each gets
-//    new Date() and is appended), but an imported journal keeps the file's order \u2014 so after an
-//    import the Coach chat was handed arbitrary trades and told they were the latest. Now sorted by
-//    date first; a no-op on already-ordered input, and both call sites benefit.
-// 3) DAILY-REWARD TOAST TIMER HAD NO CLEANUP. On the intro path it waits 8.6s, so logging out
-//    inside that window still fired a toast for an account that was no longer open. Now cleared on
-//    unmount. It also shadowed the outer `toastTimer` ref; renamed to dailyToastTimer.
-//
-// DEAD CODE REMOVED: useIsDesktop (never called), scoreCalibration (superseded by
-// scoreCalibrationDynamic), legacyStorageDelete (nothing in the Firestore path calls it), the
-// unused `import React2 from "react"`, unused locals `withR` in pd_riskAfterWin and `avgR` in
-// Patterns, and the .no-scrollbar CSS rule left orphaned when V5.4 moved those rows to .hscroll.
-//
-// CHECKED AND DELIBERATELY LEFT ALONE: the sequential awaits in saveMedia (intentional rate
-// limiting, and already guarded by the __mediaHashes cache), the retry setTimeout in the profile
-// load (tryLoad returns immediately when cancelled), and the shared-scope market snapshot cache
-// (market data, not user data).
-//
-// ---- V5.5 (still in force) ------------------------------------------------------------------
-// Adds state AFTER the trade: optional exitX/exitY on the same axes as x/y, collected in
-// CloseTrade and editable in EditTrade, shown in the Log as "state before \u2192 state after",
-// round-tripped through Firestore and JSON import/export. analytics.emotionalShift reports the
-// shift by outcome and by close type. Gemini receives stateAfter per trade, the emotionalShift
-// block, and after-state on early exits. Awareness gained stateAfterTracking (weight 0.08), null
-// until recorded 3+ times so existing journals score exactly as before.
-//
-// ---- V5.4 (still in force) ------------------------------------------------------------------
-// 1) TRADER LEVEL. Was `min(9, 3 + floor(entriesCount/3))`: a new empty account showed level 3 and
-//    every third entry bumped it regardless of how the trade went. Now an experience CAP from
-//    closed-trade count (0 closed => level 1, always) and, inside it, a weighted behaviour score
-//    from awareness, discipline, risk stability, reflection, journal completeness and plan
-//    adherence. PnL is deliberately not an input.
-// 2) AWARENESS. Was 55% on an empty journal and substituted the constant 50 for uncomputable
-//    components, so one entry produced ~50%. Now uncomputable components are EXCLUDED and the
-//    remaining weights renormalised; the result is multiplied by an evidence ramp so it grows
-//    gradually; a repeated-lesson brake stops it drifting up on usage alone. Empty => 0%.
-//    rawScore (pre-ramp) drives the trend, since both trend windows share the same ramp.
-// 3) GEMINI. Context gained exitBehavior, afterStreakBehavior, holdTime, a journal digest, the
-//    calibration stated-vs-actual comparison, the app's own grounded insights and
-//    recentClosedSequence. The prompts require a link between fields with a named number, ban
-//    universal advice, and make "not enough data yet" an explicitly preferred answer.
-// 4) HOME. Awareness starts at 0, so the mood fallback no longer labels a trader with no history
-//    as "Reactive"; the generic insight sentence is used only after the market snapshot and the
-//    app's own fact-based insights have been tried.
-// 5) SCROLL. overflow-x:auto with overflow-y:visible forces overflow-y to auto per spec \u2014 the
-//    filter/screenshot/leverage strips were each a few-pixel-tall nested VERTICAL scroll container,
-//    which is what made them jump when a pill was held and dragged. .hscroll pins
-//    overflow-y:hidden, contains overscroll, keeps touch scrolling, hides the scrollbar.
-// mind.exe V5.3 \u2014 fixes the black screen introduced by V5.1.
-// CAUSE: the V5.1 index.html was rebuilt from the wrong source file \u2014 the project directory held
-// Market Sandbox's index.html, not mind.exe's. That file has no importmap entries for recharts or
-// firebase/app|auth|firestore|ai|app-check, so app.js's bare imports failed to resolve, the module
-// never evaluated, nothing mounted, and the page stayed black. app.js itself was fine.
-// FIX: index.html is restored to the real mind.exe file (full importmap, Firebase 12.17.1 entries,
-// the window.storage legacy shim, Tailwind CDN, PWA meta) with only the V5.1 font swap applied on
-// top. Nothing in app.js changed for this \u2014 the version bump is here so the two files stay in
-// lockstep and it is obvious which index.html is the correct one.
-// Deploy BOTH files, plus splash.mp4 in the same folder (see V5.2).
-// mind.exe V5.2 \u2014 splash is now the supplied black-hole video.
-// The still photo + canvas scene (starfield and the simulated candlestick stream) is replaced by the
-// 5.875s 720\u00d71556 h264 clip, which already contains both the rotating accretion disk and the chart
-// falling into the horizon \u2014 so all of that simulation code is gone rather than layered on top.
-// The clip ships as ./splash.mp4 beside index.html; it is deliberately NOT base64-inlined (that
-// would add ~1.8 MB to every app.js fetch and prevent the browser caching an asset that never
-// changes). The existing black-hole still is now the poster: visible instantly while the video
-// buffers, and the permanent fallback if autoplay is blocked or the file is missing, so the splash
-// can never render blank. muted + playsInline + autoPlay plus a programmatic muted play() covers
-// iOS Safari's inline-autoplay rules. On unmount the video is paused, its src detached and reloaded
-// so the decoder is released \u2014 no leak.
-// Timings retuned to the clip: brand overlay unchanged, light swell at 4.6s, cross-fade into the app
-// starts at 5.5s and completes at 6.4s (was 7.3/8.25 for the longer simulated scene); the
-// \"\u0414\u0430\u043D\u043D\u044B\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u044B\" and daily-reward toasts moved with it so they still land after the splash.
-// DEPLOY NOTE: splash.mp4 must be uploaded to the repo root next to index.html, or the poster image
-// shows instead of the video.
-// mind.exe V5.1 \u2014 typography + insight refresh.
-// TYPOGRAPHY: every font-family in the app was written inline as a literal ('Space Grotesk',
-// sans-serif \u00d7 78, 'JetBrains Mono', monospace \u00d7 77). All of them now resolve through two CSS
-// variables, --font-display and --font-mono, defined once in the global style block; changing the
-// app's type is a one-line edit from here on. The families themselves changed to Sora (display) and
-// IBM Plex Mono (figures) \u2014 see the note above the @import for why. index.html must load the new
-// Google Fonts link (the old one requested Space Grotesk / JetBrains Mono / Inter); an @import in the
-// bundle covers it as a fallback either way, and both old families remain in the stack so nothing
-// renders unstyled during the swap.
-// INSIGHT REFRESH: the manual refresh control on the Home insight card was rendered behind
-// `tradingAsset && \u2026`, so for anyone who had never picked a trading asset in Settings the button
-// simply did not exist \u2014 it read as the feature having disappeared. It is now always rendered, has
-// a proper 28\u00d728 tap target instead of 20\u00d720, and when no asset is selected it says so via a toast
-// rather than silently doing nothing.
-// mind.exe V5.0 \u2014 hardening against data loss caused by APP UPDATES specifically. Audit of what a
-// new deploy (or an old cached app.js still running in someone's browser) can do to an existing
-// Firestore profile, plus three fixes.
-// (1) FORWARD/BACKWARD COMPATIBILITY OF THE PROFILE DOCUMENT. saveProfile uses setDoc, which
-// REPLACES the whole document, and buildPayload rebuilt it from scratch out of the fields this
-// build knows about. So any field written by a newer version \u2014 or by a version the user's cached
-// bundle predates \u2014 was silently dropped on the next save. buildPayload now spreads the
-// as-loaded document (rawProfileRef) underneath its own output, and each section (user, settings,
-// progress, wallet) spreads its previous contents too, so unknown keys survive every round trip in
-// both directions. journal.entries is still replaced wholesale, which is correct \u2014 it is the
-// authoritative list \u2014 and individual entries already preserve unknown fields via ...rest.
-// (2) CORRUPT-BUT-EXISTING PROFILE NO LONGER READ AS \"NEW USER\". loadProfile returned null both
-// when there was no document and when migrateProfile couldn't make sense of one that existed; the
-// second case let the app boot as a brand-new account and overwrite a recoverable document with
-// empty state. It now throws, which routes into the existing failure path: canPersistRef stays
-// false, nothing auto-saves, and the person is asked to reload.
-// (3) PER-SESSION BACKUP DOCUMENT. Immediately before the first overwrite of a session, the
-// previously stored profile is copied to users/{uid}/data/mind-exe-journal-state:backup (one extra
-// write per session, only when a profile already existed). Even a future bug that mangles the live
-// document leaves the prior state recoverable straight from the Firestore console.
-// rawProfileRef is also refreshed after every successful save and cleared on logout / user switch.
-// SCHEMA MIGRATIONS VERIFIED: migrateProfile passes an already-current document through untouched
-// and upgrades a pre-versioned one; migrateEntry preserves unknown per-entry fields via ...e; the
-// screenshot documents are keyed per entry and only deleted when their entry is deleted; the legacy
-// pre-Firebase local documents are never deleted by an update. Nothing in the update path deletes
-// or truncates user data.
-// mind.exe V4.9 \u2014 Firebase/Gemini audit follow-up. Three real defects found and fixed, plus a
-// verification pass over the whole persistence + AI surface.
-// (1) CROSS-USER LEAK IN AI COACH: Coach's loadAiState effect set loadedRef=true but never reset it
-// when userId changed. On an account switch the save effect fired while the PREVIOUS user's analysis
-// and chat history were still in state \u2014 before the new load resolved \u2014 writing user A's AI history
-// into user B's Firestore document. loadedRef now resets before every load, state is cleared
-// immediately on uid change, and each save is validated against loadedForRef (the uid the state was
-// actually loaded for). This was the only place where one account's data could reach another's.
-// (2) UNBOUNDED GEMINI CALLS FOR THE MARKET SNAPSHOT: the hourly cache lives in the SHARED Firestore
-// collection; if that write ever fails (rules/offline) the hour-bucket check misses on every mount
-// and the grounded Search-tool call re-fired each time Home rendered. Added __marketMemCache \u2014 at
-// most one call per asset per hour per session, independent of whether the shared write landed.
-// (3) STARTING-CAPITAL FIELD: the draft-sync effect re-synced from the numeric prop on any external
-// re-render (autosave finishing, coin award, theme change), stomping a half-typed value; and the
-// field accepted characters that produced NaN. Now: focus ref blocks re-sync while typing, input is
-// filtered to a valid non-negative decimal, tapping selects the current amount, Enter commits, and
-// blur clamps \u2014 the field can be fully emptied and retyped, and NaN/negatives can never reach the
-// R / P&L / analytics math (startingCapital is only ever written from the blur handler).
-// VERIFIED, NO CHANGE NEEDED: Gemini call map is aiGenerateInsight / aiChatReply (Coach button +
-// Send only), aiRecognizeTradeFromImage (explicit \"\u0420\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C\" tap), aiPolishText (explicit tap),
-// aiGenerateCalibrationQuestions (explicit Start tap, with a same-day cache), aiFetchMarketSnapshot
-// (hourly cache, now double-guarded) \u2014 no Gemini call sits in a render path or an unguarded effect.
-// Calibration is genuinely adaptive: caComputeAdaptiveFactors reads live entries+analytics (recent
-// losses, revenge risk, raised risk, overtrading, early exits), caBuildContext ships those factors,
-// aggregate stats and the last 12 already-asked questions to Gemini, which may only pick and phrase
-// questions around the supplied factors; scoring stays local (scoreCalibrationDynamic), the result
-// persists to progress.lastCalibration in the profile doc plus a 14-record history document, and it
-// is what Home renders. Firestore remains the sole source of truth: all analytics/statistics derive
-// from the live `entries` array via useMemo, so nothing can serve a stale copy.
-// mind.exe V4.8 \u2014 persistence audit + cinematic splash.
-// PERSISTENCE (priority 1): (a) buildPayload stripped `screenshots` from journal entries before
-// writing the profile doc but NOT `exitScreenshots` \u2014 so base64 close-screenshots were being packed
-// into the profile document, blowing past Firestore's 1 MiB per-document cap; setDoc then rejected
-// the write and persistNow's empty catch swallowed it, meaning the ENTIRE profile (trades, settings,
-// coins) silently stopped saving for anyone who attached close screenshots. Both fields are now
-// stripped. (b) Screenshots moved from one giant media document to one document per journal entry
-// (mediaEntryKey), each written only when its content hash changes and deleted when its entry is
-// deleted; the old single doc is still read on load and merged so nothing is lost. (c) Every cloud
-// helper gated on `window.storage` (the leftover localStorage shim) instead of the actual Firestore
-// session \u2014 now gated on fbAuth.currentUser, so cloud persistence no longer depends on a legacy
-// local shim being present. (d) persistNow now has a single central guard (canPersistRef + live uid)
-// covering every write path \u2014 deleteEntry, import, reset, coins \u2014 not just the auto-save effect, and
-// surfaces failures with a toast instead of swallowing them. (e) Legacy\u2192cloud migration
-// (claimLegacyData / migrateLocalAccountIfNeeded) overwrote the cloud profile outright; it now MERGES
-// (entries unioned by id, cloud wins conflicts, screenshots only written where none exist) and aborts
-// rather than writing if it can't read the existing cloud copy. (f) logout and user-switch now clear
-// canPersistRef and the media hash cache, so one account's screenshot state can't leak into another's
-// write path. Firestore (users/{uid}/data/*) remains the single source of truth; localStorage is used
-// only for the anon id and for reading pre-Firebase legacy data during migration.
-// SPLASH (priority 2): rebuilt as one canvas + one rAF loop \u2014 160 seed-generated stars across three
-// depth bands (independent drift, twinkle, fade-in/out; most under slow orbital drag around the hole),
-// and the candlestick chart now spirals INTO the event horizon: radius shrinks super-linearly so it
-// accelerates, the stream curves and stretches, candles heat toward the disk's colour and are
-// swallowed at the centre. The photo is untouched; its accretion ring now has a conic light sweep
-// rotating inside a static brightness mask (46s/rev) so matter reads as orbiting, plus a slow
-// counter-phase intensity breath \u2014 no blinking. Ken Burns zoom reduced 5%\u21922.2%. Ends on a single
-// light swell that cross-fades into the app. No per-frame setState, no per-star components, no extra
-// timers; rAF cancelled, resize listener removed and canvas cleared on unmount.
-// mind.exe V4.7 — two fixes. (1) CRITICAL DATA LOSS BUG: the cloud-profile load effect set
-// loaded=true in a finally block regardless of whether loadProfile actually succeeded. If the
-// Firestore read threw (network hiccup, timing, permissions) the catch silently swallowed it, but
-// loaded still flipped true with entries/settings sitting at the empty defaults from
-// resetInMemoryState() \u2014 and the auto-persist effect (gated only on `loaded`) immediately wrote
-// that empty state back to Firestore, wiping the real saved data. This is almost certainly what
-// happened to the Google-account user who lost everything. Fixed with a new canPersistRef that
-// only flips true after a load attempt actually completes without throwing (success OR a
-// legitimately-empty new profile both count \u2014 only a thrown error withholds it); the two
-// auto-persist effects, the daily-reward effect, and awardCoins now all check it, so nothing
-// auto-saves until a load has genuinely succeeded. Failed loads now retry twice with backoff before
-// giving up, and only then surface a toast telling the person to reload rather than silently saving
-// zeros over their data. (2) Starting-capital field in Settings: the onChange coerced every
-// keystroke through `parseFloat(...) || 0`, so clearing the field to type a fresh number
-// immediately snapped back to "0" and new digits landed after it (typing "500" produced "0500").
-// Replaced with a local string draft (capitalDraft) that accepts free typing, strips a redundant
-// leading zero before a digit, and only commits to the real numeric startingCapital on blur \u2014
-// matches the pattern already used for price fields elsewhere in the app.
-// mind.exe V4.6 — the splash animation read as crude, not elegant. Root cause: the shimmer was a
-// diagonal light-bar sliding across via background-position \u2014 a recognizable "cheap CSS shine"
-// cliche, and the breathing halo animated both scale AND opacity together, producing a hard
-// heartbeat-like snap rather than a smooth glow. Replaced both: the shimmer is now a still radial
-// highlight (no travel) whose opacity alone breathes on a slow 4.5s ease-in-out cycle, still gated
-// by the brightness mask so only the ring/candle pixels light up \u2014 reads as the ring itself glowing,
-// not a bar sliding over it. The horizon halo now only pulses opacity too (0.4\u21920.85, no scale jump)
-// on its own slower 6s cycle with a -1.5s offset from the shimmer's cycle, so the two overlapping
-// slow breaths don't sync into one obvious blink \u2014 closer to organic "alive" light. Ken Burns eased
-// back to a gentler 1.05 max scale over 12s with a smoother cubic-bezier curve instead of the
-// sharper default ease-in-out.
-// mind.exe V4.5 — splash animations weren't visible: Ken Burns was a 26s cycle and the shimmer a
-// 7s cycle, but the splash only stays on screen for ~7.2s total (see the setTimeout in MindExe), so
-// almost nothing had time to play. Sped Ken Burns up to 9s (scale 1.0->1.1, was 1.06) and the
-// shimmer sweep to 3.2s with a wider, brighter band, so both are now clearly visible within the
-// splash's actual lifetime. Also added a new .splash2-bh-glow layer: a warm radial highlight pinned
-// to the measured event-horizon center (47%/41%) that pulses size+opacity on its own faster 2.6s
-// cycle (screen blend mode), giving the hole a distinct "breathing" glow independent of the shimmer
-// sweep; it shares the same Ken Burns transform as the photo so it stays in registration while
-// zooming instead of drifting off the hole.
-// mind.exe V4.4 — splash screen now uses the user's own black-hole-with-candlestick photo directly
-// (base64 JPEG, quality 75, no re-generation, no CSS-drawn black hole) in place of the earlier
-// landscape stock photo. A matching SPLASH_BLACKHOLE_MASK was computed from this exact image (PIL:
-// grayscale -> gamma/threshold curve keeping only bright pixels) so the existing shimmer-sweep
-// technique now gates on both the accretion disk ring AND the candlestick chart baked into the
-// photo, making the whole scene \u2014 chart included \u2014 pulse with light together. Event horizon
-// center (47%, 41%) was hand-measured against a 10% grid overlay on the source photo and applied to
-// object-position/mask-position/vignette so the crop stays centered on the hole across screen
-// sizes; scene height went from 62% to 100% since this photo's own vertical composition already
-// carries the "chart flows into the hole" story the full height of a phone screen, and the bottom
-// vignette gradient was strengthened accordingly to keep the logo/tagline legible over the busier
-// lower half. No literal photo rotation/warping, consistent with the prior developer's note that it
-// would break the ring's foreshortened perspective \u2014 motion still comes entirely from compositing
-// layers on top of the untouched photo.
-// mind.exe V4.3 — market insight diagnostics + fallback, since the polish button (plain Gemini
-// call, no tools) worked but the market snapshot (grounded call, tools:[{googleSearch:{}}]) never
-// visibly updated. Two changes: (1) aiFetchMarketSnapshot now tries the grounded call first and,
-// if it throws for any reason (tool unsupported by this model/SDK combo, grounding refusing strict
-// JSON output, etc.), logs the real error to console and retries once with a second plain model
-// (no search tool) so the insight still updates from Gemini's own knowledge instead of silently
-// doing nothing \u2014 this also isolates whether the bug is the search tool specifically or
-// something else in the pipeline. (2) The manual refresh button on Home now surfaces the actual
-// failure via a toast (notify, wired through from App) and console.error, instead of swallowing it
-// \u2014 open devtools after pressing refresh to see exactly what's failing if it still doesn't
-// update.
-// mind.exe V4.2 — two changes. (1) Voice input removed entirely (useSpeechToText/MicButton and
-// the unused Mic icon import deleted) and replaced with PolishButton: a small Gemini-backed
-// "\u2728" button next to the same 4 reflection fields (pull in NewEntry/EditTrade, lesson in
-// CloseTrade/EditTrade) that lightly copyedits whatever the trader already typed \u2014 grammar/
-// flow only, meaning and facts untouched, no advice, not answered as a question \u2014 via a
-// separate aiGetPolishModel() instance (same Firebase AI Logic client, different config/no system
-// instruction, since the coaching model's instruction is the wrong fit for a copyedit task). (2)
-// Home's Insight card gets a manual refresh control (RotateCcw icon, spins while busy) next to the
-// pulsing dot, shown only when a trading asset is selected in Settings \u2014 calls
-// aiFetchMarketSnapshot directly (bypassing the hourly cache check) and writes the result back
-// into both the shared Firestore cache and local state, so a stale/failed automatic fetch can be
-// retried on demand instead of waiting up to an hour.
-// mind.exe V4.1 — Home's "Инсайт" card is now Gemini-backed instead of purely local. New
-// aiFetchMarketSnapshot uses a separate getGenerativeModel() config with the Google Search
-// grounding tool (tools:[{googleSearch:{}}]) — same Firebase AI Logic client, not a second
-// integration — to read the real current market and return {moodLabel, summary, btcDominance,
-// sentimentScore, sentimentLabel}. Cached in Firestore per asset class (shared:true) for one hour
-// so every user trading the same asset class reads the same cached snapshot instead of each
-// triggering their own Gemini+Search call on every Home visit. Added a "Что ты торгуешь"
-// (crypto/forex/stocks) selector in Settings — persisted through the same profile save/load/
-// backup/reset paths as measureMode/currency — that both narrows the Gemini prompt's focus and
-// controls whether the BTC.D chip shows in Home's footer ticker (F&G/sentiment chip stays for all
-// asset classes as a general risk-sentiment read). Any fetch failure (unsupported tool, quota,
-// network, bad JSON) falls back to the last cached snapshot, then silently to the previous
-// local-only insight/static BTC_DOMINANCE/FEAR_GREED constants — nothing breaks if a user hasn't
-// picked an asset class yet or Gemini/grounding is unavailable.
-// mind.exe V4.0 — two fixes. (1) PickerField (instrument/setup-type dropdowns in NewEntry/
-// EditTrade) had no click-outside handling, so opening a second field left the first one open
-// underneath it — both stayed open at once, and tapping anywhere else on the screen did nothing.
-// Added a document mousedown/touchstart listener while a picker is open that closes it (and
-// clears the search query) on any click outside its own container; picking a value already closed
-// it as before. (2) Fonts across the whole app have referenced 'Space Grotesk' and 'JetBrains
-// Mono' by name since the beginning, but neither was ever actually loaded — index.html had no
-// font <link> at all, so every label/number silently fell back to the system sans-serif this
-// whole time. Added the Google Fonts stylesheet for both (weights 400–700) plus a body-level
-// font-family/weight default (500, up from the browser's 400) so untagged text reads a bit
-// heavier too. No change needed in app.js itself for this part — see index.html.
-// mind.exe V3.9 — fixed voice input losing text after pressing stop: some Safari builds call
-// stop()/abort() without ever emitting a final (isFinal:true) result for the phrase in progress,
-// so the old code — which only committed on isFinal — silently dropped whatever was said right
-// before stopping. Now every onresult also keeps the still-interim tail in pendingRef; that gets
-// flushed into the field on session end (including mid-restart chunks) and, as a safety net, 300ms
-// after stop() even if onend never fires. Final chunks still commit immediately as before.
-// mind.exe V3.8 — two fixes. (1) Voice input on iOS Safari: webkitSpeechRecognition there ends
-// the session after every short pause even with continuous:true — a known platform quirk, not
-// something continuous:true can override. useSpeechToText now tracks the user's actual intent
-// (wantRef) separately from the browser session; when a session ends but the user hasn't pressed
-// stop, it silently spins up a fresh recognition instance ~200ms later so it reads as one
-// continuous recording instead of dying after ~1 second. Also switched interimResults to true,
-// which several iOS builds need to keep the audio pipeline alive at all — only isFinal chunks are
-// still appended to the field. (2) Bottom nav tiles were too big/blocky — shrunk icon badges
-// (regular 44px -> 32px, primary 48px -> 36px), dropped the visible border on regular tiles (flat
-// background tint only when active), softer/smaller glow on the primary "Запись" tile, corners
-// rounded-2xl -> rounded-xl throughout for a lighter feel.
-// mind.exe V3.7 — restyled the bottom nav to match the reference: dropped the floating-circle
-// look from V3.6 (it wasn't docked to the row and used the wrong colors). Every one of the 7 tabs
-// now gets its own static rounded-square icon badge (subtle border, accent tint when active) with
-// the label below it, instead of a shared sliding highlight box — closer to the reference's flat
-// tile grid. "Запись" (primary) keeps its own branch: a taller near-white badge with a black icon
-// and a soft white glow, pulled up slightly (-mt-3) so it visibly sits a notch above its
-// neighbors without floating free of the bar; label goes bold white instead of accent-colored.
-// Removed the now-unused activeIndex slider calc. Desktop sidebar untouched (not part of the ask).
-// mind.exe V3.6 — bottom nav restructure. "new" (formerly mislabeled "Дневник") is now the
-// centered, elevated primary button — a bigger accent-filled circle popping above the bar (own
-// branch in the nav.map, marked via nav[].primary, sliding highlight box skipped for that slot
-// since the circle itself is the active indicator) — reordered to sit in the middle of the 7-tab
-// row. Renamed labels: "new" -> "Запись" (short, still clear it's for logging a trade), "log"
-// (the actual trade list, NotebookText icon) -> "Дневник" (was wrongly "Заметки"). Same nav array
-// feeds the desktop sidebar too, so labels/order stay consistent there.
-// mind.exe V3.5 — fixed voice input: (1) the "stop" control was a 10px pill that easily read as
-// "nothing happened" when tapped — it's now a full red bar with explicit "Запись… нажми, чтобы
-// остановить" text while recording. (2) guarded against double-start (a stray second tap while
-// already recording could throw "already started" repeatedly); (3) wrapped the SpeechRecognition
-// constructor itself in try/catch — some restricted/insecure contexts throw synchronously there
-// instead of firing a normal error event, which was an uncaught exception before; (4) added an
-// unmount cleanup that stops any recognition still running if the user switches tabs mid-recording
-// — previously it kept firing in the background against a stale component and could throw
-// repeatedly with no way to stop it from the UI, which is what looked like "breaks the app".
-// mind.exe V3.4 — added a "Очистить" reset button to the Coach chat card header (next to
-// chatTitle, shown only when chatMessages.length > 0). Clears local chatMessages state; the
-// existing persistence useEffect (already keyed on chatMessages) then overwrites the stored
-// aiState with an empty chat array via the existing saveAiState/storageSet — no new storage call,
-// no change to the analysis insight box, Firestore schema, or Auth.
-// mind.exe V3.3 — two additions to the Journal flow, both wired through existing systems only
-// (no new Firebase project, no new AI client, no changes to Auth/Firestore/Analytics/Pattern
-// Engine/Calibration). (1) AI trade recognition: NewEntry now has a "Распознать сделку по
-// скриншоту" button; the uploaded image is compressed with the existing compressImageFile and
-// added to the existing screenshots array (no duplicate storage), then sent to Gemini via a new
-// aiCallGeminiVision (same aiGeminiModel singleton, just called with an inlineData image part
-// instead of text-only). Prompt instructs Gemini to return null for anything not clearly visible
-// — never invented prices. Recognized fields only pre-fill the existing form inputs; RR is still
-// computed exclusively by the existing computePlannedRR, and nothing saves until the user presses
-// the existing "Сохранить запись" button. Direction is mapped LONG/SHORT -> Long/Short to match
-// the app's existing convention. (2) Voice input: a small mic button (new MicButton +
-// useSpeechToText, browser Web Speech API only, no network/AI call) sits next to the four
-// existing reflection labels (pull in NewEntry/EditTrade, lesson in CloseTrade/EditTrade) and
-// appends recognized speech into the existing pull/lesson textareas — manual typing/editing still
-// works exactly as before. Unsupported browsers or denied mic permission fall back to a toast via
-// the existing notify(), the app never blocks.
-// mind.exe V3.2 — two fixes on the sticky mobile header from V3.0. (1) The hard 1px bottom
-// border was clearly visible as a sharp cut line under the logo bar — removed it, replaced with
-// a soft ~20px gradient fade (header's own translucent color fading to transparent) that extends
-// just past the header's bottom edge, so it blends into the scrolling content instead of a crisp
-// edge. (2) The small accent gradient divider under the logo used to live outside the sticky
-// header, in normal document flow — so it scrolled away on the very first pixel of scroll while
-// the header itself stayed pinned, an obvious mismatch. Moved it inside the sticky header (right
-// under the logo row) so it now scrolls/sticks as one unit with the rest of the bar.
-// mind.exe V3.1 — fixed the "странный блюр" on long AI replies: DecodeText's per-word cascade
-// computed its stagger step as maxTotalMs/wordCount, and for a long paragraph (a full AI answer
-// can be 150+ words) that step collapsed toward its floor — meaning dozens of words ended up
-// mid-fade simultaneously for well over a second, so a screenshot taken in that window showed a
-// patchwork of sharp/blurred words in no visible order rather than a clean sweep. Long text
-// (>24 words) now skips the per-word stagger entirely and fades in as one synchronized block
-// (single 0.55s softReveal, no stagger) — reads as calm regardless of length or when it's
-// captured. Short text (titles, buttons, chips) keeps the per-word cascade, which was never the
-// part that looked wrong.
-// mind.exe V3.0 — two changes. (1) DecodeText replaced entirely: the per-character random-glyph
-// "decrypt" animation is gone (it was still reading as jittery/artificial even after V2.5's
-// tuning). New version is a calm word-by-word blur+fade cascade — each word starts blurred,
-// dimmed and offset by a few px, and settles into place left-to-right via a single CSS animation
-// per word (browser-driven via animation-delay, no JS timer loop, no per-frame re-renders at
-// all). Same external API (text/as/className/style/maxTotalMs) so every call site across Coach/
-// Analysis needed zero changes. New `softReveal` keyframe added to the global stylesheet.
-// (2) The mobile top bar (logo + wordmark + wallet badge) is now `sticky top-0` with its own
-// translucent/blurred background (matching the existing bottom-nav glass treatment) and a hairline
-// bottom border, so it stays pinned while the page scrolls instead of scrolling away with the
-// content. Moved that bar's top padding off the outer content wrapper and onto the sticky bar
-// itself so spacing looks identical whether it's stuck or not. Desktop is unaffected (that header
-// row is md:hidden; desktop already has its own fixed sidebar).
-// mind.exe V2.9 — fixed the black-screen crash on Calibration. Root cause: the same-day cache
-// record saved to Firestore (calibHistoryKey) stored each question's id/text/factor/category/
-// source but NOT its `options` array. On a same-day reopen the cached (option-less) questions
-// were loaded straight into state, and the quiz screen's `q.options.map(...)` threw on an
-// undefined array — with no error boundary that unmounts the whole tree, leaving just the plain
-// black body background from index.html. Fixed at the source (the saved history record now
-// includes `options`) and defensively: prepareAndStart now validates every cached question has a
-// non-empty options array before trusting the cache (so an already-corrupted record saved by V2.6
-// self-heals into a fresh generation instead of crashing again), and the quiz-stage render bails
-// to a small error state + restart button if `q` or `q.options` is ever missing for any other
-// reason, instead of letting the crash propagate.
-// mind.exe V2.8 — EmotionGrid (the entry-mood pad in New Entry / Edit Trade) reworked. It used
-// to classify the tapped point into just 4 quadrant states via a >=50/<50 split on each axis.
-// Replaced with a 3x3 banding (fear/neutral/confidence × on-edge/balanced/calm) giving 9 distinct
-// written states, so a point near the center now reads as "even, neutral" instead of being forced
-// into whichever quadrant it's barely closer to. Visual pass: added two faint tertile grid lines
-// per axis (in addition to the bold center cross) so the 9 zones are visible, not just implied;
-// the placed dot and its state text now use a continuous LOSS→WARN→WIN color blend
-// (emotionPositionColor/emotionLerpHex, new) based on actual position instead of 3 fixed colors;
-// dot gets a two-layer glow (soft ring + blur) instead of a flat halo; card background/shadow
-// deepened slightly (inset shadow, warmer center glow) for more depth. Also: all of EmotionGrid's
-// text (axis labels, hint, all 9 states) was hardcoded Russian with no English path even though
-// the rest of the app is bilingual — moved into t.newEntry.emotionGrid (RU/EN) and the component
-// now takes `t` like its siblings.
-// mind.exe V2.7 — renamed the "Coach" tab to "Analysis" everywhere it's user-visible: bottom nav
-// label, screen title, chat section title ("Спросить ИИ" / "Ask AI"), and the online-status line.
-// Internal identifiers (Coach component, t.coach.* keys, aiCoach-adjacent functions) intentionally
-// left as-is — renaming those is a pure code-churn risk with zero user-facing benefit.
-// mind.exe V2.6 — Adaptive pre-session Calibration. Calibration is no longer a fixed 6-question
-// quiz: on "Start" it now reads the existing Analytics/Pattern Engine output for the trader's last
-// closed session + a short recent window and turns it into a small set of typed, severity-scored
-// factors (consecutive_losses, euphoria_risk, revenge_risk, increased_risk, overtrading_risk,
-// early_exit_pattern, fomo_risk, repeated_lesson, decreased_discipline, poor_sleep,
-// reflection_note — new caComputeAdaptiveFactors, nothing invented if the sample isn't there).
-// Those factors + a compact context (new caBuildContext, same shape family as the Coach tab's
-// aiBuildContext) go to the existing Gemini integration (one new call site,
-// aiGenerateCalibrationQuestions) which returns ONLY question text + factor/category/priority —
-// never scores, never awareness, per spec. Every returned (or fallback) question is scored through
-// one new shared 4-point readiness scale (CALIBRATION_READINESS_SCALE) via scoreCalibrationDynamic,
-// so Gemini can't influence the math. Final set = 2 baseline questions (sleep/emotion, unchanged
-// from CALIBRATION_QUESTIONS) + up to 4 adaptive ones. Three-tier fallback if Gemini is unavailable
-// or returns something unusable: caLocalFallbackQuestions (local per-factor question bank) ->
-// full original static CALIBRATION_QUESTIONS set — Calibration can never break. Same-day caching
-// and a rolling question history (avoids repeating the same factor every day) are stored per user
-// via the same storageGet/Set Firestore pattern as loadAiState (new calibHistoryKey). Nothing in
-// Analytics Engine, Pattern Engine, Calibration Score math, Firebase Auth, Firestore schema, or the
-// existing Gemini/Coach integration was changed — this is purely an added layer.
-// mind.exe V2.5 — two Coach-screen fixes. (1) Chat card layout: it had `minHeight` instead of a
-// fixed `height`, so the card grew to fit the whole conversation instead of scrolling internally
-// — pushed the input off-screen and blew past the bottom nav, exactly like the "стало резиновым"
-// screenshot showed. Reverted to a fixed height (52vh, capped at 560px) plus `min-h-0` on the
-// inner scroll div (a flexbox gotcha: a flex child needs min-h-0 for overflow-y-auto to actually
-// clip instead of growing its parent). (2) DecodeText felt like lag, not an effect: it drove a
-// requestAnimationFrame loop (60 ticks/sec) that rebuilt and re-rendered the *entire* string every
-// frame for up to 1100ms, and — because revealMs (90-260ms) was large relative to the tiny
-// per-char delay on long strings — most characters were mid-scramble simultaneously, i.e. the
-// whole paragraph flickering at once rather than a left-to-right sweep, which is real jank on a
-// phone with 10+ DecodeText instances live at once (title, labels, chips, messages...). Switched
-// the tick loop from rAF to a slower ~55ms setTimeout cadence (fewer re-renders) and cut default
-// maxTotalMs/revealMs roughly in half (900/260 -> 520/90), with the long-text call sites (analysis
-// paragraph, AI chat replies, quick-question chips) tuned down to match. Net effect: a quick,
-// calm settle instead of a sustained flicker.
-// mind.exe V2.4 — pilot: text on the Coach screen no longer just fades in, it "decodes" — the
-// full string renders immediately with every letter/digit scrambled to a random character from
-// its own script (cyrillic stays cyrillic, digits stay digits, so width never jumps), then
-// characters lock into their real value left-to-right over a capped ~0.5-1.1s regardless of
-// string length. New shared DecodeText component (near LogoSpinner) drives this via
-// requestAnimationFrame and respects prefers-reduced-motion. Applied to: the Coach title/
-// subtitle, both card section labels, the Analyze button label, the analysis result paragraph
-// (so a fresh AI insight visibly "decrypts" in), the scope-info line, the 6 quick-question
-// chips, assistant chat replies (user messages stay plain — only AI output decodes), the
-// disclaimer, and the status/model footer row. Card layout and colors unchanged. If this reads
-// well, next step is rolling DecodeText out to the other screens.
-// mind.exe V2.3 — bottom mobile nav bar geometry fixed: the active-tab highlight was positioned
-// with percentages measured against the bar's padding box (p-1 on the same element as the grid),
-// while the grid tracks themselves are sized against the content box (padding excluded) — a
-// mismatch that grows with each column, so it was worst (visibly skewed/cut) on the rightmost
-// tab (Settings). Fixed by moving the 4px inset from padding to margin on an inner wrapper: the
-// highlight and the grid buttons now share that inner div as their coordinate system with zero
-// padding on it, so percentage math for both matches exactly. Outer rounded shell also got
-// overflow-hidden so nothing can visually poke past its rounded corners again.
-// mind.exe V2.2 — Coach tab redesigned: header now has a subtitle line, the analysis card gained
-// a small glowing accent orb + gradient "Analyze" button + a scope-info footer line, and the chat
-// card shows a 2-column grid of tappable quick-question chips (Brain/Star/TrendingDown/Target/
-// RotateCcw/LineChart icons) before the first message, which fire straight into sendMessage
-// instead of requiring typing. Added a bottom status row (pulsing WIN-colored online dot +
-// "Model: Gemini" badge) below the chat card. All colors stay on the existing cosmic BASE/accent
-// palette — no new hues introduced. sendMessage now accepts an optional override string so the
-// quick-question chips can bypass the input box.
-// mind.exe V2.1 — splash-screen shimmer glow restored: the luminance mask baked for the new 16:9
-// black hole photo had way too harsh a contrast curve (mean alpha ~4/255, only ~5% of pixels
-// visible), so the animated light sweep across the ring was barely there. Rebuilt the mask with a
-// gentler black point/gamma and a brightness boost (mean alpha now ~21/255) so the glow reads clearly
-// on the loading screen again. (Also since V2.0, undocumented: App Check reCAPTCHA v3 site key wired
-// in, black hole object-position retuned to 51%/48% to center the event horizon on mobile crops,
-// CalendarView capped to max-w-md so it doesn't blow up on wide desktop, Settings' Section/
-// SectionLabel hoisted out of the component body to fix a focus-loss-per-keystroke bug, and the Coach
-// chat got a pulsing logo spinner + fade-in for replies instead of an abrupt pop-in.)
-// mind.exe V2.0 — Gemini AI layer added via Firebase AI Logic (client SDK, Gemini Developer API
-// backend — no Cloud Function, no Blaze billing plan needed). Bumped the Firebase JS SDK from
-// 10.13.0 to 12.17.1 in index.html (required for the firebase/ai package to exist) and added
-// firebase/ai + firebase/app-check imports. Replaced the old aiAnalyzeCallable Cloud Function
-// (Anthropic-backed, deferred pending Blaze) with a direct Gemini call. New AI layer, organized as
-// three logical modules within this file: aiContextBuilder (turns real analytics/journal data into
-// a compact, privacy-safe JSON — no raw Firestore/user/auth data ever leaves the device), aiPrompts
-// (fixed system instruction: no trading signals, no diagnoses, RR+WinRate read jointly, cites only
-// given numbers), aiService (single Gemini call site + error handling). Coach tab now calls Gemini
-// directly; requests only fire on explicit user action (Analyze button / Send), never on render, and
-// the automatic insight is skipped entirely if the underlying stats hash hasn't changed since the
-// last generated insight. AI_MODEL is the one place the model name lives (gemini-3.1-flash-lite —
-// current free-tier fast/cheap model; 2.0/2.5 Flash & Flash-Lite are being retired through 2026).
-// Two manual setup steps remain in the Firebase console (can't be done from code): 1) run through
-// the "AI Logic" setup wizard once to enable the Gemini Developer API for this project (Spark plan
-// is fine, no billing needed); 2) optionally create a reCAPTCHA v3 site key under App Check and
-// paste it into AI_APP_CHECK_SITE_KEY before Nov 2, 2026, when Google starts enforcing App Check
-// for Firebase AI Logic — until then the app works fine with it left blank.
-// entry.jsx
 import { createRoot } from "react-dom/client";
 
 // firebase.js
@@ -806,8 +222,14 @@ var STRINGS = {
       calibrationCta: "\u041F\u0440\u043E\u0439\u0442\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439",
       insight: "\u0418\u043D\u0441\u0430\u0439\u0442",
       marketRefresh: "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C",
+      // V0.5 — эти подписи были захардкожены по-английски и не менялись при русском языке.
+      stopLoss: "\u0421\u0442\u043E\u043F-\u043B\u043E\u0441\u0441",
+      takeProfit: "\u0422\u0435\u0439\u043A-\u043F\u0440\u043E\u0444\u0438\u0442",
+      entrySection: "\u0412\u0425\u041E\u0414",
+      exitSection: "\u0412\u042B\u0425\u041E\u0414",
+      wlbe: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C / \u0423\u0431\u044B\u0442\u043E\u043A / \u0412 \u043D\u043E\u043B\u044C",
+      avgRrWinRate: "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 RR \u0438 \u0432\u0438\u043D\u0440\u0435\u0439\u0442",
       // V0.3
-      marketStale: "\u0411\u0435\u0437 \u0441\u0432\u0435\u0436\u0438\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u2014 \u043F\u043E\u0438\u0441\u043A \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D, \u0441\u0432\u043E\u0434\u043A\u0430 \u043F\u043E \u043F\u0430\u043C\u044F\u0442\u0438 \u043C\u043E\u0434\u0435\u043B\u0438",
       moodPrefix: "\u041D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435 \u0440\u044B\u043D\u043A\u0430: ",
       insightConfident: "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442, \u0447\u0442\u043E \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u043E\u043A\u0443\u043F\u0430\u0435\u0442\u0441\u044F \u2014 \u0434\u0435\u0440\u0436\u0438 \u043E\u0431\u044A\u0451\u043C \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C.",
       insightFocus: "\u0421\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u044F\u0432\u0438\u043B\u0441\u044F \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D.",
@@ -914,6 +336,13 @@ var STRINGS = {
       tradingAssetForex: "\u0412\u0430\u043B\u044E\u0442\u0430",
       tradingAssetStocks: "\u0410\u043A\u0446\u0438\u0438",
       tradingAssetNote: "\u0412\u043B\u0438\u044F\u0435\u0442 \u043D\u0430 \u0442\u043E, \u043A\u0430\u043A\u043E\u0439 \u0440\u044B\u043D\u043E\u043A \u0430\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u0442 \u0418\u0418 \u0434\u043B\u044F \u0438\u043D\u0441\u0430\u0439\u0442\u0430 \u043D\u0430 \u0413\u043B\u0430\u0432\u043D\u043E\u0439.",
+      strategyLabel: "\u0422\u0432\u043E\u044F \u0441\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u044F",
+      groupProfile: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C",
+      groupTrading: "\u0422\u043E\u0440\u0433\u043E\u0432\u043B\u044F",
+      groupApp: "\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435",
+      groupData: "\u0414\u0430\u043D\u043D\u044B\u0435 \u0438 \u0441\u0431\u0440\u043E\u0441",
+      strategyPlaceholder: "\u041D\u0430\u043F\u0440\u0438\u043C\u0435\u0440: \u0441\u043A\u0430\u043B\u044C\u043F\u0438\u043D\u0433 \u043D\u0430 M1\u2013M5, 10\u201320 \u0441\u0434\u0435\u043B\u043E\u043A \u0432 \u0434\u0435\u043D\u044C, \u0432\u0445\u043E\u0434 \u043E\u0442 \u0443\u0440\u043E\u0432\u043D\u0435\u0439, \u0441\u0442\u043E\u043F 0.3%, \u0446\u0435\u043B\u044C 1R, \u0442\u043E\u0440\u0433\u0443\u044E \u0442\u043E\u043B\u044C\u043A\u043E \u043D\u0430 \u043B\u043E\u043D\u0434\u043E\u043D\u0441\u043A\u043E\u0439 \u0441\u0435\u0441\u0441\u0438\u0438",
+      strategyNote: "\u0418\u0418 \u0431\u0443\u0434\u0435\u0442 \u043E\u043F\u0438\u0440\u0430\u0442\u044C\u0441\u044F \u043D\u0430 \u044D\u0442\u043E \u043E\u043F\u0438\u0441\u0430\u043D\u0438\u0435 \u0432\u043E \u0432\u0441\u0435\u0445 \u0430\u043D\u0430\u043B\u0438\u0437\u0430\u0445 \u0438 \u043D\u0435 \u0431\u0443\u0434\u0435\u0442 \u0441\u0447\u0438\u0442\u0430\u0442\u044C \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u043E\u0448\u0438\u0431\u043A\u043E\u0439.",
       account: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442",
       logout: "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u0430\u043A\u043A\u0430\u0443\u043D\u0442\u0430",
       localAccountNote: "\u0410\u043A\u043A\u0430\u0443\u043D\u0442 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u0443\u0435\u0442\u0441\u044F \u0447\u0435\u0440\u0435\u0437 \u043E\u0431\u043B\u0430\u043A\u043E \u0438 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D \u0441 \u043B\u044E\u0431\u043E\u0433\u043E \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0430 \u043F\u043E\u0441\u043B\u0435 \u0432\u0445\u043E\u0434\u0430.",
@@ -1091,7 +520,12 @@ var STRINGS = {
       calibrationCta: "Calibrate before your session",
       insight: "Insight",
       marketRefresh: "Refresh",
-      marketStale: "No live data \u2014 search unavailable, summary from the model's own knowledge",
+      stopLoss: "Stop loss",
+      takeProfit: "Take profit",
+      entrySection: "ENTRY",
+      exitSection: "EXIT",
+      wlbe: "Win / Loss / Breakeven",
+      avgRrWinRate: "Average RR and win rate",
       moodPrefix: "Market mood: ",
       insightConfident: "Recent trades show confidence is paying off \u2014 keep your size consistent.",
       insightFocus: "Focus on consistency. Add a few more trades for a real pattern to show up.",
@@ -1193,6 +627,13 @@ var STRINGS = {
       tradingAssetForex: "Forex",
       tradingAssetStocks: "Stocks",
       tradingAssetNote: "Controls which market the AI insight on Home analyzes.",
+      strategyLabel: "Your strategy",
+      groupProfile: "Profile",
+      groupTrading: "Trading",
+      groupApp: "App",
+      groupData: "Data and reset",
+      strategyPlaceholder: "e.g. M1\u2013M5 scalping, 10\u201320 trades a day, level entries, 0.3% stop, 1R target, London session only",
+      strategyNote: "The AI uses this description in every analysis and won't treat your style as a mistake.",
       account: "Account",
       logout: "Log out",
       localAccountNote: "Account syncs to the cloud and is available from any device after logging in.",
@@ -4286,7 +3727,7 @@ function Sparkline({ points, color, width = 68, height = 26 }) {
   const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
   return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
 }
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify }) {
+function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
@@ -4306,32 +3747,50 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       cancelled = true;
     };
   }, [tradingAsset, lang]);
-  // V0.3 — вторая, персональная часть инсайта. Считается ТОЛЬКО когда уже есть рыночный снапшот,
-  // и пересчитывается только при смене снапшота/статистики/часа (см. marketLinkStamp) — не на
-  // каждом рендере Home.
-  const [marketLink, setMarketLink] = useState(null);
-  const marketDigest = useMemo(() => aiMarketPersonalDigest(entries, analytics), [entries, analytics]);
-  const marketLinkStamp = useMemo(
-    () => marketSnapshot ? aiHashContext({ s: marketSnapshot.summary || "", f: marketSnapshot.facts || [], d: marketDigest, l: lang, h: marketSnapshot.hourBucket }) : null,
-    [marketSnapshot, marketDigest, lang]
-  );
+  // V0.4 — совет по собственному журналу вместо пересказа рынка. Контекст тот же, что у Coach
+  // (aiBuildContext), плюс стратегия из настроек. Запрос уходит только когда меняется хэш
+  // контекста — не на каждый рендер Home.
+  const [homeAdvice, setHomeAdvice] = useState(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const adviceContext = useMemo(() => aiBuildContext(entries, analytics, lang, strategyNote), [entries, analytics, lang, strategyNote]);
+  const adviceHash = useMemo(() => aiHashContext(adviceContext), [adviceContext]);
   useEffect(() => {
-    if (!marketSnapshot || !tradingAsset) {
-      setMarketLink(null);
+    if (entries.length === 0) {
+      setHomeAdvice(null);
       return;
     }
     let cancelled = false;
-    getMarketLink(tradingAsset, marketSnapshot, marketDigest, lang).then((text) => {
-      if (!cancelled && text) setMarketLink(text);
+    setAdviceLoading(true);
+    getHomeAdvice(adviceContext, adviceHash, false).then((text) => {
+      if (!cancelled && text) setHomeAdvice(text);
     }).catch((err) => {
-      console.error("mind.exe market link failed:", err);
+      console.error("mind.exe home advice failed:", err);
+    }).finally(() => {
+      if (!cancelled) setAdviceLoading(false);
     });
     return () => {
       cancelled = true;
     };
-    // marketLinkStamp покрывает snapshot+digest+lang; остальное читается внутри и не должно
-    // само по себе перезапускать запрос.
-  }, [marketLinkStamp, tradingAsset]);
+    // adviceContext/entries читаются внутри; перезапуск строго по изменению хэша контекста.
+  }, [adviceHash]);
+  // V0.4 — кнопка обновления в шапке карточки: принудительно перегенерировать совет (мимо кэша)
+  // и заодно освежить рыночные метрики внизу экрана, если актив выбран.
+  const refreshInsight = async () => {
+    if (marketRefreshing || adviceLoading) return;
+    if (entries.length > 0) {
+      setAdviceLoading(true);
+      try {
+        const text = await getHomeAdvice(adviceContext, adviceHash, true);
+        if (text) setHomeAdvice(text);
+      } catch (err) {
+        console.error("mind.exe home advice (manual) failed:", err);
+        notify?.(t.coach.error);
+      } finally {
+        setAdviceLoading(false);
+      }
+    }
+    if (tradingAsset) refreshMarketSnapshot();
+  };
   const refreshMarketSnapshot = async () => {
     if (marketRefreshing) return;
     if (!tradingAsset) {
@@ -4442,31 +3901,22 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
             "button",
             {
               type: "button",
-              onClick: refreshMarketSnapshot,
-              disabled: marketRefreshing,
+              onClick: refreshInsight,
+              disabled: marketRefreshing || adviceLoading,
               title: t.home.marketRefresh,
               "aria-label": t.home.marketRefresh,
               className: "flex items-center justify-center w-7 h-7 -m-1 rounded-full transition-all active:scale-90",
-              style: { color: accent, opacity: marketRefreshing ? 0.45 : 0.85 },
-              children: /* @__PURE__ */ jsx(RotateCcw, { size: 13, className: marketRefreshing ? "animate-spin" : void 0 })
+              style: { color: accent, opacity: marketRefreshing || adviceLoading ? 0.45 : 0.85 },
+              children: /* @__PURE__ */ jsx(RotateCcw, { size: 13, className: marketRefreshing || adviceLoading ? "animate-spin" : void 0 })
             }
           ),
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: accent } })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: [
-        t.home.moodPrefix,
-        /* @__PURE__ */ jsx("span", { style: { color: accent }, children: moodKey }),
-        ".",
-        " ",
-        marketSnapshot?.summary || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus)
-      ] }),
-      // V0.3 — персональная связка рынка со статистикой этого трейдера. Отдельным абзацем, чтобы
-      // рыночный факт и вывод про себя не смешивались в одно предложение.
-      marketLink && /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mt-2", style: { color: BASE.inkDim }, children: marketLink }),
-      // Пометка появляется, только когда сводка построена БЕЗ доступа к вебу — то есть это
-      // знание модели, а не текущий рынок.
-      marketSnapshot && marketSnapshot.grounded === false && /* @__PURE__ */ jsx("p", { className: "text-[10.5px] mt-2", style: { color: BASE.inkFaint }, children: t.home.marketStale })
+      /* V0.4 — текст карточки: совет по собственному журналу. Пока Gemini отвечает (или если он
+         недоступен) показывается локальный инсайт из аналитики — он всегда посчитан по реальным
+         данным, поэтому подмены фактов не происходит. */
+      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: homeAdvice || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus) })
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 divide-x", style: { borderColor: BASE.line }, children: [
@@ -4900,10 +4350,10 @@ async function aiPolishText(text) {
   const trimmed = (text || "").trim();
   if (!trimmed) throw new Error("ai_empty_text");
   const model = aiGetPolishModel();
-  const result = await model.generateContent(`${AI_POLISH_TASK}
+  const result = await caWithTimeout(model.generateContent(`${AI_POLISH_TASK}
 
 TEXT:
-${trimmed}`);
+${trimmed}`), 2e4, "ai_polish_timeout");
   const out = result?.response?.text?.();
   if (!out || !out.trim()) throw new Error("ai_empty_response");
   return out.trim();
@@ -5127,7 +4577,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-2", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "Stop Loss" }),
+        /* @__PURE__ */ jsx(L, { children: t.home.stopLoss }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -5143,7 +4593,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
         )
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "Take Profit" }),
+        /* @__PURE__ */ jsx(L, { children: t.home.takeProfit }),
         /* @__PURE__ */ jsx(
           "input",
           {
@@ -5554,7 +5004,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
       " \u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: "ENTRY" }),
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: t.home.entrySection }),
     /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-x-8 lg:items-start", children: [
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
@@ -5583,11 +5033,11 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-2", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "Stop Loss" }),
+        /* @__PURE__ */ jsx(L, { children: t.home.stopLoss }),
         /* @__PURE__ */ jsx("input", { value: stopLoss, onChange: (e) => setStopLoss(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ jsx(L, { children: "Take Profit" }),
+        /* @__PURE__ */ jsx(L, { children: t.home.takeProfit }),
         /* @__PURE__ */ jsx("input", { value: takeProfit, onChange: (e) => setTakeProfit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
       ] })
     ] }),
@@ -5607,7 +5057,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
     /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent, t }),
-    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: "EXIT" }),
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: t.home.exitSection }),
     hasPlanNow && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
       /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
       /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: closeTypeOptions.map((o) => /* @__PURE__ */ jsx(
@@ -5725,7 +5175,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       ] }),
       openId === e.id && /* @__PURE__ */ jsxs("div", { className: "tab-content px-4 py-3 space-y-3 text-sm", style: { background: BASE.bg, color: BASE.inkDim }, children: [
         /* @__PURE__ */ jsxs("div", { children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "ENTRY" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: t.home.entrySection }),
           (e.stopLoss != null || e.takeProfit != null) && /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2", style: { fontFamily: "var(--font-mono)" }, children: [
             e.stopLoss != null && /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(e.stopLoss)] }),
             e.takeProfit != null && /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(e.takeProfit)] }),
@@ -5739,7 +5189,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
           ] })
         ] }),
         isEntryClosed(e) && /* @__PURE__ */ jsxs("div", { className: "pt-2", style: { borderTop: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "EXIT" }),
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: t.home.exitSection }),
           /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2 flex-wrap", style: { fontFamily: "var(--font-mono)" }, children: [
             e.closeType && /* @__PURE__ */ jsx("span", { children: { tp: "\u041F\u043E TP", sl: "\u041F\u043E SL", manual: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }[e.closeType] || e.closeType }),
             e.exitPrice != null && /* @__PURE__ */ jsxs("span", { children: ["Exit ", formatPriceValue(e.exitPrice)] }),
@@ -5820,7 +5270,7 @@ function TagBars({ data, measureMode, currency }) {
     ] }, d.tag);
   }) });
 }
-function CalendarView({ entries, accent, measureMode, currency }) {
+function CalendarView({ entries, accent, measureMode, currency, t }) {
   const [viewMonth, setViewMonth] = useState(() => {
     const d = /* @__PURE__ */ new Date();
     d.setDate(1);
@@ -5907,7 +5357,7 @@ function CalendarView({ entries, accent, measureMode, currency }) {
             /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: selectedEntries.length })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
-            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "W / L / BE" }),
+            /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.home.wlbe }),
             /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
               daySummary.wins,
               "/",
@@ -6058,7 +5508,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
       /* @__PURE__ */ jsx(Pill, { active: view === "performance", onClick: () => setView("performance"), accent, children: "\u0414\u0438\u043D\u0430\u043C\u0438\u043A\u0430" }),
       /* @__PURE__ */ jsx(Pill, { active: view === "calendar", onClick: () => setView("calendar"), accent, children: "\u041A\u0430\u043B\u0435\u043D\u0434\u0430\u0440\u044C" })
     ] }),
-    view === "calendar" && /* @__PURE__ */ jsx(CalendarView, { entries, accent, measureMode, currency }),
+    view === "calendar" && /* @__PURE__ */ jsx(CalendarView, { entries, accent, measureMode, currency, t }),
     view === "emotions" && /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-6", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
@@ -6165,7 +5615,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
       /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start", children: [
       tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm lg:col-span-2", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
       analytics.rrStats && analytics.rrStats.sampleSize > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "Average RR \u0438 Win Rate" }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: t.home.avgRrWinRate }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2", children: [
           /* @__PURE__ */ jsx(StatCard, { label: "Average RR", value: analytics.rrStats.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "\u2014", accent: analytics.rrStats.avgRealizedRR != null ? analytics.rrStats.avgRealizedRR >= 0 ? WIN : LOSS : BASE.ink }),
           /* @__PURE__ */ jsx(StatCard, { label: "Win Rate", value: analytics.rrStats.winRate != null ? `${analytics.rrStats.winRate}%` : "\u2014", accent: BASE.ink })
@@ -6287,7 +5737,7 @@ function CalibrationRing({ pct, color, size = 172 }) {
 // unchanged for the rest of the day. V5.8: bumped for CALIBRATION_SCALE_SETS (readiness/
 // confidence/calm/impact) replacing the single hardcoded yes/no scale.
 var CALIBRATION_CACHE_SCHEMA = 3;
-function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }) {
+function Calibration({ accent, onComplete, lang, t, entries, analytics, userId, strategyNote }) {
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -6329,7 +5779,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
       let adaptiveQuestions = [];
       if (factors.length) {
         try {
-          const context = caBuildContext(entries, analytics, factors, history, lang);
+          const context = caBuildContext(entries, analytics, factors, history, lang, strategyNote);
           // V0.1 — вечная загрузка на экране "Готовим вопросы...". generateContent() у Firebase AI
           // не имеет собственного таймаута: при недоступной/висящей сети промис не резолвится
           // никогда, поэтому finally { setStage("quiz") } не выполнялся. Ограничиваем ожидание:
@@ -7075,7 +6525,7 @@ function aiCalibrationDigest(analytics) {
     confidence: c.confidence || null
   };
 }
-function aiBuildContext(entries, analytics, lang) {
+function aiBuildContext(entries, analytics, lang, strategyNote) {
   const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
   const closedEntries = validEntries.filter(isEntryClosed);
   const sortedClosed = [...closedEntries].sort((a, b) => a.date - b.date);
@@ -7084,6 +6534,9 @@ function aiBuildContext(entries, analytics, lang) {
   const violation = (id) => analytics?.discipline?.violations?.find((v) => v.id === id)?.value ?? null;
   const context = {
     lang: lang === "en" ? "en" : "ru",
+    // V0.4 — стратегия, описанная пользователем в настройках. Модель обязана считать её
+    // заданной рамкой, а не предметом критики (см. AI_STRATEGY_RULE).
+    strategy: strategyNote && strategyNote.trim() ? strategyNote.trim() : null,
     trader: {
       level: calculateTraderLevel(validEntries, analytics),
       awarenessScore: aiSafeNum(analytics?.awareness?.score?.value),
@@ -7233,6 +6686,13 @@ Rules:
   your risk", "be careful after a winning streak"). If you cannot attach a statement to a specific
   number from this trader's own data, do not make the statement at all. Saying "there isn't enough
   data for that yet" is always an acceptable and preferred answer.
+- The context may contain a "strategy" field: the trader's own description of how they trade. Treat
+  it as a GIVEN FRAME, never as a mistake to correct. Do not suggest changing their style, their
+  timeframe, how many trades they take, how long they hold, or which sessions they trade \u2014 a
+  scalper taking 20 trades a day is executing their strategy, not overtrading. Judge only whether
+  they FOLLOWED their own stated rules and how their state affected that. If something in the data
+  contradicts the stated strategy, describe the contradiction factually and let the trader draw
+  the conclusion.
 - You have no market data. Never describe current market conditions, sentiment, or price direction.
 - Respond in the language given by the context's "lang" field: "ru" \u2192 Russian, "en" \u2192 English.`;
 // V5.4: the previous task asked for "at least one concrete number", which the model satisfied with
@@ -7292,9 +6752,13 @@ function aiGetModel() {
   }
   return aiGeminiModel;
 }
+// V0.7 — generateContent() у Firebase AI Logic не имеет собственного таймаута: при потере
+// сети промис может не резолвиться никогда, и вызывающий экран остаётся в состоянии загрузки
+// навсегда (та же причина, что чинилась для калибровки в V0.2). Таймаут стоит здесь, в одной
+// точке, поэтому его получают все потребители: анализ и чат в Coach, совет на Главной, vision.
 async function aiCallGemini(prompt) {
   const model = aiGetModel();
-  const result = await model.generateContent(prompt);
+  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_request_timeout");
   const text = result?.response?.text?.();
   if (!text || !text.trim()) throw new Error("ai_empty_response");
   return text.trim();
@@ -7335,10 +6799,10 @@ future price scenarios. Return ONLY this JSON shape, no markdown fences, no comm
 {"asset":{"value":string|null,"confidence":0-1},"direction":{"value":"LONG"|"SHORT"|null,"confidence":0-1},"entryPrice":{"value":number|null,"confidence":0-1},"stopLoss":{"value":number|null,"confidence":0-1},"takeProfit":{"value":number|null,"confidence":0-1}}`;
 async function aiCallGeminiVision(prompt, base64Data, mimeType) {
   const model = aiGetModel();
-  const result = await model.generateContent([
+  const result = await caWithTimeout(model.generateContent([
     { text: prompt },
     { inlineData: { mimeType, data: base64Data } }
-  ]);
+  ]), 45e3, "ai_vision_timeout");
   const text = result?.response?.text?.();
   if (!text || !text.trim()) throw new Error("ai_empty_response");
   return text.trim();
@@ -7428,7 +6892,7 @@ Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
 {"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 sentences in ${langName}, each with a concrete number, level or named event>","facts":["<up to 3 short factual strings in ${langName}, each with a number or a named event>"],"btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
 }
 async function aiRunMarketModel(model, prompt) {
-  const result = await model.generateContent(prompt);
+  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_market_timeout");
   const text = result?.response?.text?.();
   if (!text || !text.trim()) throw new Error("ai_empty_response");
   const cleaned = text.replace(/```json|```/g, "").trim();
@@ -7461,86 +6925,57 @@ async function aiFetchMarketSnapshot(assetClass, lang) {
     return { ...snap, grounded: false };
   }
 }
-// ---- V0.3: персональный слой над рыночным снапшотом --------------------------
-// Рыночная сводка общая для всех (shared-кэш по классу актива), поэтому персонализировать её
-// внутри того же вызова нельзя. Второй слой берёт уже готовый снапшот + компактную выжимку из
-// СУЩЕСТВУЮЩЕЙ аналитики этого пользователя и просит одну фразу-связку: чем текущий рынок
-// опасен или удобен именно для его статистики. Никакой новой системы: та же модель aiGetModel()
-// (её system instruction запрещает выдумывать факты вне переданных данных), тот же storageGet/
-// storageSet, ключ приватный (shared=false) — то есть лежит в users/{uid}/data и не может
-// утечь другому пользователю.
-function aiMarketPersonalDigest(entries, analytics) {
-  const rr = analytics?.rrStats || null;
-  const violation = (id) => analytics?.discipline?.violations?.find((v) => v.id === id)?.value ?? null;
-  const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
-  const closed = validEntries.filter(isEntryClosed);
-  const sorted = [...closed].sort((a, b) => a.date - b.date);
-  const streaks = aiComputeStreaks(sorted);
-  const tagCount = {};
-  closed.forEach((e) => {
-    if (e.tag) tagCount[e.tag] = (tagCount[e.tag] || 0) + 1;
-  });
-  const topTag = Object.entries(tagCount).sort((a, b) => b[1] - a[1])[0] || null;
-  return {
-    closedTrades: closed.length,
-    winRate: aiSafeNum(rr?.winRate),
-    avgRealizedRR: aiSafeNum(rr?.avgRealizedRR),
-    avgWinR: aiSafeNum(rr?.avgWinR),
-    avgLossR: aiSafeNum(rr?.avgLossR),
-    maxLossStreak: aiSafeNum(streaks?.maxLossStreak),
-    maxWinStreak: aiSafeNum(streaks?.maxWinStreak),
-    awarenessScore: aiSafeNum(analytics?.awareness?.score?.value),
-    disciplineScore: aiSafeNum(analytics?.discipline?.score?.value),
-    riskStability: aiSafeNum(analytics?.risk?.stability?.value),
-    revengeRatePct: violation("revenge_rate"),
-    overtradingDaysPct: violation("overtrading_days"),
-    riskChangeAfterLossPct: violation("risk_after_loss"),
-    mostUsedSetup: topTag ? { tag: topTag[0], count: topTag[1] } : null,
-    topPatternInsight: (analytics?.insights || []).find((i) => i && i.text)?.text || null
-  };
-}
-var AI_MARKET_LINK_TASK = `You are writing ONE short sentence for a trading journal app's home screen.
-You get MARKET (a snapshot of the current market, already gathered) and TRADER (this specific
-trader's own journal statistics, already computed by the app).
+// ---- V0.4: совет на главном экране (журнал, а не рынок) ----------------------
+// Блок «Инсайт» на Home больше не пересказывает рынок: он выдаёт один короткий вывод по
+// СОБСТВЕННЫМ данным трейдера — последние сделки, состояние, повторяющиеся паттерны, время
+// удержания, калибровка — плюс описание стратегии из настроек. Никакой новой AI-системы:
+// используется тот же aiBuildContext() и тот же aiGetModel(), что и в Coach; его system
+// instruction уже запрещает торговые сигналы и (с V0.4) запрещает предлагать смену стиля
+// торговли. Рыночный снапшот остаётся только для строки метрик внизу главной (BTC.D / F&G).
+var AI_HOME_ADVICE_TASK = `Write ONE short piece of guidance (2-3 sentences) for this trader's home screen,
+using ONLY the AGGREGATED_CONTEXT JSON below.
 
-Write a single sentence, in the language given by TRADER.lang, that connects the market situation
-to THIS trader's actual numbers. Rules:
-- Reference at least one concrete number from TRADER (win rate, average RR, streak, discipline
-  metric, setup count) and at least one concrete thing from MARKET.
-- No generic trading advice, no motivational phrasing, no diagnosis of the person.
-- If TRADER.closedTrades is under 5, say plainly that there isn't enough of their own history yet
-  to tie the market to their statistics, and name what's missing \u2014 don't invent a connection.
-- Never invent numbers that are not in MARKET or TRADER.
-- Return ONLY the sentence itself. No JSON, no quotes, no markdown.`;
-async function aiGenerateMarketLink(snapshot, digest, lang) {
-  const payload = {
-    MARKET: { moodLabel: snapshot?.moodLabel || null, summary: snapshot?.summary || null, facts: snapshot?.facts || [], grounded: snapshot?.grounded !== false },
-    TRADER: { ...digest, lang: lang === "en" ? "en" : "ru" }
-  };
-  const text = await aiCallGemini(`${AI_MARKET_LINK_TASK}
+What this is: a single observation about how this person has been executing lately \u2014 built from
+their recent closed trades, their state before/after those trades, repeated lessons, hold time,
+and calibration \u2014 and at most one careful suggestion about their own process.
 
-${JSON.stringify(payload)}`);
-  return text.replace(/^["'\s]+|["'\s]+$/g, "");
+Hard rules:
+- Not a trading recommendation. No instruments, no directions, no entries, exits, stops, targets or
+  position sizes. Nothing about the market.
+- Never suggest changing their strategy or style. If "strategy" is present in the context, it is the
+  frame you work inside. Trade frequency, timeframe, hold duration and session choice are the
+  trader's decisions \u2014 a scalper with many trades per day is following their plan, not making a
+  mistake. If no strategy is described, still do not judge style: stick to consistency with their
+  OWN past behaviour and their own stated plans.
+- Ground it in a named number from the context (a count, an average, a percentage, "N of the last M").
+- No motivational filler and nothing that would be true for any trader. If the data is too thin
+  (few closed trades, empty reflections, no calibration), say plainly in one sentence what is
+  missing and stop \u2014 that is a correct answer.
+- Plain prose, no headers, no lists, no markdown.`;
+async function aiGenerateHomeAdvice(context) {
+  const prompt = `${AI_HOME_ADVICE_TASK}
+
+AGGREGATED_CONTEXT:
+${JSON.stringify(context)}`;
+  return aiCallGemini(prompt);
 }
-function marketLinkKey(assetClass) {
-  return `market-link:${assetClass}`;
-}
-// Кэш: одна генерация на час на класс актива, и дополнительно сбрасывается, если изменились
-// либо рыночная сводка, либо статистика трейдера. Запрос уходит только из useEffect, который
-// зависит от этих же хэшей, — то есть не на каждый рендер Home.
-async function getMarketLink(assetClass, snapshot, digest, lang) {
-  if (!assetClass || !snapshot) return null;
-  const bucket = marketHourBucket();
-  const stamp = aiHashContext({ s: snapshot?.summary || "", f: snapshot?.facts || [], d: digest, l: lang });
-  try {
-    const res = await caWithTimeout(storageGet(marketLinkKey(assetClass), false), 1e4, "market_link_cache_timeout");
-    const cached = res?.value ? JSON.parse(res.value) : null;
-    if (cached && cached.hourBucket === bucket && cached.stamp === stamp && cached.text) return cached.text;
-  } catch (_) {
+var HOME_ADVICE_KEY = "home-advice";
+// Кэш приватный (shared=false \u2192 users/{uid}/data/home-advice), поэтому совет одного пользователя
+// физически не может показаться другому. Ключ инвалидации \u2014 хэш того же контекста, который
+// уходит в модель: пока статистика, состояние и стратегия не менялись, запрос не уходит вообще.
+async function getHomeAdvice(context, contextHash, force) {
+  if (!context) return null;
+  if (!force) {
+    try {
+      const res = await caWithTimeout(storageGet(HOME_ADVICE_KEY, false), 1e4, "home_advice_cache_timeout");
+      const cached = res?.value ? JSON.parse(res.value) : null;
+      if (cached && cached.hash === contextHash && cached.text) return cached.text;
+    } catch (_) {
+    }
   }
-  const text = await caWithTimeout(aiGenerateMarketLink(snapshot, digest, lang), 2e4, "market_link_timeout");
+  const text = await caWithTimeout(aiGenerateHomeAdvice(context), 2e4, "home_advice_timeout");
   if (!text) return null;
-  storageSet(marketLinkKey(assetClass), JSON.stringify({ hourBucket: bucket, stamp, text }), false).catch(() => {
+  storageSet(HOME_ADVICE_KEY, JSON.stringify({ hash: contextHash, text }), false).catch(() => {
   });
   return text;
 }
@@ -7757,7 +7192,7 @@ function caComputeAdaptiveFactors(entries, analytics, calibrationHistory, lang) 
   }
   return factors;
 }
-function caBuildContext(entries, analytics, adaptiveFactors, calibrationHistory, lang) {
+function caBuildContext(entries, analytics, adaptiveFactors, calibrationHistory, lang, strategyNote) {
   const closedSorted = (entries || []).filter(isEntryClosed).slice().sort((a, b) => (a.exitDate || a.date) - (b.exitDate || b.date));
   const { list: lastSession } = caLastSessionEntries(closedSorted);
   const closeCounts = { tp: 0, sl: 0, manual: 0 };
@@ -7770,6 +7205,9 @@ function caBuildContext(entries, analytics, adaptiveFactors, calibrationHistory,
   });
   return {
     lang: lang === "en" ? "en" : "ru",
+    // V0.4 — стратегия из настроек: вопросы не должны подразумевать, что стиль торговли
+    // (частота, таймфрейм, длительность удержания) сам по себе является проблемой.
+    strategy: strategyNote && strategyNote.trim() ? strategyNote.trim() : null,
     todayDate: (/* @__PURE__ */ new Date()).toISOString().slice(0, 10),
     yesterday: lastSession.length ? {
       trades: lastSession.length,
@@ -7800,6 +7238,12 @@ For each chosen factor, write ONE short, concrete, specific question that refere
 both directions: a loss-related factor implies possible revenge/fear, a win-streak factor implies possible
 euphoria/overconfidence, a no-trades factor implies possible FOMO \u2014 match the question's tone to the
 factor's actual direction, don't treat everything as a problem.
+
+If ADAPTIVE_CONTEXT.strategy is present, it is the trader's own description of how they trade. Never
+imply that their style is the problem: trade frequency, timeframe, hold duration and session choice
+are deliberate parts of their plan, not symptoms. A scalper with many trades in a day is executing
+their strategy. Ask about their state and whether they followed their OWN rules, not about changing
+those rules.
 
 Rules:
 - Never diagnose or label the person ("you have a problem with...", "you are addicted to..."). Use the
@@ -7939,7 +7383,7 @@ async function caSaveCalibrationHistory(userId, history) {
   }
 }
 
-function Coach({ entries, analytics, accent, userId, lang, t }) {
+function Coach({ entries, analytics, accent, userId, lang, t, strategyNote }) {
   const [analysis, setAnalysis] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState("");
@@ -7990,7 +7434,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
   // changed since the last generated insight (context hash cache).
   const runAnalyze = async () => {
     if (analyzing || entries.length === 0) return;
-    const context = aiBuildContext(entries, analytics, lang);
+    const context = aiBuildContext(entries, analytics, lang, strategyNote);
     const hash = aiHashContext(context);
     if (hash === lastContextHashRef.current && analysis) return;
     setAnalyzing(true);
@@ -8014,7 +7458,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
     setChatMessages(nextMessages);
     setSending(true);
     try {
-      const context = aiBuildContext(entries, analytics, lang);
+      const context = aiBuildContext(entries, analytics, lang, strategyNote);
       const recentTrades = aiCompactRecentEntries(entries, 15);
       const reply = await aiChatReply(context, recentTrades, nextMessages, text);
       setChatMessages((prev) => [...prev, { role: "assistant", content: reply }]);
@@ -8641,6 +8085,11 @@ function Simulator({ accent, onWin, t, lang }) {
 function SettingsSection({ children }) {
   return /* @__PURE__ */ jsx("div", { className: "mb-6 break-inside-avoid", children });
 }
+// V0.5 — заголовок группы настроек: крупнее и с отбивкой сверху, чтобы разделы читались
+// как блоки, а не как один сплошной список подписей.
+function SettingsGroupTitle({ children }) {
+  return /* @__PURE__ */ jsx("div", { className: "text-[12px] mt-2 mb-3 break-inside-avoid", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 600, letterSpacing: "0.02em", breakAfter: "avoid" }, children });
+}
 function SettingsSectionLabel({ children }) {
   return /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
 }
@@ -8666,6 +8115,8 @@ function Settings({
   setCurrency,
   tradingAsset,
   setTradingAsset,
+  strategyNote,
+  setStrategyNote,
   startingCapital,
   setStartingCapital,
   username,
@@ -8681,6 +8132,24 @@ function Settings({
   const importBackupInputRef = useRef(null);
   const [capitalDraft, setCapitalDraft] = useState(String(startingCapital));
   const capitalFocusedRef = useRef(false);
+  const [strategyDraft, setStrategyDraft] = useState(strategyNote || "");
+  const strategyFocusedRef = useRef(false);
+  useEffect(() => {
+    if (!strategyFocusedRef.current) setStrategyDraft(strategyNote || "");
+  }, [strategyNote]);
+  // V0.6 — черновик уходит в глобальный state по blur. Если человек печатает и сразу
+  // переключает вкладку, blur может не сработать (компонент размонтируется), и текст теряется.
+  // Ref держит актуальный черновик, а cleanup сохраняет его при уходе с экрана настроек.
+  const strategyLatestRef = useRef(strategyNote || "");
+  strategyLatestRef.current = strategyDraft;
+  const strategySavedRef = useRef(strategyNote || "");
+  strategySavedRef.current = strategyNote || "";
+  useEffect(() => {
+    return () => {
+      const v = (strategyLatestRef.current || "").trim();
+      if (v !== strategySavedRef.current) setStrategyNote(v);
+    };
+  }, []);
   useEffect(() => {
     // Never re-sync the draft while the field has focus \u2014 an external re-render (autosave finishing,
     // a coin award, a theme change) would otherwise stomp what the person is halfway through typing.
@@ -8695,38 +8164,10 @@ function Settings({
       t.settings.title
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-6", children: [
-    /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.language }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: [{ id: "ru", label: t.settings.russian }, { id: "en", label: t.settings.english }].map((l) => /* @__PURE__ */ jsx(
-        "button",
-        {
-          onClick: () => setLang(l.id),
-          className: "flex-1 px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
-          style: { background: lang === l.id ? `${accent}12` : "transparent", color: lang === l.id ? accent : BASE.inkDim, border: `1px solid ${lang === l.id ? accent + "40" : BASE.line}` },
-          children: l.label
-        },
-        l.id
-      )) }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.languageNote })
-    ] }),
-    /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.tradingAssetLabel }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-2 flex-wrap", children: [
-        { id: "crypto", label: t.settings.tradingAssetCrypto },
-        { id: "forex", label: t.settings.tradingAssetForex },
-        { id: "stocks", label: t.settings.tradingAssetStocks }
-      ].map((o) => /* @__PURE__ */ jsx(
-        "button",
-        {
-          onClick: () => setTradingAsset(o.id),
-          className: "px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
-          style: { background: tradingAsset === o.id ? `${accent}12` : "transparent", color: tradingAsset === o.id ? accent : BASE.inkDim, border: `1px solid ${tradingAsset === o.id ? accent + "40" : BASE.line}` },
-          children: o.label
-        },
-        o.id
-      )) }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.tradingAssetNote })
-    ] }),
+    /* V0.5 — настройки сгруппированы по смыслу: раньше 11 секций шли одним потоком, в котором
+       аккаунт стоял между стратегией и именем, а язык — перед торговыми настройками. Порядок и
+       содержимое самих секций не изменены, добавлены только заголовки групп. */
+    /* @__PURE__ */ jsx(SettingsGroupTitle, { children: t.settings.groupProfile }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.account }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between px-4 py-3 rounded-xl mb-2", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
@@ -8748,15 +8189,51 @@ function Settings({
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.operatorName }),
       /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), placeholder: t.settings.operatorPlaceholder, className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink } })
     ] }),
+    /* @__PURE__ */ jsx(SettingsGroupTitle, { children: t.settings.groupTrading }),
     /* @__PURE__ */ jsxs(Section, { children: [
-      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.accentColor }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-3", children: ACCENTS.map((a) => /* @__PURE__ */ jsxs("button", { onClick: () => {
-        setAccent(a);
-        onThemeChange(a.name);
-      }, className: "flex flex-col items-center gap-1.5 transition-transform duration-150 active:scale-90", children: [
-        /* @__PURE__ */ jsx("span", { className: "w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300", style: { background: a.value, boxShadow: accent === a.value ? `0 0 0 3px ${BASE.bg}, 0 0 0 4.5px ${a.value}60` : "none" }, children: accent === a.value && /* @__PURE__ */ jsx(Check, { size: 16, color: "#06120F" }) }),
-        /* @__PURE__ */ jsx("span", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: a.name })
-      ] }, a.name)) })
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.tradingAssetLabel }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2 flex-wrap", children: [
+        { id: "crypto", label: t.settings.tradingAssetCrypto },
+        { id: "forex", label: t.settings.tradingAssetForex },
+        { id: "stocks", label: t.settings.tradingAssetStocks }
+      ].map((o) => /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: () => setTradingAsset(o.id),
+          className: "px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+          style: { background: tradingAsset === o.id ? `${accent}12` : "transparent", color: tradingAsset === o.id ? accent : BASE.inkDim, border: `1px solid ${tradingAsset === o.id ? accent + "40" : BASE.line}` },
+          children: o.label
+        },
+        o.id
+      )) }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.tradingAssetNote })
+    ] }),
+    /* V0.4 — описание стратегии. Локальный черновик + сохранение по blur: писать в глобальный
+       state на каждое нажатие клавиши здесь нельзя, иначе автосейв Firestore будет срабатывать
+       на каждый символ. Тот же приём, что уже используется для startingCapital выше. */
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.strategyLabel }),
+      /* @__PURE__ */ jsx(
+        "textarea",
+        {
+          value: strategyDraft,
+          onChange: (e) => setStrategyDraft(e.target.value.slice(0, 600)),
+          onFocus: () => {
+            strategyFocusedRef.current = true;
+          },
+          onBlur: () => {
+            strategyFocusedRef.current = false;
+            const v = strategyDraft.trim();
+            if (v !== (strategyNote || "")) setStrategyNote(v);
+          },
+          rows: 4,
+          maxLength: 600,
+          placeholder: t.settings.strategyPlaceholder,
+          className: "w-full px-4 py-3 rounded-xl text-sm outline-none resize-none",
+          style: { background: BASE.surface, border: `1px solid ${BASE.line}`, color: BASE.ink }
+        }
+      ),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.strategyNote })
     ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.resultUnits }),
@@ -8844,6 +8321,31 @@ function Settings({
       )) }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.weeklyGoalNote })
     ] }),
+    /* @__PURE__ */ jsx(SettingsGroupTitle, { children: t.settings.groupApp }),
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.language }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: [{ id: "ru", label: t.settings.russian }, { id: "en", label: t.settings.english }].map((l) => /* @__PURE__ */ jsx(
+        "button",
+        {
+          onClick: () => setLang(l.id),
+          className: "flex-1 px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+          style: { background: lang === l.id ? `${accent}12` : "transparent", color: lang === l.id ? accent : BASE.inkDim, border: `1px solid ${lang === l.id ? accent + "40" : BASE.line}` },
+          children: l.label
+        },
+        l.id
+      )) }),
+      /* @__PURE__ */ jsx("p", { className: "text-xs mt-2", style: { color: BASE.inkFaint }, children: t.settings.languageNote })
+    ] }),
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.accentColor }),
+      /* @__PURE__ */ jsx("div", { className: "flex gap-3", children: ACCENTS.map((a) => /* @__PURE__ */ jsxs("button", { onClick: () => {
+        setAccent(a);
+        onThemeChange(a.name);
+      }, className: "flex flex-col items-center gap-1.5 transition-transform duration-150 active:scale-90", children: [
+        /* @__PURE__ */ jsx("span", { className: "w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300", style: { background: a.value, boxShadow: accent === a.value ? `0 0 0 3px ${BASE.bg}, 0 0 0 4.5px ${a.value}60` : "none" }, children: accent === a.value && /* @__PURE__ */ jsx(Check, { size: 16, color: "#06120F" }) }),
+        /* @__PURE__ */ jsx("span", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: a.name })
+      ] }, a.name)) })
+    ] }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.sound }),
       /* @__PURE__ */ jsxs("button", { onClick: () => setSoundOn(!soundOn), className: "w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
@@ -8854,6 +8356,7 @@ function Settings({
         /* @__PURE__ */ jsx("span", { className: "w-9 h-5 rounded-full relative transition-all duration-200", style: { background: soundOn ? accent : BASE.line }, children: /* @__PURE__ */ jsx("span", { className: "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200", style: { left: soundOn ? "18px" : "2px" } }) })
       ] })
     ] }),
+    /* @__PURE__ */ jsx(SettingsGroupTitle, { children: t.settings.groupData }),
     /* @__PURE__ */ jsxs(Section, { children: [
       /* @__PURE__ */ jsx(SectionLabel, { children: t.settings.data }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-2.5", style: { color: BASE.inkFaint }, children: t.settings.dataNote }),
@@ -9713,6 +9216,9 @@ function MindExe() {
   const [measureMode, setMeasureMode] = useState("R");
   const [currency, setCurrency] = useState("USD");
   const [tradingAsset, setTradingAsset] = useState(null);
+  // V0.4 — описание собственной стратегии. Хранится в settings профиля (Firestore) и
+  // передаётся во все AI-контексты, чтобы модель не предлагала ломать стиль торговли.
+  const [strategyNote, setStrategyNote] = useState("");
   const [startingCapital, setStartingCapital] = useState(1e3);
   const [customInstruments, setCustomInstruments] = useState([]);
   const [customTags, setCustomTags] = useState([]);
@@ -9755,6 +9261,7 @@ function MindExe() {
     setMeasureMode("R");
     setCurrency("USD");
     setTradingAsset(null);
+    setStrategyNote("");
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -9855,6 +9362,7 @@ function MindExe() {
           if (settings.measureMode) setMeasureMode(settings.measureMode);
           if (settings.currency) setCurrency(settings.currency);
           if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
+          if (typeof settings.strategyNote === "string") setStrategyNote(settings.strategyNote);
           if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
           if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
           if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
@@ -9899,7 +9407,7 @@ function MindExe() {
   }, [authStatus, userId, migrateFor]);
   const buildPayload = (overrides = {}) => {
     const prev = rawProfileRef.current || {};
-    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
+    const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
     return {
       // spread the previously stored document first so unknown / future top-level fields are kept;
       // every section below then overwrites only the keys this build actually owns.
@@ -9918,6 +9426,7 @@ function MindExe() {
         measureMode: src.measureMode,
         currency: src.currency,
         tradingAsset: src.tradingAsset,
+        strategyNote: src.strategyNote,
         startingCapital: src.startingCapital,
         customInstruments: src.customInstruments,
         customTags: src.customTags
@@ -9981,7 +9490,7 @@ function MindExe() {
     if (!loaded || !canPersistRef.current || authStatus !== "authenticated" || !userId) return;
     const timer = setTimeout(() => persistNow(), 900);
     return () => clearTimeout(timer);
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => {
     if (!loaded || !canPersistRef.current || authStatus !== "authenticated" || !userId) return;
     const flush = () => {
@@ -9993,7 +9502,7 @@ function MindExe() {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
     };
-  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
+  }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
   const showToast = (text) => {
     setToast(text);
@@ -10120,6 +9629,7 @@ function MindExe() {
         if (settings.measureMode) setMeasureMode(settings.measureMode);
         if (settings.currency) setCurrency(settings.currency);
         if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
+        if (typeof settings.strategyNote === "string") setStrategyNote(settings.strategyNote);
         if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
         if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
         if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
@@ -10137,6 +9647,7 @@ function MindExe() {
           measureMode: settings.measureMode ?? measureMode,
           currency: settings.currency ?? currency,
           tradingAsset: settings.tradingAsset ?? tradingAsset,
+          strategyNote: settings.strategyNote ?? strategyNote,
           startingCapital: settings.startingCapital ?? startingCapital,
           customInstruments: settings.customInstruments ?? customInstruments,
           customTags: settings.customTags ?? customTags,
@@ -10168,6 +9679,7 @@ function MindExe() {
       lang: "ru",
       measureMode: "R",
       currency: "USD",
+      strategyNote: "",
       startingCapital: 1e3,
       customInstruments: [],
       customTags: [],
@@ -10185,6 +9697,7 @@ function MindExe() {
     setMeasureMode("R");
     setCurrency("USD");
     setTradingAsset(null);
+    setStrategyNote("");
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -10459,12 +9972,12 @@ function MindExe() {
         /* @__PURE__ */ jsxs(
           "div",
           {
-            className: "sticky top-0 z-30 -mx-5 px-5 pt-8 pb-8 relative md:hidden",
-            style: {
-              background: accentPreset.cosmic ? "rgba(4,4,5,0.88)" : `${BASE.bg}E0`,
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)"
-            },
+            // V0.5 — шапка больше не sticky и не имеет собственного фона. Раньше это была
+            // залитая на 88% полоса с blur, которая при открытом приложении читалась как вторая
+            // «чёлка» поверх системной. Теперь логотип просто стоит в начале страницы и уезжает
+            // вместе с контентом; фон один на весь экран.
+            className: "-mx-5 px-5 pt-6 pb-5 relative md:hidden",
+            style: { background: "transparent" },
             children: [
               /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
                 /* @__PURE__ */ jsx("div", {}),
@@ -10474,13 +9987,12 @@ function MindExe() {
                 ] }),
                 /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
               ] }),
-              /* @__PURE__ */ jsx("div", { className: "mx-auto mt-3", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } }),
-              /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0 bottom-0 h-5 pointer-events-none translate-y-full", style: { background: `linear-gradient(to bottom, ${accentPreset.cosmic ? "rgba(4,4,5,0.35)" : `${BASE.bg}59`}, transparent)` } })
+              /* @__PURE__ */ jsx("div", { className: "mx-auto mt-3", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } })
             ]
           }
         ),
         /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify: showToast }),
+          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify: showToast, strategyNote }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
@@ -10556,13 +10068,13 @@ function MindExe() {
             }
           }),
           tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics, t, lang }),
-          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t, entries, analytics, userId }),
+          tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t, entries, analytics, userId, strategyNote }),
           tab === "simulator" && /* @__PURE__ */ jsx(Simulator, { accent, onWin: () => {
             awardCoins(5, lang === "en" ? "Win in the game" : "\u041F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
             showToast(lang === "en" ? "+5 MindCoin \u2014 win in the game" : "+5 MindCoin \u2014 \u043F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
           }, t, lang }),
           tab === "challenge" && /* @__PURE__ */ jsx(Challenge, { entries, accent, weeklyGoal, t, lang }),
-          tab === "coach" && /* @__PURE__ */ jsx(Coach, { entries, analytics, accent, userId, lang, t }),
+          tab === "coach" && /* @__PURE__ */ jsx(Coach, { entries, analytics, accent, userId, lang, t, strategyNote }),
           tab === "settings" && /* @__PURE__ */ jsx(
             Settings,
             {
@@ -10587,6 +10099,8 @@ function MindExe() {
               setCurrency,
               tradingAsset,
               setTradingAsset,
+              strategyNote,
+              setStrategyNote,
               startingCapital,
               setStartingCapital,
               username: authUser?.username,
