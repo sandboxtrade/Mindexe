@@ -1,3 +1,13 @@
+// mind.exe V5.3 \u2014 fixes the black screen introduced by V5.1.
+// CAUSE: the V5.1 index.html was rebuilt from the wrong source file \u2014 the project directory held
+// Market Sandbox's index.html, not mind.exe's. That file has no importmap entries for recharts or
+// firebase/app|auth|firestore|ai|app-check, so app.js's bare imports failed to resolve, the module
+// never evaluated, nothing mounted, and the page stayed black. app.js itself was fine.
+// FIX: index.html is restored to the real mind.exe file (full importmap, Firebase 12.17.1 entries,
+// the window.storage legacy shim, Tailwind CDN, PWA meta) with only the V5.1 font swap applied on
+// top. Nothing in app.js changed for this \u2014 the version bump is here so the two files stay in
+// lockstep and it is obvious which index.html is the correct one.
+// Deploy BOTH files, plus splash.mp4 in the same folder (see V5.2).
 // mind.exe V5.2 \u2014 splash is now the supplied black-hole video.
 // The still photo + canvas scene (starfield and the simulated candlestick stream) is replaced by the
 // 5.875s 720\u00d71556 h264 clip, which already contains both the rotating accretion disk and the chart
