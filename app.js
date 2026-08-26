@@ -1,3 +1,16 @@
+// mind.exe — V0.2
+//
+// V0.2 (на базе V5.8, архитектура не менялась):
+//  1) Глобально скрыты полосы прокрутки (боковые полоски при скролле страницы).
+//  2) Чёрный экран вкладки «Аналитика»: в компоненте Patterns не была объявлена переменная
+//     withR, которую читают equityCurve и tagStats — рендер падал с ReferenceError.
+//  3) Калибровка: вечная загрузка на экране «Готовим вопросы...» — добавлен caWithTimeout
+//     на вызов Gemini (20с) и на чтение истории из Firestore (10с), дальше идёт уже
+//     существующий локальный fallback.
+//  4) Калибровка: варианты ответов больше не сводятся к «Да/Нет» — добавлены 6 шкал
+//     (ease, comfort, likelihood, frequency, presence, energy), обновлён промпт и
+//     привязка шкалы к каждому fallback-вопросу. CALIBRATION_CACHE_SCHEMA 2 → 3.
+//
 // mind.exe V5.8 \u2014 fixes two "nothing changed after update" causes: a same-day calibration
 // cache with no schema check, and index.html serving app.js with no cache-busting query.
 // index.html DOES change this version \u2014 deploy the paired V5.8 index.html (still the same full
@@ -1843,6 +1856,45 @@ var CALIBRATION_SCALE_SETS = {
       { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: -1 },
       { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: 1 },
       { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: 2 }
+    ],
+    // V0.1 — четырёх шкал не хватало: почти все адаптивные вопросы падали на readiness
+    // ("\u0414\u0430/\u041D\u0435\u0442"), даже когда вопрос спрашивал "насколько легко/часто/вероятно".
+    // Направление у всех одинаковое: -2 = рискованное состояние, +2 = ресурсное.
+    ease: [
+      { label: "\u041E\u0447\u0435\u043D\u044C \u0442\u044F\u0436\u0435\u043B\u043E", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0442\u044F\u0436\u0435\u043B\u043E", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043B\u0435\u0433\u043A\u043E", score: 1 },
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043B\u0435\u0433\u043A\u043E", score: 2 }
+    ],
+    comfort: [
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435\u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435\u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E", score: 1 },
+      { label: "\u0412\u043F\u043E\u043B\u043D\u0435 \u043A\u043E\u043C\u0444\u043E\u0440\u0442\u043D\u043E", score: 2 }
+    ],
+    likelihood: [
+      { label: "\u0422\u043E\u0447\u043D\u043E \u043D\u0435\u0442", score: -2 },
+      { label: "\u0412\u0440\u044F\u0434 \u043B\u0438", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0432\u0441\u0435\u0433\u043E \u0434\u0430", score: 1 },
+      { label: "\u041F\u043E\u0447\u0442\u0438 \u043D\u0430\u0432\u0435\u0440\u043D\u044F\u043A\u0430", score: 2 }
+    ],
+    frequency: [
+      { label: "\u041F\u043E\u0447\u0442\u0438 \u043D\u0438\u043A\u043E\u0433\u0434\u0430", score: -2 },
+      { label: "\u0418\u043D\u043E\u0433\u0434\u0430", score: -1 },
+      { label: "\u0427\u0430\u0441\u0442\u043E", score: 1 },
+      { label: "\u041F\u043E\u0447\u0442\u0438 \u0432\u0441\u0435\u0433\u0434\u0430", score: 2 }
+    ],
+    presence: [
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435 \u043F\u043E\u043C\u043D\u044E", score: -2 },
+      { label: "\u0421\u043C\u0443\u0442\u043D\u043E", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043F\u043E\u043C\u043D\u044E", score: 1 },
+      { label: "\u041F\u043E\u043C\u043D\u044E \u0447\u0451\u0442\u043A\u043E", score: 2 }
+    ],
+    energy: [
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435\u0442 \u0441\u0438\u043B", score: -2 },
+      { label: "\u0421\u0438\u043B \u043C\u0430\u043B\u043E", score: -1 },
+      { label: "\u0421\u0438\u043B \u0434\u043E\u0441\u0442\u0430\u0442\u043E\u0447\u043D\u043E", score: 1 },
+      { label: "\u041F\u043E\u043B\u043E\u043D \u0441\u0438\u043B", score: 2 }
     ]
   },
   en: {
@@ -1869,10 +1921,62 @@ var CALIBRATION_SCALE_SETS = {
       { label: "Affected it somewhat", score: -1 },
       { label: "Barely affected it", score: 1 },
       { label: "Didn't affect it at all", score: 2 }
+    ],
+    ease: [
+      { label: "Very hard", score: -2 },
+      { label: "Fairly hard", score: -1 },
+      { label: "Fairly easy", score: 1 },
+      { label: "Very easy", score: 2 }
+    ],
+    comfort: [
+      { label: "Not comfortable at all", score: -2 },
+      { label: "Somewhat uncomfortable", score: -1 },
+      { label: "Fairly comfortable", score: 1 },
+      { label: "Completely comfortable", score: 2 }
+    ],
+    likelihood: [
+      { label: "Definitely not", score: -2 },
+      { label: "Unlikely", score: -1 },
+      { label: "Likely", score: 1 },
+      { label: "Almost certainly", score: 2 }
+    ],
+    frequency: [
+      { label: "Almost never", score: -2 },
+      { label: "Sometimes", score: -1 },
+      { label: "Often", score: 1 },
+      { label: "Almost always", score: 2 }
+    ],
+    presence: [
+      { label: "Don't remember it at all", score: -2 },
+      { label: "Vaguely", score: -1 },
+      { label: "Mostly remember it", score: 1 },
+      { label: "Remember it clearly", score: 2 }
+    ],
+    energy: [
+      { label: "No energy at all", score: -2 },
+      { label: "Low energy", score: -1 },
+      { label: "Enough energy", score: 1 },
+      { label: "Full of energy", score: 2 }
     ]
   }
 };
-var CALIBRATION_SCALE_TYPES = ["readiness", "confidence", "calm", "impact"];
+var CALIBRATION_SCALE_TYPES = ["readiness", "confidence", "calm", "impact", "ease", "comfort", "likelihood", "frequency", "presence", "energy"];
+// V0.2 — ограничение времени ожидания для сетевых промисов калибровки (Gemini / Firestore).
+// Важно: обработчик .catch вешается на исходный промис, поэтому его поздний reject уже
+// обработан и не всплывает как unhandled rejection; таймер очищается в любом исходе.
+function caWithTimeout(promise, ms, tag) {
+  let timer = null;
+  promise.catch(() => {
+  });
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(tag)), ms);
+    })
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
 function caScaleSet(scaleType, lang) {
   const byLang = lang === "en" ? CALIBRATION_SCALE_SETS.en : CALIBRATION_SCALE_SETS.ru;
   return byLang[scaleType] || byLang.readiness;
@@ -5823,6 +5927,10 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     return g;
   }, [closedEntries]);
   const winRate = grouped.Win.length + grouped.Loss.length > 0 ? Math.round(grouped.Win.length / (grouped.Win.length + grouped.Loss.length) * 100) : 0;
+  // V0.1 — equityCurve/tagStats ниже читают `withR`, но переменная нигде не объявлялась:
+  // рендер вкладки "Аналитика" падал с ReferenceError и экран оставался чёрным.
+  // Определение то же, что в Home: закрытые сделки с посчитанным r.
+  const withR = useMemo(() => closedEntries.filter((e) => e.r !== null && e.r !== void 0), [closedEntries]);
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const insight = useMemo(() => {
     if (grouped.Win.length < 2 || grouped.Loss.length < 2) return t.pattern.needMoreEntries;
@@ -6137,7 +6245,7 @@ function CalibrationRing({ pct, color, size = 172 }) {
 // a same-day cache written by an older build is treated as a miss instead of being replayed
 // unchanged for the rest of the day. V5.8: bumped for CALIBRATION_SCALE_SETS (readiness/
 // confidence/calm/impact) replacing the single hardcoded yes/no scale.
-var CALIBRATION_CACHE_SCHEMA = 2;
+var CALIBRATION_CACHE_SCHEMA = 3;
 function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }) {
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
@@ -6181,7 +6289,11 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
       if (factors.length) {
         try {
           const context = caBuildContext(entries, analytics, factors, history, lang);
-          adaptiveQuestions = await aiGenerateCalibrationQuestions(context);
+          // V0.1 — вечная загрузка на экране "Готовим вопросы...". generateContent() у Firebase AI
+          // не имеет собственного таймаута: при недоступной/висящей сети промис не резолвится
+          // никогда, поэтому finally { setStage("quiz") } не выполнялся. Ограничиваем ожидание:
+          // по истечении времени идём по уже существующему локальному fallback-пути.
+          adaptiveQuestions = await caWithTimeout(aiGenerateCalibrationQuestions(context), 2e4, "ai_calibration_timeout");
         } catch (e) {
           adaptiveQuestions = [];
         }
@@ -7558,8 +7670,14 @@ Rules:
   \u2022 "impact" \u2014 for "how much did [an event] affect your [judgment/read of the market/plan]"
     questions \u2014 use this one whenever the question isn't naturally a yes/no, e.g. it asks the person
     to RATE something rather than commit to an action.
-  Pick whichever of these four genuinely matches the grammar of the question you wrote; when in doubt,
-  prefer "readiness" and rephrase the question as a yes/no instead of forcing an awkward fit.
+  \u2022 "ease" \u2014 for "how easy/hard will it be to..." questions.
+  \u2022 "comfort" \u2014 for "how comfortable are you with..." questions.
+  \u2022 "likelihood" \u2014 for "how likely is it that..." questions about a future outcome.
+  \u2022 "frequency" \u2014 for "how often do you..." questions about a habit.
+  \u2022 "presence" \u2014 for "how well do you remember / how present is..." questions about a past lesson.
+  \u2022 "energy" \u2014 for questions about physical resources: rest, sleep, energy for the session.
+  Pick the one that genuinely matches the grammar of the question you wrote \u2014 do NOT default to
+  "readiness" for a question that isn't a yes/no; pick the matching scale instead of rephrasing.
 - Return ONLY a JSON array, no markdown fences, no commentary: [{"question": "...", "factor": "...",
   "category": "adaptive", "scaleType": "readiness", "priority": 0.0}]. "factor" must be one of the
   adaptiveFactors' type values you were given. "scaleType" must be exactly one of readiness/confidence/
@@ -7613,6 +7731,23 @@ function caLocalFallbackQuestions(adaptiveFactors, lang) {
     poor_sleep: "\u0423\u0447\u0438\u0442\u044B\u0432\u0430\u044F, \u0447\u0442\u043E \u0442\u044B \u043D\u0435\u0434\u0430\u0432\u043D\u043E \u043F\u043B\u043E\u0445\u043E \u0432\u044B\u0441\u043F\u0430\u043B\u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0433\u043E\u0442\u043E\u0432 \u0442\u0432\u043E\u0439 \u0443\u043C \u043A \u044F\u0441\u043D\u044B\u043C \u0440\u0435\u0448\u0435\u043D\u0438\u044F\u043C \u0441\u0435\u0433\u043E\u0434\u043D\u044F?",
     reflection_note: "\u0412\u0441\u043F\u043E\u043C\u043D\u0438 \u0441\u0432\u043E\u0438 \u0437\u0430\u043C\u0435\u0442\u043A\u0438 \u043F\u043E \u043F\u043E\u0441\u043B\u0435\u0434\u043D\u0435\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u2014 \u043D\u0430\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u043E\u043D\u0438 \u0435\u0449\u0451 \u0441 \u0442\u043E\u0431\u043E\u0439, \u043A\u043E\u0433\u0434\u0430 \u0442\u044B \u043D\u0430\u0447\u0438\u043D\u0430\u0435\u0448\u044C \u0441\u0435\u0433\u043E\u0434\u043D\u044F?"
   };
+  // V0.1 \u2014 раньше каждый fallback-вопрос получал scaleType "readiness", т.е. "Да/Нет", хотя
+  // формулировки в банке спрашивают "насколько комфортно / насколько легко / насколько уверен".
+  // Шкала теперь закреплена за конкретным вопросом банка (тексты фиксированные, поэтому
+  // соответствие однозначное).
+  const scaleByFactor = {
+    consecutive_losses: "comfort",
+    euphoria_risk: "confidence",
+    revenge_risk: "ease",
+    increased_risk: "readiness",
+    overtrading_risk: "comfort",
+    early_exit_pattern: "ease",
+    fomo_risk: "comfort",
+    repeated_lesson: "presence",
+    decreased_discipline: "likelihood",
+    poor_sleep: "energy",
+    reflection_note: "presence"
+  };
   return adaptiveFactors.filter((f) => bank[f.type]).sort((a, b) => b.severity - a.severity).slice(0, 4).map((f, i) => ({
     id: `fallback_${i}`,
     text: bank[f.type],
@@ -7620,7 +7755,7 @@ function caLocalFallbackQuestions(adaptiveFactors, lang) {
     category: "adaptive",
     source: "fallback",
     priority: f.severity,
-    scaleType: "readiness"
+    scaleType: scaleByFactor[f.type] || "readiness"
   }));
 }
 function assembleCalibrationQuestions(adaptiveQuestions, lang) {
@@ -7638,7 +7773,10 @@ function calibHistoryKey(userId) {
 async function caLoadCalibrationHistory(userId) {
   if (!fbAuth.currentUser || !userId) return [];
   try {
-    const res = await storageGet(calibHistoryKey(userId), false);
+    // V0.1 — второй возможный источник вечной загрузки: чтение из Firestore при потере сети
+    // может не завершиться. Без истории калибровка работает корректно (просто нет кэша и
+    // recentQuestions), поэтому по таймауту возвращаем пустую историю, а не зависаем.
+    const res = await caWithTimeout(storageGet(calibHistoryKey(userId), false), 1e4, "calib_history_timeout");
     return res?.value ? JSON.parse(res.value) : [];
   } catch (_) {
     return [];
@@ -10099,6 +10237,14 @@ function MindExe() {
         .cosmic-theme .rounded-xl { box-shadow: 0 10px 22px -8px rgba(0,0,0,0.6); }
         .cosmic-theme .rounded-full { box-shadow: 0 3px 10px -3px rgba(0,0,0,0.5); }
         .cosmic-theme button:active { transform: translateY(1px); }
+
+        /* V0.1 — боковые полосы прокрутки. .hscroll/.vscroll закрывали только те контейнеры,
+           которым классы были проставлены вручную; полоса самой страницы и любых прочих
+           скролл-областей оставалась видимой. Скрываем трек глобально — прокрутка (включая
+           touch) при этом продолжает работать, не рисуется только сам ползунок. */
+        html, body, * { scrollbar-width: none; -ms-overflow-style: none; }
+        ::-webkit-scrollbar { width: 0; height: 0; }
+        *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 
         .tab-content { animation: fadeIn 0.25s ease-out; }
         /* V5.4 — horizontal strips (filter pills, screenshot rows, leverage/RR selectors).
