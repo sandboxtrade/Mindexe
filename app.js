@@ -1,53 +1,134 @@
-// mind.exe V5.5 \u2014 adds the missing half of the emotional loop: state AFTER the trade.
+// mind.exe V5.7 \u2014 calibration answer options fitted to question shape, exit emotion grid
+// redesigned around reaction-to-result, remaining scrollbars hidden.
 // index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
 //
-// WHAT WAS MISSING: the journal recorded how the trader felt at ENTRY (x/y) but nothing at EXIT, so
-// no part of the app \u2014 analytics, psychology or Gemini \u2014 could see how a trader reacts to their
-// own result. Two new optional fields, exitX/exitY, on the same axes as x/y
-// (x = fear 0 .. confidence 100, y = on edge 0 .. calm 100).
-//   \u2022 CloseTrade: an EmotionGrid under the lesson field. Deliberately NOT required to save \u2014
-//     forcing it would make people tap something arbitrary to close a trade, which is worse data
-//     than a null.
-//   \u2022 EditTrade: the same pad, prefilled, so trades closed before this existed can be completed.
-//   \u2022 Log: the expanded EXIT block now shows "state before \u2192 state after" in the same words the
-//     trader saw on the pad (emotionStateText, extracted from EmotionGrid so there is one wording).
-//   \u2022 Persistence: buildPayload spreads ...rest and load spreads ...e, so the fields round-trip
-//     through Firestore with no schema change; migrateEntry normalises them to null, and JSON
-//     import/export carry them.
-//   \u2022 analytics.emotionalShift (new emotionalShiftAnalysis): the SHIFT between the two points,
-//     split by outcome and by close type, plus wins that still end with low calm and losses taken
-//     calmly. Needs both points on the same trade; reports its own sample and coverage and returns
-//     available:false rather than guessing.
-//   \u2022 Gemini: stateAfter on every compact trade, emotionalShift in the context, after-state on
-//     early exits in exitBehavior, and the insight prompt now names these as sources of links.
-//   \u2022 Awareness: new component stateAfterTracking (weight 0.08). It is null \u2014 not 0 \u2014 until the
-//     trader has recorded the after-state at least 3 times, and the V5.4 renormalisation excludes
-//     null components, so every existing journal scores exactly as it did before.
+// 1) CALIBRATION ANSWER OPTIONS. Every adaptive (Gemini-written) question was forced onto one
+//    fixed yes/no scale ("\u041D\u0435\u0442/\u0421\u043a\u043e\u0440\u0435\u0435 \u043d\u0435\u0442/\u0421\u043a\u043e\u0440\u0435\u0435 \u0434\u0430/\u0414\u0430"), even when the question wasn't
+//    shaped as a yes/no at all (e.g. "how do you rate the impact of X on Y" answered with
+//    "\u0414\u0430/\u041d\u0435\u0442" reads as nonsense). CALIBRATION_SCALE_SETS now defines four app-owned
+//    label sets \u2014 readiness / confidence / calm / impact \u2014 all sharing the same fixed score
+//    positions (-2,-1,1,2; position 0 always least-favorable, position 3 always most-favorable).
+//    Gemini returns a scaleType NAME per question (validated against this exact enum, default
+//    "readiness" if missing/invalid) and picks whichever wording fits its own phrasing; it still
+//    never writes or scores an option itself, so the p.14 no-model-scoring guarantee is unchanged.
+//    assembleCalibrationQuestions looks up each question's own scale instead of one shared scale
+//    for all four; the local fallback bank is explicitly tagged "readiness" since it's already
+//    written as yes/no questions.
+// 2) EXIT EMOTION GRID REDESIGNED. CloseTrade/EditTrade's post-trade check-in used to be the exact
+//    same fear\u2194confidence, on-edge\u2194calm pad as entry \u2014 which describes a read on the SETUP, not
+//    a reaction to a RESULT; "confident and calm" says nothing about whether the trader is happy
+//    with what just happened. New exitEmotionGrid: axes disappointed\u2194pleased and stung\u2194at
+//    peace, with 9 states including resentment/anger and euphoria-still-wired \u2014 the shapes the
+//    person asked for. EmotionGrid and emotionStateText take a `variant` ("entry"/"exit") to pick
+//    the right label set; every call site (CloseTrade, EditTrade, Log's before\u2192after display) is
+//    updated.
+//
+//    CONSEQUENCE FOUND AND FIXED: since exitX now measures a different construct than entry x,
+//    `emotionalShiftAnalysis`'s old `confidenceShift = mean(exitX - x)` was subtracting two
+//    unrelated axes and calling the result a "shift" \u2014 removed. avgConfidenceAfter (which was
+//    always just a mean of exitX, never a comparison) is renamed avgSatisfactionAfter; same value,
+//    accurate name. calmShift is untouched \u2014 entry's on-edge\u2194calm and exit's stung\u2194at-peace
+//    are still the same kind of arousal measure on both ends, so that comparison stays valid. Added
+//    winsEndingUnsatisfied alongside the existing winsEndingUncalm (same-axis comparisons only).
+//    aiCompactRecentEntries.stateAfter is now keyed `satisfaction` instead of reusing `confidence`;
+//    aiComputeExitBehavior's post-exit figure is avgSatisfactionAfterEarlyExit (its pre-exit
+//    sibling, avgConfidenceBeforeEarlyExit, was already correctly named \u2014 it reads entry x).
+//    Gemini's prompt text updated to match.
+// 3) REMAINING SCROLLBARS HIDDEN. Two bottom-sheet pickers, the instrument/tag dropdown and the
+//    Coach chat panel still showed a vertical OS scrollbar (V5.4 only covered horizontal strips).
+//    New .vscroll class: scrolling, including touch, is unaffected \u2014 only the track is hidden.
+//
+// ---- V5.6 (still in force) ------------------------------------------------------------------
+// Full-code audit pass: fixed a duplicate Firestore write on every journal action (persistNow's
+// profile-write is now deduped against the last-written payload; saveMedia always runs regardless,
+// since buildPayload strips screenshots and an image-only change would otherwise be skipped
+// entirely), "recent trades" being last-inserted rather than last-by-date (broke after journal
+// import), and a daily-reward toast timer with no cleanup. Removed several dead functions.
+//
+// ---- V5.5 (still in force) ------------------------------------------------------------------
+// Added state AFTER the trade (exitX/exitY), round-tripped through Firestore and JSON import/
+// export, shown in the Log, and fed to analytics/Gemini. Awareness gained stateAfterTracking
+// (weight 0.08, null until recorded 3+ times so existing journals score exactly as before).
 //
 // ---- V5.4 (still in force) ------------------------------------------------------------------
-// 1) TRADER LEVEL. Was `min(9, 3 + floor(entriesCount/3))`: a brand-new empty account showed level
-//    3 and every third entry bumped it regardless of how the trade went. Now
-//    calculateTraderLevel(entries, analytics): an experience CAP from closed-trade count (0 closed
-//    trades => level 1, always) and, inside that cap, a weighted behaviour score from awareness,
-//    discipline, risk stability, reflection, journal completeness and adherence to the trader's own
-//    plan. PnL is deliberately not an input.
-// 2) AWARENESS. Was 55% on an empty journal and substituted the constant 50 for every component it
-//    could not compute, so one entry produced ~50%. Now: uncomputable components are EXCLUDED and
-//    the remaining weights renormalised; the result is multiplied by an evidence ramp (closed +
-//    fully filled-in trades, target 40) so it grows gradually; a repeated-lesson brake stops the
-//    score drifting up on usage alone. Empty account => 0%. rawScore (pre-ramp) drives the trend.
-// 3) GEMINI. Context gained exitBehavior (TP reached vs SL respected vs manual, early-exit count,
-//    RR actually lost to early exits), afterStreakBehavior (risk change and manual-close share
-//    after two wins / two losses), holdTime, a journal digest, the calibration stated-vs-actual
-//    comparison, the app's own grounded insights, and recentClosedSequence. The tasks and system
-//    instruction require a link between fields with a named number, ban universal advice outright,
-//    and make "not enough data yet" an explicitly preferred answer.
-// 4) HOME. Awareness now starts at 0, so the mood fallback no longer labels a trader with no
-//    history as "Reactive"; the generic insight sentence is used only after the market snapshot and
-//    the app's own fact-based insights have been tried.
+// Trader level rebuilt on behaviour instead of entry count (new account = level 1, always).
+// Awareness rebuilt to start at 0% and grow on an evidence ramp instead of defaulting components
+// to 50. Gemini's context and prompts rewired to require a named-number link between fields and
+// ban universal advice. Home's mood fallback and generic insight gated behind real evidence.
+// Horizontal filter/screenshot/leverage strips fixed to stop jumping under touch-drag (.hscroll).
+// mind.exe V5.6 \u2014 full-code audit pass. No feature changes; 3 real bugs fixed, dead code removed.
+// index.html is UNCHANGED from V5.3 \u2014 deploy the V5.3 index.html (full importmap) plus splash.mp4.
+//
+// HOW IT WAS CHECKED: the file was parsed with acorn and walked for unused/undefined identifiers,
+// duplicate declarations and object keys, unreachable statements, hooks missing a dependency array,
+// effects that subscribe or start timers without a cleanup return, list renders missing a React key,
+// setState during the render phase, and async effects that setState without a cancel guard. The
+// pure calculation layer was then extracted and run against hostile inputs (empty journal, single
+// entry, open-only, r = 0 / -0 / 1e9, plannedRR = 0, entry = SL = TP = 0, empty lessons, mixed
+// nulls) and a 600-trade journal. Result: no NaN, no Infinity, no divide-by-zero anywhere;
+// 600 trades analyse in ~8ms.
+//
+// BUGS FIXED
+// 1) DUPLICATE FIRESTORE WRITE ON EVERY JOURNAL ACTION. Each onSave handler calls
+//    persistNow({ entries: next }) explicitly; setEntries then changed `entries`, the auto-save
+//    effect fired and persistNow() ran a SECOND time with identical data \u2014 two full profile
+//    writes plus two media writes (base64 screenshots) per saved trade. persistNow now compares the
+//    payload against rawProfileRef (the exact object it last wrote) and skips ONLY the profile
+//    document write when the two are byte-identical; the effect just debounces 900ms.
+//    Critically, saveMedia always runs: buildPayload strips screenshots out of journal entries, so
+//    an image-only change yields an identical payload \u2014 putting the skip in the effect (as this
+//    fix first did) would have silently dropped screenshot saves. rawProfileRef is only updated
+//    after a successful write, so a failed save stays pending and is retried on the next pass.
+//    Explicit handler calls still write instantly and the visibilitychange/pagehide flush still
+//    covers the app being backgrounded inside the debounce window.
+// 2) "RECENT TRADES" WERE THE LAST INSERTED, NOT THE MOST RECENT. aiCompactRecentEntries did
+//    slice(-limit) straight off the array. Normally created trades are chronological (each gets
+//    new Date() and is appended), but an imported journal keeps the file's order \u2014 so after an
+//    import the Coach chat was handed arbitrary trades and told they were the latest. Now sorted by
+//    date first; a no-op on already-ordered input, and both call sites benefit.
+// 3) DAILY-REWARD TOAST TIMER HAD NO CLEANUP. On the intro path it waits 8.6s, so logging out
+//    inside that window still fired a toast for an account that was no longer open. Now cleared on
+//    unmount. It also shadowed the outer `toastTimer` ref; renamed to dailyToastTimer.
+//
+// DEAD CODE REMOVED: useIsDesktop (never called), scoreCalibration (superseded by
+// scoreCalibrationDynamic), legacyStorageDelete (nothing in the Firestore path calls it), the
+// unused `import React2 from "react"`, unused locals `withR` in pd_riskAfterWin and `avgR` in
+// Patterns, and the .no-scrollbar CSS rule left orphaned when V5.4 moved those rows to .hscroll.
+//
+// CHECKED AND DELIBERATELY LEFT ALONE: the sequential awaits in saveMedia (intentional rate
+// limiting, and already guarded by the __mediaHashes cache), the retry setTimeout in the profile
+// load (tryLoad returns immediately when cancelled), and the shared-scope market snapshot cache
+// (market data, not user data).
+//
+// ---- V5.5 (still in force) ------------------------------------------------------------------
+// Adds state AFTER the trade: optional exitX/exitY on the same axes as x/y, collected in
+// CloseTrade and editable in EditTrade, shown in the Log as "state before \u2192 state after",
+// round-tripped through Firestore and JSON import/export. analytics.emotionalShift reports the
+// shift by outcome and by close type. Gemini receives stateAfter per trade, the emotionalShift
+// block, and after-state on early exits. Awareness gained stateAfterTracking (weight 0.08), null
+// until recorded 3+ times so existing journals score exactly as before.
+//
+// ---- V5.4 (still in force) ------------------------------------------------------------------
+// 1) TRADER LEVEL. Was `min(9, 3 + floor(entriesCount/3))`: a new empty account showed level 3 and
+//    every third entry bumped it regardless of how the trade went. Now an experience CAP from
+//    closed-trade count (0 closed => level 1, always) and, inside it, a weighted behaviour score
+//    from awareness, discipline, risk stability, reflection, journal completeness and plan
+//    adherence. PnL is deliberately not an input.
+// 2) AWARENESS. Was 55% on an empty journal and substituted the constant 50 for uncomputable
+//    components, so one entry produced ~50%. Now uncomputable components are EXCLUDED and the
+//    remaining weights renormalised; the result is multiplied by an evidence ramp so it grows
+//    gradually; a repeated-lesson brake stops it drifting up on usage alone. Empty => 0%.
+//    rawScore (pre-ramp) drives the trend, since both trend windows share the same ramp.
+// 3) GEMINI. Context gained exitBehavior, afterStreakBehavior, holdTime, a journal digest, the
+//    calibration stated-vs-actual comparison, the app's own grounded insights and
+//    recentClosedSequence. The prompts require a link between fields with a named number, ban
+//    universal advice, and make "not enough data yet" an explicitly preferred answer.
+// 4) HOME. Awareness starts at 0, so the mood fallback no longer labels a trader with no history
+//    as "Reactive"; the generic insight sentence is used only after the market snapshot and the
+//    app's own fact-based insights have been tried.
 // 5) SCROLL. overflow-x:auto with overflow-y:visible forces overflow-y to auto per spec \u2014 the
 //    filter/screenshot/leverage strips were each a few-pixel-tall nested VERTICAL scroll container,
-//    which is what made them jump when a pill was held and dragged. New .hscroll pins
+//    which is what made them jump when a pill was held and dragged. .hscroll pins
 //    overflow-y:hidden, contains overscroll, keeps touch scrolling, hides the scrollbar.
 // mind.exe V5.3 \u2014 fixes the black screen introduced by V5.1.
 // CAUSE: the V5.1 index.html was rebuilt from the wrong source file \u2014 the project directory held
@@ -482,7 +563,6 @@
 // paste it into AI_APP_CHECK_SITE_KEY before Nov 2, 2026, when Google starts enforcing App Check
 // for Firebase AI Logic — until then the app works fine with it left blank.
 // entry.jsx
-import React2 from "react";
 import { createRoot } from "react-dom/client";
 
 // firebase.js
@@ -742,6 +822,29 @@ var STRINGS = {
           "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E, \u043D\u043E \u043D\u0435\u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E",
           "\u0421\u043F\u043E\u043A\u043E\u0439\u043D\u043E \u0438 \u0440\u043E\u0432\u043D\u043E",
           "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E \u0438 \u0441\u043F\u043E\u043A\u043E\u0439\u043D\u043E"
+        ]
+      },
+      // V5.7: the exit pad used to reuse the ENTRY grid's fear/confidence axes and states, which
+      // don't describe a reaction to a result at all \u2014 "confident and calm" says nothing about
+      // whether the trader is satisfied with what just happened. This grid is themed around
+      // reaction to the outcome instead: disappointed\u2194pleased and stung\u2194at peace, giving states
+      // like resentment and euphoria that a post-trade check-in actually needs.
+      exitEmotionGrid: {
+        axisTop: "\u0417\u0430\u0434\u0435\u043B\u043E",
+        axisBottom: "\u041F\u0440\u0438\u043D\u044F\u043B",
+        axisLeft: "\u0420\u0430\u0437\u043E\u0447\u0430\u0440\u043E\u0432\u0430\u043D",
+        axisRight: "\u0414\u043E\u0432\u043E\u043B\u0435\u043D",
+        hint: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0447\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u0443\u0435\u0448\u044C \u043F\u043E \u0438\u0442\u043E\u0433\u0443 \u0441\u0434\u0435\u043B\u043A\u0438, \u0430 \u043D\u0435 \u0442\u043E, \u0447\u0442\u043E \u00AB\u043D\u0443\u0436\u043D\u043E\u00BB \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C",
+        states: [
+          "\u041E\u0431\u0438\u0434\u0430 \u0438 \u0437\u043B\u043E\u0441\u0442\u044C",
+          "\u0417\u0430\u0434\u0435\u043B\u043E, \u0441\u0430\u043C \u043D\u0435 \u043F\u043E\u043D\u0438\u043C\u0430\u044E \u043F\u043E\u0447\u0435\u043C\u0443",
+          "\u042D\u0439\u0444\u043E\u0440\u0438\u044F, \u0435\u0449\u0451 \u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
+          "\u0415\u0441\u0442\u044C \u0434\u043E\u0441\u0430\u0434\u0430, \u043D\u043E \u0434\u0435\u0440\u0436\u0443 \u0441\u0435\u0431\u044F \u0432 \u0440\u0443\u043A\u0430\u0445",
+          "\u0420\u043E\u0432\u043D\u043E\u0435, \u043D\u0435\u0439\u0442\u0440\u0430\u043B\u044C\u043D\u043E\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435",
+          "\u0414\u043E\u0432\u043E\u043B\u0435\u043D \u0438 \u0441\u043E\u0431\u0440\u0430\u043D",
+          "\u041F\u0440\u0438\u043D\u044F\u043B \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442, \u0431\u0435\u0437 \u043E\u0431\u0438\u0434",
+          "\u0421\u043F\u043E\u043A\u043E\u0435\u043D \u0438 \u0443\u0440\u0430\u0432\u043D\u043E\u0432\u0435\u0448\u0435\u043D",
+          "\u0414\u043E\u0432\u043E\u043B\u0435\u043D \u0438 \u0441\u043F\u043E\u043A\u043E\u0435\u043D"
         ]
       }
     },
@@ -1003,6 +1106,24 @@ var STRINGS = {
           "Calm and steady",
           "Confident and calm"
         ]
+      },
+      exitEmotionGrid: {
+        axisTop: "Stung",
+        axisBottom: "At peace",
+        axisLeft: "Disappointed",
+        axisRight: "Pleased",
+        hint: "Mark how you feel about the result, not how you think you should feel",
+        states: [
+          "Resentful and angry",
+          "Stung, not sure why",
+          "Euphoric, still wired",
+          "Some frustration, but holding it together",
+          "Even, neutral state",
+          "Pleased and composed",
+          "Accepted it, no hard feelings",
+          "Calm and settled",
+          "Pleased and at peace"
+        ]
       }
     },
     log: {
@@ -1190,10 +1311,11 @@ function migrateEntry(e) {
     plannedRR: typeof e.plannedRR === "number" && !isNaN(e.plannedRR) ? e.plannedRR : null,
     closeType: ["tp", "sl", "manual"].includes(e.closeType) ? e.closeType : null,
     realizedRR: typeof e.realizedRR === "number" && !isNaN(e.realizedRR) ? e.realizedRR : null,
-    // V5.5: state AFTER the trade closed. Same axes as x/y (the entry-mood pad): exitX =
-    // fear(0)..confidence(100), exitY = on edge(0)..calm(100). Optional \u2014 stays null on every
-    // pre-V5.5 entry and on any close where the trader skipped it, and every consumer must handle
-    // null rather than assume it is present.
+    // V5.5: state AFTER the trade closed. Same 0-100 numeric range as x/y, but as of V5.7 a
+    // DIFFERENT pad with its own axes \u2014 exitX = disappointed(0)..pleased(100), exitY =
+    // stung(0)..at peace(100) \u2014 a reaction to the RESULT, not the fear\u2192confidence read on the
+    // setup that x/y capture. Optional \u2014 stays null on every pre-V5.5 entry and on any close
+    // where the trader skipped it, and every consumer must handle null rather than assume present.
     exitX: typeof e.exitX === "number" && !isNaN(e.exitX) ? e.exitX : null,
     exitY: typeof e.exitY === "number" && !isNaN(e.exitY) ? e.exitY : null,
     exitScreenshots: Array.isArray(e.exitScreenshots) ? e.exitScreenshots : []
@@ -1270,21 +1392,6 @@ function useAnimatedNumber(target, duration = 600) {
     return () => cancelAnimationFrame(raf);
   }, [target, duration]);
   return display;
-}
-function useIsDesktop(breakpoint = 900) {
-  const [isDesktop, setIsDesktop] = useState(() => typeof window !== "undefined" && window.innerWidth >= breakpoint);
-  useEffect(() => {
-    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`);
-    const handler = (e) => setIsDesktop(e.matches);
-    handler(mq);
-    if (mq.addEventListener) mq.addEventListener("change", handler);
-    else mq.addListener(handler);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", handler);
-      else mq.removeListener(handler);
-    };
-  }, [breakpoint]);
-  return isDesktop;
 }
 // V5.4: the level used to be `3 + floor(entriesCount / 3)`, so a brand-new account with an empty
 // journal already displayed level 3 and every third entry bumped it regardless of HOW the trader
@@ -1672,43 +1779,83 @@ var CALIBRATION_TIERS_EN = [
   { label: "Caution recommended \u2014 cut risk by 30\u201350%.", color: LOSS },
   { label: "Trading not recommended \u2014 high chance of emotional decisions.", color: LOSS }
 ];
-function scoreCalibration(answers, lang = "ru") {
-  const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
-  const tiers = lang === "en" ? CALIBRATION_TIERS_EN : CALIBRATION_TIERS;
-  const total = questions.reduce((s, q) => s + (answers[q.id]?.score ?? 0), 0);
-  const pct = Math.max(0, Math.min(100, Math.round((total + 12) / 24 * 100)));
-  let tierIndex = pct >= 85 ? 0 : pct >= 70 ? 1 : pct >= 50 ? 2 : pct >= 30 ? 3 : 4;
-  const riskFactors = [];
-  if (answers.motivation?.flag === "revenge") riskFactors.push(lang === "en" ? "Wanting to win back losses" : "\u0416\u0435\u043B\u0430\u043D\u0438\u0435 \u043E\u0442\u0431\u0438\u0442\u044C \u0443\u0431\u044B\u0442\u043A\u0438");
-  if (answers.emotion?.flag === "emotion" || answers.objectivity?.flag === "emotion") riskFactors.push(lang === "en" ? "Strong emotional involvement" : "\u0421\u0438\u043B\u044C\u043D\u0430\u044F \u044D\u043C\u043E\u0446\u0438\u043E\u043D\u0430\u043B\u044C\u043D\u0430\u044F \u0432\u043E\u0432\u043B\u0435\u0447\u0451\u043D\u043D\u043E\u0441\u0442\u044C");
-  if (riskFactors.length) tierIndex = Math.max(tierIndex, 2);
-  const factors = questions.map((q) => {
-    const a = answers[q.id];
-    if (!a) return null;
-    if (a.score === 2) return { type: "positive", text: q.positive };
-    if (a.score === -2) return { type: "warning", text: q.negative };
-    return null;
-  }).filter(Boolean);
-  return { pct, tier: tiers[tierIndex], riskFactors, factors };
-}
 // ---- Adaptive Calibration: shared answer scale + scorer ---------------------
 // Adaptive (Gemini-written) questions don't carry their own per-option scores — that would let
-// the model influence scoring, which p.14 of the spec explicitly forbids. Instead every adaptive
-// question uses this one fixed 4-point readiness scale, and score is derived purely from which
-// option (position) the user picked. Baseline questions (sleep/emotion, pulled from
-// CALIBRATION_QUESTIONS as-is) keep their existing custom-labeled options untouched.
-var CALIBRATION_READINESS_SCALE = [
-  { label: "\u041D\u0435\u0442", score: -2 },
-  { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435\u0442", score: -1 },
-  { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0434\u0430", score: 1 },
-  { label: "\u0414\u0430", score: 2 }
-];
-var CALIBRATION_READINESS_SCALE_EN = [
-  { label: "No", score: -2 },
-  { label: "Probably not", score: -1 },
-  { label: "Probably yes", score: 1 },
-  { label: "Yes", score: 2 }
-];
+// the model influence scoring, which p.14 of the spec explicitly forbids. Score is always derived
+// purely from which option POSITION the user picked (index 0..3 -> -2,-1,1,2); position 0 is
+// always the least-favorable/highest-risk answer and position 3 the most-favorable/lowest-risk
+// one. That contract never changes.
+//
+// V5.7: what DID change is that until now every adaptive question was forced onto one single
+// yes/no phrasing (CALIBRATION_READINESS_SCALE), even when the question Gemini wrote wasn't a
+// yes/no question at all (e.g. "how do you rate the impact of X on Y" answered with
+// "Нет/Скорее нет/Скорее да/Да" reads as nonsense). Gemini now also returns a scaleType chosen
+// from this fixed, app-defined enum \u2014 it picks WHICH pre-approved wording fits the question it
+// wrote, but never writes or scores an option itself, so the p.14 guarantee is unchanged. An
+// unrecognised or missing scaleType falls back to "readiness".
+var CALIBRATION_SCALE_SETS = {
+  ru: {
+    readiness: [
+      { label: "\u041D\u0435\u0442", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435\u0442", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0434\u0430", score: 1 },
+      { label: "\u0414\u0430", score: 2 }
+    ],
+    confidence: [
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435 \u0443\u0432\u0435\u0440\u0435\u043D", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435 \u0443\u0432\u0435\u0440\u0435\u043D", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0443\u0432\u0435\u0440\u0435\u043D", score: 1 },
+      { label: "\u041F\u043E\u043B\u043D\u043E\u0441\u0442\u044C\u044E \u0443\u0432\u0435\u0440\u0435\u043D", score: 2 }
+    ],
+    calm: [
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435 \u0441\u043F\u043E\u043A\u043E\u0435\u043D", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435 \u0441\u043F\u043E\u043A\u043E\u0435\u043D", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u0441\u043F\u043E\u043A\u043E\u0435\u043D", score: 1 },
+      { label: "\u041F\u043E\u043B\u043D\u043E\u0441\u0442\u044C\u044E \u0441\u043F\u043E\u043A\u043E\u0435\u043D", score: 2 }
+    ],
+    // Impact-style questions ("how much did X affect your reading of Y") run the other visual
+    // direction \u2014 heavy impact is position 0 (risk), no impact is position 3 (safe) \u2014 which is
+    // exactly the shape the "stop-loss / collected liquidity" example question needed.
+    impact: [
+      { label: "\u0421\u0438\u043B\u044C\u043D\u043E \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: -2 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: -1 },
+      { label: "\u0421\u043A\u043E\u0440\u0435\u0435 \u043D\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: 1 },
+      { label: "\u0421\u043E\u0432\u0441\u0435\u043C \u043D\u0435 \u043F\u043E\u0432\u043B\u0438\u044F\u043B\u043E", score: 2 }
+    ]
+  },
+  en: {
+    readiness: [
+      { label: "No", score: -2 },
+      { label: "Probably not", score: -1 },
+      { label: "Probably yes", score: 1 },
+      { label: "Yes", score: 2 }
+    ],
+    confidence: [
+      { label: "Not confident at all", score: -2 },
+      { label: "Somewhat unsure", score: -1 },
+      { label: "Fairly confident", score: 1 },
+      { label: "Completely confident", score: 2 }
+    ],
+    calm: [
+      { label: "Not calm at all", score: -2 },
+      { label: "A bit on edge", score: -1 },
+      { label: "Fairly calm", score: 1 },
+      { label: "Completely calm", score: 2 }
+    ],
+    impact: [
+      { label: "Affected it a lot", score: -2 },
+      { label: "Affected it somewhat", score: -1 },
+      { label: "Barely affected it", score: 1 },
+      { label: "Didn't affect it at all", score: 2 }
+    ]
+  }
+};
+var CALIBRATION_SCALE_TYPES = ["readiness", "confidence", "calm", "impact"];
+function caScaleSet(scaleType, lang) {
+  const byLang = lang === "en" ? CALIBRATION_SCALE_SETS.en : CALIBRATION_SCALE_SETS.ru;
+  return byLang[scaleType] || byLang.readiness;
+}
+
 var ADAPTIVE_FACTOR_LABELS = {
   consecutive_losses: { ru: "\u0421\u0435\u0440\u0438\u044F \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A", en: "A losing streak" },
   euphoria_risk: { ru: "\u042D\u0439\u0444\u043E\u0440\u0438\u044F \u043F\u043E\u0441\u043B\u0435 \u0441\u0435\u0440\u0438\u0438 \u043F\u043E\u0431\u0435\u0434", en: "Euphoria after a winning streak" },
@@ -2332,20 +2479,28 @@ function emotionalAnalysis(entries) {
   return { average, volatility, zones, bestState, worstState, confidence: ta_confidence(complete.length) };
 }
 // V5.5 \u2014 exit-state analysis. The entry mood (x/y) was already tracked; exitX/exitY closes the
-// loop, so the interesting quantity is the SHIFT between them and how it depends on the outcome and
-// on how the trade was closed. Everything here needs both points on the same trade, so it reports
-// its own sample and returns nulls rather than guessing when a group is too thin. Nothing else in
-// the engine depends on this \u2014 scores, patterns and levels are unchanged by it \u2014 it is an added
-// read-only view fed to the UI and to Gemini.
+// loop. Everything here needs both points on the same trade, so it reports its own sample and
+// returns nulls rather than guessing when a group is too thin. Nothing else in the engine depends
+// on this \u2014 scores, patterns and levels are unchanged by it \u2014 it is an added read-only view fed
+// to the UI and to Gemini.
+//
+// V5.7 correction: this used to also report `confidenceShift = mean(exitX - x)`. That was only
+// ever valid while the exit grid reused the entry grid's fear\u2192confidence x-axis. Since the exit
+// grid was redesigned around disappointed\u2192pleased (a reaction to the RESULT, not a read on the
+// setup), x and exitX are two different psychological axes \u2014 subtracting them produced a number
+// with no coherent meaning, even though it looked like a normal "before/after" delta. The y-axis
+// (agitated\u2192calm at entry, stung\u2192at peace at exit) is still the same kind of arousal measure on
+// both ends, so calmShift stays valid and unchanged. avgConfidenceAfter is renamed
+// avgSatisfactionAfter \u2014 it was always just a mean of exitX alone (not a comparison to x), so the
+// value is identical, only the name now matches what it actually measures.
 var EMOTION_SHIFT_MIN_GROUP = 3;
 function es_shiftStats(group) {
   if (group.length < EMOTION_SHIFT_MIN_GROUP) return null;
   return {
     sample: group.length,
-    confidenceShift: Math.round(st_mean(group.map((e) => e.exitX - e.x))),
     calmShift: Math.round(st_mean(group.map((e) => e.exitY - e.y))),
     avgCalmAfter: Math.round(st_mean(group.map((e) => e.exitY))),
-    avgConfidenceAfter: Math.round(st_mean(group.map((e) => e.exitX)))
+    avgSatisfactionAfter: Math.round(st_mean(group.map((e) => e.exitX)))
   };
 }
 function emotionalShiftAnalysis(closedEntries) {
@@ -2366,8 +2521,11 @@ function emotionalShiftAnalysis(closedEntries) {
     sl: es_shiftStats(both.filter((e) => e.closeType === "sl")),
     manual: es_shiftStats(both.filter((e) => e.closeType === "manual"))
   };
-  // A win that still leaves the trader rattled is a different signal from a win that settles them.
+  // A win that still leaves the trader rattled, or unsatisfied, is a different signal from a win
+  // that settles them \u2014 each stays within its own axis (calm compared to calm, satisfaction
+  // compared to satisfaction), never mixed.
   const winsUncalm = both.filter((e) => e.outcome === "Win" && e.exitY < 40);
+  const winsUnsatisfied = both.filter((e) => e.outcome === "Win" && e.exitX < 40);
   const lossesCalm = both.filter((e) => e.outcome === "Loss" && e.exitY >= 60);
   return {
     available: true,
@@ -2378,6 +2536,8 @@ function emotionalShiftAnalysis(closedEntries) {
     byCloseType,
     winsEndingUncalmCount: winsUncalm.length,
     winsEndingUncalmPct: byOutcome.win ? Math.round(winsUncalm.length / byOutcome.win.sample * 100) : null,
+    winsEndingUnsatisfiedCount: winsUnsatisfied.length,
+    winsEndingUnsatisfiedPct: byOutcome.win ? Math.round(winsUnsatisfied.length / byOutcome.win.sample * 100) : null,
     lossesEndingCalmCount: lossesCalm.length,
     lossesEndingCalmPct: byOutcome.loss ? Math.round(lossesCalm.length / byOutcome.loss.sample * 100) : null,
     confidence: ta_confidence(both.length, { low: 5, moderate: 15, high: 25 })
@@ -2937,7 +3097,6 @@ function pd_lossStreak(allSorted, lang = "ru") {
   };
 }
 function pd_riskAfterWin(allSorted, lang = "ru") {
-  const withR = allSorted.filter((t) => typeof t.r === "number" && !isNaN(t.r));
   const group = [], rest = [];
   for (let i = 1; i < allSorted.length; i++) {
     if (allSorted[i - 1].outcome === "Win" && typeof allSorted[i - 1].r === "number" && typeof allSorted[i].r === "number") {
@@ -3892,7 +4051,7 @@ function WalletSheet({ open, onClose, balance, ledger, accent }) {
         "div",
         {
           onClick: (e) => e.stopPropagation(),
-          className: "w-full max-w-md rounded-t-[28px] px-5 pt-4 pb-8",
+          className: "w-full max-w-md rounded-t-[28px] px-5 pt-4 pb-8 vscroll",
           style: { background: BASE.surface, border: `1px solid ${BASE.line}`, borderBottom: "none", maxHeight: "78vh", overflowY: "auto", animation: "riseIn 0.28s ease-out" },
           children: [
             /* @__PURE__ */ jsx("div", { className: "mx-auto mb-4", style: { width: 36, height: 4, borderRadius: 2, background: BASE.line } }),
@@ -4294,7 +4453,7 @@ function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
     "div",
     {
       onClick: (e) => e.stopPropagation(),
-      className: "w-full max-w-md rounded-t-[28px] px-5 pt-4 pb-8",
+      className: "w-full max-w-md rounded-t-[28px] px-5 pt-4 pb-8 vscroll",
       style: { background: BASE.surface, border: `1px solid ${BASE.line}`, borderBottom: "none", maxHeight: "88vh", overflowY: "auto", animation: "riseIn 0.28s ease-out" },
       children: [
         /* @__PURE__ */ jsx("div", { className: "mx-auto mb-4", style: { width: 36, height: 4, borderRadius: 2, background: BASE.line } }),
@@ -4400,15 +4559,19 @@ function emotionPositionColor(x, y) {
 function emotionBand(v) {
   return v < 34 ? 0 : v < 67 ? 1 : 2;
 }
-function emotionStateText(x, y, t) {
+// V5.7: `variant` selects which of the two label sets (entry vs exit) a point is read against.
+// Both callers of this function must agree on which grid produced x/y, or the wrong wording gets
+// shown \u2014 exit points always pass variant "exit" (see the Log call sites).
+function emotionStateText(x, y, t, variant = "entry") {
   if (x == null || y == null || isNaN(x) || isNaN(y)) return null;
-  return t.newEntry.emotionGrid.states[emotionBand(y) * 3 + emotionBand(x)] || null;
+  const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
+  return eg.states[emotionBand(y) * 3 + emotionBand(x)] || null;
 }
-function EmotionGrid({ x, y, onChange, accent, t }) {
+function EmotionGrid({ x, y, onChange, accent, t, variant = "entry" }) {
   const ref = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [justPlaced, setJustPlaced] = useState(false);
-  const eg = t.newEntry.emotionGrid;
+  const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
   const place = (e) => {
     const rect = ref.current.getBoundingClientRect();
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -4440,7 +4603,7 @@ function EmotionGrid({ x, y, onChange, accent, t }) {
   // 3x3 banding (fear/neutral/confidence x nervous/balanced/calm) instead of the old 4-quadrant
   // split, so the written-out state actually reflects a middling position instead of forcing it
   // into one of two extremes either axis is closest to.
-  const stateText = has ? emotionStateText(x, y, t) : null;
+  const stateText = has ? emotionStateText(x, y, t, variant) : null;
   const stateColor = has ? emotionPositionColor(x, y) : BASE.inkFaint;
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx("div", { className: "text-center mb-1.5", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisTop }) }),
@@ -4535,7 +4698,7 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
         setQuery("");
       }, children: /* @__PURE__ */ jsx(XIcon, { size: 14, style: { color: BASE.inkFaint } }) })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "max-h-52 overflow-y-auto", children: filtered ? /* @__PURE__ */ jsxs(Fragment, { children: [
+    /* @__PURE__ */ jsx("div", { className: "max-h-52 overflow-y-auto vscroll", children: filtered ? /* @__PURE__ */ jsxs(Fragment, { children: [
       filtered.map((o) => /* @__PURE__ */ jsx("button", { type: "button", onClick: () => select(o), className: "w-full text-left px-3 py-2.5 text-sm transition-colors duration-100", style: rowStyle(o), children: o }, o)),
       allowCustom && query.trim() && !exactMatch && /* @__PURE__ */ jsxs("button", { type: "button", onClick: () => addCustom(query.trim()), className: "w-full text-left px-3 py-2.5 text-sm flex items-center gap-2", style: { color: accent }, children: [
         /* @__PURE__ */ jsx(Plus, { size: 13 }),
@@ -5071,7 +5234,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
-      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t }),
+      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t, variant: "exit" }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
@@ -5309,7 +5472,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
-      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t }),
+      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t, variant: "exit" }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
@@ -5423,7 +5586,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
             e.x != null && e.exitX != null && /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u2192" }),
             e.exitX != null && /* @__PURE__ */ jsxs("span", { children: [
               /* @__PURE__ */ jsxs("span", { style: { color: BASE.inkFaint }, children: [t.newEntry.stateAfterLabel, " "] }),
-              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.exitX, e.exitY) }, children: emotionStateText(e.exitX, e.exitY, t) })
+              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.exitX, e.exitY) }, children: emotionStateText(e.exitX, e.exitY, t, "exit") })
             ] })
           ] }),
           e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
@@ -5638,8 +5801,6 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     return g;
   }, [closedEntries]);
   const winRate = grouped.Win.length + grouped.Loss.length > 0 ? Math.round(grouped.Win.length / (grouped.Win.length + grouped.Loss.length) * 100) : 0;
-  const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
-  const avgR = withR.length ? withR.reduce((s, e) => s + e.r, 0) / withR.length : null;
   const traderPatterns = useMemo(() => analyzeTraderPatterns(closedEntries, lang), [closedEntries, lang]);
   const insight = useMemo(() => {
     if (grouped.Win.length < 2 || grouped.Loss.length < 2) return t.pattern.needMoreEntries;
@@ -6635,11 +6796,14 @@ function aiComputeExitBehavior(closedEntries) {
     avgRRLostToEarlyExit: shortfalls.length ? st_round2(st_mean(shortfalls)) : null,
     avgPlannedRROnEarlyExits: earlyExits.length ? st_round2(st_mean(earlyExits.map((e) => e.plannedRR))) : null,
     avgRealizedRROnEarlyExits: earlyExits.length ? st_round2(st_mean(earlyExits.map((e) => e.realizedRR))) : null,
+    // avgConfidenceBeforeEarlyExit reads entry x (fear\u2192confidence axis \u2014 correct name). The
+    // after-exit figure below reads exitX, which since V5.7 is the disappointed\u2192pleased axis, so
+    // it's named for what it actually measures rather than reusing "confidence".
     avgConfidenceBeforeEarlyExit: emotionOnEarlyExit.length >= 2 ? Math.round(st_mean(emotionOnEarlyExit.map((e) => e.x))) : null,
     avgCalmBeforeEarlyExit: emotionOnEarlyExit.length >= 2 ? Math.round(st_mean(emotionOnEarlyExit.map((e) => e.y))) : null,
     emotionSampleOnEarlyExits: emotionOnEarlyExit.length,
     avgCalmAfterEarlyExit: exitEmotionOnEarlyExit.length >= 2 ? Math.round(st_mean(exitEmotionOnEarlyExit.map((e) => e.exitY))) : null,
-    avgConfidenceAfterEarlyExit: exitEmotionOnEarlyExit.length >= 2 ? Math.round(st_mean(exitEmotionOnEarlyExit.map((e) => e.exitX))) : null,
+    avgSatisfactionAfterEarlyExit: exitEmotionOnEarlyExit.length >= 2 ? Math.round(st_mean(exitEmotionOnEarlyExit.map((e) => e.exitX))) : null,
     exitEmotionSampleOnEarlyExits: exitEmotionOnEarlyExit.length
   };
 }
@@ -6817,7 +6981,16 @@ function aiHashContext(context) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
 function aiCompactRecentEntries(entries, limit) {
-  return (entries || []).slice(-limit).map((e) => ({
+  // V5.6: this used to slice(-limit) straight off the array. For normally-created trades that is
+  // chronological (every new entry gets new Date() and is appended), but an imported journal keeps
+  // the file's order, so after an import the Coach chat was handed the last-INSERTED trades and
+  // told they were the most recent. Sorting here fixes both call sites and is a no-op on input
+  // that is already ordered.
+  return [...(entries || [])].sort((a, b) => {
+    const av = a?.date instanceof Date ? a.date.getTime() : 0;
+    const bv = b?.date instanceof Date ? b.date.getTime() : 0;
+    return av - bv;
+  }).slice(-limit).map((e) => ({
     date: e.date instanceof Date ? e.date.toISOString().slice(0, 10) : null,
     instrument: e.instrument || null,
     direction: e.direction || null,
@@ -6830,8 +7003,12 @@ function aiCompactRecentEntries(entries, limit) {
     // V5.4: state-before-entry and hold time were already on the entry but never reached the model,
     // which is why it could not connect "anxious before the trade" to "closed it by hand early".
     // Same axes as EmotionGrid/EMOTION_ZONES: x = doubt(0)..confidence(100), y = tension(0)..calm(100).
+    // stateBefore reads the entry grid's confidence/calm axes. stateAfter reads the exit grid,
+    // which since V5.7 measures disappointed\u2192pleased and stung\u2192at peace \u2014 a reaction to the
+    // RESULT, not a read on the setup \u2014 so it's keyed as satisfaction/calm rather than reusing
+    // "confidence" for a different construct.
     stateBefore: e.x != null && e.y != null ? { confidence: e.x, calm: e.y } : null,
-    stateAfter: e.exitX != null && e.exitY != null ? { confidence: e.exitX, calm: e.exitY } : null,
+    stateAfter: e.exitX != null && e.exitY != null ? { satisfaction: e.exitX, calm: e.exitY } : null,
     minutesHeld: aiEntryMinutesHeld(e),
     pull: e.pull && e.pull !== "\u2014" ? String(e.pull).slice(0, 200) : null,
     lesson: e.lesson && e.lesson !== "\u2014" ? String(e.lesson).slice(0, 200) : null
@@ -6882,12 +7059,14 @@ Hard requirements:
 - Every claim must be tied to a countable fact from the context: a count, a percentage, an average,
   a change, or a comparison between two groups. Name the number.
 - Prefer linking fields to each other. Useful sources of links: exitBehavior (tpReachedPct vs
-  slRespectedPct, earlyExitCount, avgRRLostToEarlyExit, avgConfidenceBeforeEarlyExit),
-  afterStreakBehavior (riskChangeVsBaselinePct, manualClosePct after two wins or two losses),
-  recentClosedSequence (an actual run of recent trades \u2014 you may say "N of the last M"; each
-  carries stateBefore and, where the trader filled it in, stateAfter), emotionalShift (how
-  confidence and calm move between entry and exit, split by outcome and by close type \u2014 e.g. wins
-  that still end with low calm, or losses the trader takes calmly),
+  slRespectedPct, earlyExitCount, avgRRLostToEarlyExit, avgConfidenceBeforeEarlyExit,
+  avgSatisfactionAfterEarlyExit), afterStreakBehavior (riskChangeVsBaselinePct, manualClosePct
+  after two wins or two losses), recentClosedSequence (an actual run of recent trades \u2014 you may
+  say "N of the last M"; each carries stateBefore \u2014 confidence/calm going into the trade \u2014 and,
+  where the trader filled it in, stateAfter \u2014 satisfaction/calm right after closing, a reaction to
+  the RESULT, not the same axis as stateBefore), emotionalShift (calmShift plus avgSatisfactionAfter,
+  split by outcome and by close type \u2014 e.g. wins that still end with low satisfaction or low calm,
+  or losses the trader takes calmly),
   journal.repeatedLessons (the same lesson written repeatedly), calibration.statedVsActualNote
   (stated state vs what actually happened), emotional.bestState/worstState, holdTime.
 - State the observation first, then at most one careful interpretation ("this may indicate...").
@@ -7333,9 +7512,22 @@ Rules:
 - Do not calculate any score, tier, or awareness value yourself \u2014 only write the question text.
 - Each question must be a single sentence or two, in plain conversational language, in the language given
   by ADAPTIVE_CONTEXT.lang ("ru" \u2192 Russian, "en" \u2192 English).
+- Every question is answered on a 4-point scale, but the WORDING of that scale must fit how you phrased
+  the question. Choose one scaleType per question from this fixed list \u2014 you only pick the name, the
+  app supplies the actual button text and never lets you set scores:
+  \u2022 "readiness" \u2014 for a yes/no question about what the person will DO ("will you keep your usual
+    risk size today even if...", "\u0431\u0443\u0434\u0435\u0448\u044C \u043B\u0438 \u0442\u044B...").
+  \u2022 "confidence" \u2014 for "how confident/sure are you that..." questions.
+  \u2022 "calm" \u2014 for questions about the person's emotional/physical state right now.
+  \u2022 "impact" \u2014 for "how much did [an event] affect your [judgment/read of the market/plan]"
+    questions \u2014 use this one whenever the question isn't naturally a yes/no, e.g. it asks the person
+    to RATE something rather than commit to an action.
+  Pick whichever of these four genuinely matches the grammar of the question you wrote; when in doubt,
+  prefer "readiness" and rephrase the question as a yes/no instead of forcing an awkward fit.
 - Return ONLY a JSON array, no markdown fences, no commentary: [{"question": "...", "factor": "...",
-  "category": "adaptive", "priority": 0.0}]. "factor" must be one of the adaptiveFactors' type values you
-  were given. "priority" is 0-1, how relevant this question is right now.`;
+  "category": "adaptive", "scaleType": "readiness", "priority": 0.0}]. "factor" must be one of the
+  adaptiveFactors' type values you were given. "scaleType" must be exactly one of readiness/confidence/
+  calm/impact. "priority" is 0-1, how relevant this question is right now.`;
 async function aiGenerateCalibrationQuestions(context) {
   if (!context.adaptiveFactors.length) return [];
   const prompt = `${AI_CALIBRATION_TASK}
@@ -7352,7 +7544,11 @@ ${JSON.stringify(context)}`;
     factor: q.factor,
     category: "adaptive",
     source: "adaptive",
-    priority: typeof q.priority === "number" ? q.priority : 0.5
+    priority: typeof q.priority === "number" ? q.priority : 0.5,
+    // Gemini only NAMES which pre-built wording fits its own question \u2014 the actual label text
+    // and score values for every scaleType live in CALIBRATION_SCALE_SETS, defined by the app.
+    // An unrecognised value (or none) falls back to the plain yes/no scale in caScaleSet().
+    scaleType: CALIBRATION_SCALE_TYPES.includes(q.scaleType) ? q.scaleType : "readiness"
   }));
 }
 function caLocalFallbackQuestions(adaptiveFactors, lang) {
@@ -7387,14 +7583,17 @@ function caLocalFallbackQuestions(adaptiveFactors, lang) {
     factor: f.type,
     category: "adaptive",
     source: "fallback",
-    priority: f.severity
+    priority: f.severity,
+    scaleType: "readiness"
   }));
 }
 function assembleCalibrationQuestions(adaptiveQuestions, lang) {
   const questions = lang === "en" ? CALIBRATION_QUESTIONS_EN : CALIBRATION_QUESTIONS;
-  const scale = lang === "en" ? CALIBRATION_READINESS_SCALE_EN : CALIBRATION_READINESS_SCALE;
   const baseline = questions.filter((q) => q.id === "sleep" || q.id === "emotion").map((q) => ({ ...q, category: "baseline", source: "baseline" }));
-  const adaptive = adaptiveQuestions.slice(0, 4).map((q) => ({ ...q, options: scale }));
+  // V5.7: each adaptive question can carry its own scaleType (readiness/confidence/calm/impact),
+  // picked by aiGenerateCalibrationQuestions or the local fallback bank — so a question shaped
+  // as "how much did X affect Y" gets the impact wording instead of being forced onto yes/no.
+  const adaptive = adaptiveQuestions.slice(0, 4).map((q) => ({ ...q, options: caScaleSet(q.scaleType, lang) }));
   return [...baseline, ...adaptive];
 }
 function calibHistoryKey(userId) {
@@ -7565,7 +7764,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
         )
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatDesc }) }),
-      /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 min-h-0 overflow-y-auto mb-3 pr-1", children: [
+      /* @__PURE__ */ jsxs("div", { ref: scrollRef, className: "flex-1 min-h-0 overflow-y-auto vscroll mb-3 pr-1", children: [
         chatMessages.length === 0 && /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2", children: quickQuestions.map((q, i) => /* @__PURE__ */ jsxs(
           "button",
           {
@@ -8520,15 +8719,6 @@ async function legacyStorageSet(key, value, shared = false) {
     throw e;
   }
 }
-async function legacyStorageDelete(key, shared = false) {
-  if (!window.storage || storageDegraded) return null;
-  try {
-    return await queueStorage(() => withStorageRetry(() => window.storage.delete(key, shared)));
-  } catch (e) {
-    markStorageDegraded(e);
-    throw e;
-  }
-}
 async function storageGet(key, shared = false) {
   const ref = fsDocRef(key, shared);
   if (!ref) return null;
@@ -9419,16 +9609,30 @@ function MindExe() {
     // session, otherwise a failed load would let empty in-memory state overwrite real cloud data.
     if (!canPersistRef.current || !fbAuth.currentUser || !userId) return;
     try {
-      if (backupPendingRef.current && rawProfileRef.current) {
-        backupPendingRef.current = false;
-        try {
-          await storageSet(`${PROFILE_KEY}:backup:${userId}`, JSON.stringify(rawProfileRef.current), false);
-        } catch (_) {
-        }
-      }
       const payload = buildPayload(overrides);
-      await saveProfile(userId, payload);
-      rawProfileRef.current = payload;
+      // V5.6 dedup. Skips ONLY the profile-document write, and only when the payload is
+      // byte-identical to the one already in Firestore (rawProfileRef holds exactly what was last
+      // written, and stays stale if a write threw \u2014 so a failed save is always retried).
+      // saveMedia below runs unconditionally: buildPayload strips screenshots out of journal
+      // entries, so an image-only change yields an identical payload and must never be skipped
+      // here. saveMedia does its own per-entry hash check, so the unchanged case is nearly free.
+      let profileUnchanged = false;
+      try {
+        profileUnchanged = !!rawProfileRef.current && JSON.stringify(payload) === JSON.stringify(rawProfileRef.current);
+      } catch (_) {
+        profileUnchanged = false;
+      }
+      if (!profileUnchanged) {
+        if (backupPendingRef.current && rawProfileRef.current) {
+          backupPendingRef.current = false;
+          try {
+            await storageSet(`${PROFILE_KEY}:backup:${userId}`, JSON.stringify(rawProfileRef.current), false);
+          } catch (_) {
+          }
+        }
+        await saveProfile(userId, payload);
+        rawProfileRef.current = payload;
+      }
       const srcEntries = overrides.entries ?? entries;
       const mediaMap = {};
       for (const e of srcEntries) {
@@ -9442,9 +9646,18 @@ function MindExe() {
       showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0441\u0432\u044F\u0437\u044C");
     }
   };
+  // V5.6 \u2014 duplicate Firestore write on every journal action. Each onSave handler already calls
+  // persistNow({ entries: next }) explicitly; setEntries then changed `entries`, this effect fired,
+  // and persistNow() ran a SECOND time with identical data \u2014 two full profile writes plus two
+  // media writes (base64 screenshots) per saved trade. The de-duplication now lives inside
+  // persistNow (where it can skip the profile write without ever skipping media); this effect just
+  // debounces so rapid changes coalesce into one pass. The explicit calls in the handlers are
+  // untouched and still write instantly, and the visibilitychange/pagehide flush below still
+  // covers the app being backgrounded inside the debounce window.
   useEffect(() => {
     if (!loaded || !canPersistRef.current || authStatus !== "authenticated" || !userId) return;
-    persistNow();
+    const timer = setTimeout(() => persistNow(), 900);
+    return () => clearTimeout(timer);
   }, [entries, name, accentPreset, soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, loaded, authStatus, userId]);
   useEffect(() => {
     if (!loaded || !canPersistRef.current || authStatus !== "authenticated" || !userId) return;
@@ -9484,8 +9697,11 @@ function MindExe() {
     setCoinLedger(nextLedger);
     setLastDailyReward(nowIso);
     persistNow({ mindCoins: nextCoins, coinLedger: nextLedger, lastDailyReward: nowIso });
-    setTimeout(() => showToast("+10 MindCoin \u2014 \u0432\u0445\u043E\u0434 \u0437\u0430 \u0434\u0435\u043D\u044C"), firstDailyRewardRef.current ? 8600 : 400);
+    // V5.6: this timer had no cleanup. On the intro path it waits 8.6s, so logging out (or any
+    // unmount) inside that window still fired a toast for an account that is no longer open.
+    const dailyToastTimer = setTimeout(() => showToast("+10 MindCoin \u2014 \u0432\u0445\u043E\u0434 \u0437\u0430 \u0434\u0435\u043D\u044C"), firstDailyRewardRef.current ? 8600 : 400);
     firstDailyRewardRef.current = false;
+    return () => clearTimeout(dailyToastTimer);
   }, [loaded, authStatus, userId]);
   const playPing = () => {
     if (!soundOn) return;
@@ -9849,8 +10065,6 @@ function MindExe() {
         .cosmic-theme button:active { transform: translateY(1px); }
 
         .tab-content { animation: fadeIn 0.25s ease-out; }
-        .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
         /* V5.4 — horizontal strips (filter pills, screenshot rows, leverage/RR selectors).
            Per the CSS overflow spec, setting overflow-x to auto while overflow-y stays
            'visible' forces overflow-y to compute to 'auto' as well. Those rows are only a
@@ -9872,6 +10086,17 @@ function MindExe() {
         /* keeps the 300ms tap delay off and stops the pressed-state transform from being
            held (and re-rendered) through a drag */
         .hscroll > * { touch-action: manipulation; }
+        /* V5.7 \u2014 the visible vertical scrollbar on bottom-sheet pickers, the instrument/tag
+           dropdown and the Coach chat panel ("\u0431\u043e\u043a\u043e\u0432\u044b\u0435 \u043f\u043e\u043b\u043e\u0441\u044b \u0441\u043a\u0440\u043e\u043b\u043b\u0438\u043d\u0433\u0430") \u2014
+           same idea as .hscroll but for a vertical-only container: scrolling still works
+           (including touch), the OS scrollbar track is just not drawn. */
+        .vscroll {
+          -webkit-overflow-scrolling: touch;
+          overscroll-behavior-y: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .vscroll::-webkit-scrollbar { display: none; }
         .toast-in { animation: toastIn 0.2s ease-out; }
         .emotion-ripple { animation: ripple 0.5s ease-out; }
         .flame-flicker { animation: flicker 1.8s ease-in-out infinite; display: inline-block; }
