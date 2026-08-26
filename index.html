@@ -1,95 +1,68 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#040405" />
-  <title>mind.exe</title>
-  <link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png" />
-  <link rel="icon" href="icons/icon-16.png" sizes="16x16" type="image/png" />
-  <link rel="apple-touch-icon" href="icons/icon-180.png" />
-  <link rel="manifest" href="manifest.json" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="mind.exe" />
-  <!-- V4.0 fix: the app has referenced 'Space Grotesk' and 'JetBrains Mono' by name in fontFamily
-       styles throughout app.js since the beginning, but neither font was ever actually loaded here
-       — every label, number, and heading has been silently falling back to the system sans-serif
-       the whole time. This is the actual font source; app.js needs no changes for this. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <!-- The app is built entirely with Tailwind utility classes (flex, rounded-xl, text-[24px], etc.)
-       — inside Claude's artifact preview Tailwind is provided automatically, but a plain static site
-       needs it loaded explicitly. Without this script every className does nothing and the app falls
-       back to unstyled browser-default form controls. -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    html, body { margin: 0; padding: 0; background: #040405; overscroll-behavior: none; }
-    body { font-family: 'Space Grotesk', system-ui, -apple-system, sans-serif; font-weight: 500; }
-    #root { min-height: 100vh; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="theme-color" content="#0B0E14" />
+<title>market-sandbox</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<!-- V5.1: type swapped to Sora (display) + IBM Plex Mono (figures). app.js no longer names font
+       families inline — it reads --font-display / --font-mono, defined in the bundle's global style
+       block — so this link is what has to load them. -->
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body, #root { height: 100%; margin: 0; background: #0B0E14; }
+  body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; font-family: 'Sora', system-ui, -apple-system, sans-serif; }
+</style>
 
-  <script>
-    // window.storage shim — mind.exe was built against Claude's artifact storage API
-    // (get/set/delete/list). Outside that environment this backs the same interface with
-    // localStorage, keyed by an anonymous per-browser id so multiple "accounts" on one device
-    // don't collide. This is a drop-in replacement only — the app itself never talks to
-    // localStorage directly, only through window.storage (see storage/storageAdapter in
-    // ARCHITECTURE.md), so swapping this shim for a real backend later needs no app changes.
-    //
-    // NOTE (Firebase migration): this shim is now only used to read pre-Firebase local data
-    // during the one-time legacy migration path in app.js (legacyStorage*). All new reads/writes
-    // for authenticated users go through Firestore instead — see firebase/* imports in app.js.
-    (function () {
-      const PREFIX = "mindexe:";
-      function fullKey(key, shared) {
-        return PREFIX + (shared ? "shared:" : "priv:") + key;
-      }
-      window.storage = {
-        async get(key, shared) {
-          const v = localStorage.getItem(fullKey(key, shared));
-          if (v === null) return null;
-          return { key, value: v, shared: !!shared };
-        },
-        async set(key, value, shared) {
-          localStorage.setItem(fullKey(key, shared), value);
-          return { key, value, shared: !!shared };
-        },
-        async delete(key, shared) {
-          localStorage.removeItem(fullKey(key, shared));
-          return { key, deleted: true, shared: !!shared };
-        },
-        async list(prefix, shared) {
-          const marker = fullKey(prefix || "", shared);
-          const scope = PREFIX + (shared ? "shared:" : "priv:");
-          const keys = Object.keys(localStorage)
-            .filter((k) => k.startsWith(scope) && k.startsWith(marker))
-            .map((k) => k.slice(scope.length));
-          return { keys, prefix, shared: !!shared };
-        },
-      };
-    })();
-  </script>
+<!--
+  window.storage is an API that only exists inside Claude.ai's artifact viewer. This shim gives the
+  app the same shape (get/set/delete/list, matching {key,value,shared} results) backed by the
+  browser's own localStorage, so the exact same app code works standalone on a real site.
+-->
+<script>
+  (function () {
+    const PREFIX = "marketsandbox:";
+    function fullKey(key, shared) { return PREFIX + (shared ? "shared:" : "priv:") + key; }
+    window.storage = {
+      async get(key, shared) {
+        const v = localStorage.getItem(fullKey(key, shared));
+        if (v === null) return null;
+        return { key, value: v, shared: !!shared };
+      },
+      async set(key, value, shared) {
+        localStorage.setItem(fullKey(key, shared), value);
+        return { key, value, shared: !!shared };
+      },
+      async delete(key, shared) {
+        localStorage.removeItem(fullKey(key, shared));
+        return { key, deleted: true, shared: !!shared };
+      },
+      async list(prefix, shared) {
+        const marker = fullKey(prefix || "", shared);
+        const keys = Object.keys(localStorage)
+          .filter((k) => k.startsWith(PREFIX + (shared ? "shared:" : "priv:")) && k.startsWith(marker))
+          .map((k) => k.slice((PREFIX + (shared ? "shared:" : "priv:")).length));
+        return { keys, prefix, shared: !!shared };
+      },
+    };
+  })();
+</script>
 
-  <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.3.1",
-      "react-dom": "https://esm.sh/react-dom@18.3.1",
-      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-      "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
-      "recharts": "https://esm.sh/recharts@2.12.7?external=react,react-dom",
-      "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react",
-      "firebase/app": "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js",
-      "firebase/auth": "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js",
-      "firebase/ai": "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js",
-      "firebase/app-check": "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js"
-    }
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
+    "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
+    "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react"
   }
-  </script>
+}
+</script>
 </head>
 <body>
   <div id="root"></div>

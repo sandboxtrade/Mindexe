@@ -1,3 +1,43 @@
+// mind.exe V5.1 \u2014 typography + insight refresh.
+// TYPOGRAPHY: every font-family in the app was written inline as a literal ('Space Grotesk',
+// sans-serif \u00d7 78, 'JetBrains Mono', monospace \u00d7 77). All of them now resolve through two CSS
+// variables, --font-display and --font-mono, defined once in the global style block; changing the
+// app's type is a one-line edit from here on. The families themselves changed to Sora (display) and
+// IBM Plex Mono (figures) \u2014 see the note above the @import for why. index.html must load the new
+// Google Fonts link (the old one requested Space Grotesk / JetBrains Mono / Inter); an @import in the
+// bundle covers it as a fallback either way, and both old families remain in the stack so nothing
+// renders unstyled during the swap.
+// INSIGHT REFRESH: the manual refresh control on the Home insight card was rendered behind
+// `tradingAsset && \u2026`, so for anyone who had never picked a trading asset in Settings the button
+// simply did not exist \u2014 it read as the feature having disappeared. It is now always rendered, has
+// a proper 28\u00d728 tap target instead of 20\u00d720, and when no asset is selected it says so via a toast
+// rather than silently doing nothing.
+// mind.exe V5.0 \u2014 hardening against data loss caused by APP UPDATES specifically. Audit of what a
+// new deploy (or an old cached app.js still running in someone's browser) can do to an existing
+// Firestore profile, plus three fixes.
+// (1) FORWARD/BACKWARD COMPATIBILITY OF THE PROFILE DOCUMENT. saveProfile uses setDoc, which
+// REPLACES the whole document, and buildPayload rebuilt it from scratch out of the fields this
+// build knows about. So any field written by a newer version \u2014 or by a version the user's cached
+// bundle predates \u2014 was silently dropped on the next save. buildPayload now spreads the
+// as-loaded document (rawProfileRef) underneath its own output, and each section (user, settings,
+// progress, wallet) spreads its previous contents too, so unknown keys survive every round trip in
+// both directions. journal.entries is still replaced wholesale, which is correct \u2014 it is the
+// authoritative list \u2014 and individual entries already preserve unknown fields via ...rest.
+// (2) CORRUPT-BUT-EXISTING PROFILE NO LONGER READ AS \"NEW USER\". loadProfile returned null both
+// when there was no document and when migrateProfile couldn't make sense of one that existed; the
+// second case let the app boot as a brand-new account and overwrite a recoverable document with
+// empty state. It now throws, which routes into the existing failure path: canPersistRef stays
+// false, nothing auto-saves, and the person is asked to reload.
+// (3) PER-SESSION BACKUP DOCUMENT. Immediately before the first overwrite of a session, the
+// previously stored profile is copied to users/{uid}/data/mind-exe-journal-state:backup (one extra
+// write per session, only when a profile already existed). Even a future bug that mangles the live
+// document leaves the prior state recoverable straight from the Firestore console.
+// rawProfileRef is also refreshed after every successful save and cleared on logout / user switch.
+// SCHEMA MIGRATIONS VERIFIED: migrateProfile passes an already-current document through untouched
+// and upgrades a pre-versioned one; migrateEntry preserves unknown per-entry fields via ...e; the
+// screenshot documents are keyed per entry and only deleted when their entry is deleted; the legacy
+// pre-Firebase local documents are never deleted by an update. Nothing in the update path deletes
+// or truncates user data.
 // mind.exe V4.9 \u2014 Firebase/Gemini audit follow-up. Three real defects found and fixed, plus a
 // verification pass over the whole persistence + AI surface.
 // (1) CROSS-USER LEAK IN AI COACH: Coach's loadAiState effect set loadedRef=true but never reset it
@@ -3447,7 +3487,7 @@ function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520
   }) });
 }
 function Wordmark({ accent, size = 15, animated = false, wide = false }) {
-  return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: BASE.ink, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
+  return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "var(--font-display)", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: BASE.ink, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
     "mind",
     /* @__PURE__ */ jsxs("span", { className: "relative", style: { color: accent }, children: [
       ".exe",
@@ -3695,7 +3735,7 @@ function WalletBadge({ balance, accent, onClick }) {
       style: { border: `1px solid ${BASE.line}`, background: BASE.surface },
       children: [
         /* @__PURE__ */ jsx(Coins, { size: 13, style: { color: accent } }),
-        /* @__PURE__ */ jsx("span", { className: "text-[12px] leading-none", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 500 }, children: groupThousands(balance) })
+        /* @__PURE__ */ jsx("span", { className: "text-[12px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: groupThousands(balance) })
       ]
     }
   );
@@ -3718,12 +3758,12 @@ function WalletSheet({ open, onClose, balance, ledger, accent }) {
           children: [
             /* @__PURE__ */ jsx("div", { className: "mx-auto mb-4", style: { width: 36, height: 4, borderRadius: 2, background: BASE.line } }),
             /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-5", children: [
-              /* @__PURE__ */ jsx("span", { className: "text-sm", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: "MindCoin" }),
+              /* @__PURE__ */ jsx("span", { className: "text-sm", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: "MindCoin" }),
               /* @__PURE__ */ jsx("button", { onClick: onClose, className: "p-1 -m-1", children: /* @__PURE__ */ jsx(XIcon, { size: 16, style: { color: BASE.inkFaint } }) })
             ] }),
             /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2.5 mb-1", children: [
               /* @__PURE__ */ jsx(Coins, { size: 24, style: { color: accent } }),
-              /* @__PURE__ */ jsx("span", { className: "text-[30px] leading-none", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 600 }, children: groupThousands(balance) })
+              /* @__PURE__ */ jsx("span", { className: "text-[30px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 600 }, children: groupThousands(balance) })
             ] }),
             /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-6", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043A\u0430 \u043D\u0435 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D\u044B \u043A \u043F\u043E\u043A\u0443\u043F\u043A\u0430\u043C \u2014 \u043E\u0431\u043C\u0435\u043D \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0437\u0436\u0435, \u0432 App Store-\u0432\u0435\u0440\u0441\u0438\u0438." }),
             /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F" }),
@@ -3732,7 +3772,7 @@ function WalletSheet({ open, onClose, balance, ledger, accent }) {
                 /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink }, children: tx.reason }),
                 /* @__PURE__ */ jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: relTime(new Date(tx.date)) })
               ] }),
-              /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: WIN, fontFamily: "'JetBrains Mono', monospace" }, children: [
+              /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: WIN, fontFamily: "var(--font-mono)" }, children: [
                 "+",
                 tx.amount
               ] })
@@ -3834,7 +3874,11 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     };
   }, [tradingAsset, lang]);
   const refreshMarketSnapshot = async () => {
-    if (!tradingAsset || marketRefreshing) return;
+    if (marketRefreshing) return;
+    if (!tradingAsset) {
+      notify?.("\u0412\u044B\u0431\u0435\u0440\u0438 \u0442\u043E\u0440\u0433\u043E\u0432\u044B\u0439 \u0430\u043A\u0442\u0438\u0432 \u0432 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0430\u0445 \u2014 \u0431\u0435\u0437 \u043D\u0435\u0433\u043E \u0440\u044B\u043D\u043E\u0447\u043D\u044B\u0439 \u0438\u043D\u0441\u0430\u0439\u0442 \u043D\u0435 \u0441\u0442\u0440\u043E\u0438\u0442\u0441\u044F");
+      return;
+    }
     setMarketRefreshing(true);
     try {
       const fresh = await aiFetchMarketSnapshot(tradingAsset, lang);
@@ -3881,7 +3925,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-6", children: [
-      /* @__PURE__ */ jsx("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: t.home.welcomeBack(name || t.home.defaultName) }),
+      /* @__PURE__ */ jsx("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: t.home.welcomeBack(name || t.home.defaultName) }),
       /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.home.subtitle })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
@@ -3893,8 +3937,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         ] }),
         sparkPoints.length >= 2 && /* @__PURE__ */ jsx(Sparkline, { points: sparkPoints, color: cumResult >= 0 ? WIN : LOSS })
       ] }),
-      /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none mb-1", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 500 }, children: measureMode === "currency" ? formatBalance(animatedHero, currency) : formatResult(animatedHero, "R", currency) }),
-      measureMode === "currency" && /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: cumResult >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none mb-1", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: measureMode === "currency" ? formatBalance(animatedHero, currency) : formatResult(animatedHero, "R", currency) }),
+      measureMode === "currency" && /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: cumResult >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
         formatResult(cumResult, "currency", currency),
         " ",
         t.home.sinceStart
@@ -3907,7 +3951,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         className: "w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-3 text-left transition-all duration-200 active:scale-[0.98] break-inside-avoid",
         style: { border: `1px solid ${calibratedToday ? BASE.line : accent + "40"}`, background: calibratedToday ? BASE.surface : `${accent}0D` },
         children: [
-          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: [
+          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: [
             /* @__PURE__ */ jsx(Gauge, { size: 15, style: { color: calibratedToday ? lastCalibration.tierColor : accent } }),
             calibratedToday ? t.home.calibrationToday(lastCalibration.pct) : t.home.calibrationCta
           ] }),
@@ -3917,22 +3961,27 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     ),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-        /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: [
+        /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkDim, fontFamily: "var(--font-display)" }, children: [
           /* @__PURE__ */ jsx(Sparkles, { size: 12, style: { color: accent } }),
           " ",
           t.home.insight
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
-          tradingAsset && /* @__PURE__ */ jsx(
+          /* V5.1: the manual refresh control was rendered only when a trading asset had been picked
+             in Settings, so for anyone who never set one it simply wasn't there \u2014 which reads as
+             \"\u0440\u0443\u0447\u043D\u043E\u0435 \u043E\u0431\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u043F\u0440\u043E\u043F\u0430\u043B\u043E\". It is always visible now, with a real 28px tap target, and
+             explains itself instead of doing nothing when no asset is selected. */
+          /* @__PURE__ */ jsx(
             "button",
             {
               type: "button",
               onClick: refreshMarketSnapshot,
               disabled: marketRefreshing,
               title: t.home.marketRefresh,
-              className: "flex items-center justify-center w-5 h-5 rounded-full transition-all active:scale-90",
-              style: { color: accent, opacity: marketRefreshing ? 0.5 : 1 },
-              children: /* @__PURE__ */ jsx(RotateCcw, { size: 11, className: marketRefreshing ? "animate-spin" : void 0 })
+              "aria-label": t.home.marketRefresh,
+              className: "flex items-center justify-center w-7 h-7 -m-1 rounded-full transition-all active:scale-90",
+              style: { color: accent, opacity: marketRefreshing ? 0.45 : 0.85 },
+              children: /* @__PURE__ */ jsx(RotateCcw, { size: 13, className: marketRefreshing ? "animate-spin" : void 0 })
             }
           ),
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: accent } })
@@ -3950,11 +3999,11 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 divide-x", style: { borderColor: BASE.line }, children: [
         /* @__PURE__ */ jsxs("div", { className: "pr-4", children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.traderLevel }),
-          /* @__PURE__ */ jsx("div", { className: "text-[26px] leading-none", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: level })
+          /* @__PURE__ */ jsx("div", { className: "text-[26px] leading-none", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: level })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "pl-4", style: { borderLeft: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.awareness }),
-          /* @__PURE__ */ jsxs("div", { className: "text-[26px] leading-none", style: { fontFamily: "'Space Grotesk', sans-serif", color: accent, fontWeight: 500 }, children: [
+          /* @__PURE__ */ jsxs("div", { className: "text-[26px] leading-none", style: { fontFamily: "var(--font-display)", color: accent, fontWeight: 500 }, children: [
             consciousScore,
             "%"
           ] })
@@ -4005,8 +4054,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
         /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: traderPatterns.primaryPattern.confidence === "high" ? t.pattern.strongSignal : traderPatterns.primaryPattern.confidence === "medium" ? t.pattern.observedPattern : t.pattern.someSigns })
       ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.primaryPattern.title }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.primaryPattern.title }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
         /* @__PURE__ */ jsx("span", { children: t.pattern.trades(traderPatterns.primaryPattern.stats.trades) }),
         /* @__PURE__ */ jsxs("span", { children: [
           traderPatterns.primaryPattern.stats.winRate,
@@ -4020,14 +4069,14 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         ] })
       ] }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-3", style: { color: BASE.inkDim }, children: traderPatterns.primaryPattern.description }),
-      /* @__PURE__ */ jsx("button", { onClick: () => setPatternOpen(true), className: "text-sm transition-transform duration-150 active:scale-95", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: t.pattern.breakdown })
+      /* @__PURE__ */ jsx("button", { onClick: () => setPatternOpen(true), className: "text-sm transition-transform duration-150 active:scale-95", style: { color: accent, fontFamily: "var(--font-display)", fontWeight: 500 }, children: t.pattern.breakdown })
     ] }) : traderPatterns.healthyPatterns.length > 0 ? /* @__PURE__ */ jsxs(Card, { accent, className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.yourPattern }),
         /* @__PURE__ */ jsx("span", { className: "text-[9px] px-2 py-0.5 rounded-full", style: { color: WIN, border: `1px solid ${WIN}40` }, children: t.pattern.strength })
       ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.healthyPatterns[0].title }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsx("p", { className: "text-base mb-1.5", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: traderPatterns.healthyPatterns[0].title }),
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mb-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
         /* @__PURE__ */ jsx("span", { children: t.pattern.trades(traderPatterns.healthyPatterns[0].stats.trades) }),
         /* @__PURE__ */ jsxs("span", { children: [
           traderPatterns.healthyPatterns[0].stats.winRate,
@@ -4058,7 +4107,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         className: "flex items-center justify-between px-4 py-3.5 rounded-2xl text-left transition-all duration-200 active:scale-[0.98]",
         style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.ink },
         children: [
-          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { fontFamily: "'Space Grotesk', sans-serif" }, children: [
+          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { fontFamily: "var(--font-display)" }, children: [
             /* @__PURE__ */ jsx(tile.icon, { size: 15, style: { color: tile.primary ? accent : BASE.inkDim } }),
             " ",
             tile.label
@@ -4069,7 +4118,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       tile.id
     )) })
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
       (!tradingAsset || tradingAsset === "crypto") && /* @__PURE__ */ jsxs("span", { children: [
         "BTC.D ",
         /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink }, children: [
@@ -4085,7 +4134,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
           marketSnapshot?.sentimentLabel || FEAR_GREED.label
         ] })
       ] }),
-      /* @__PURE__ */ jsxs("span", { style: { fontFamily: "'Space Grotesk', sans-serif" }, children: [
+      /* @__PURE__ */ jsxs("span", { style: { fontFamily: "var(--font-display)" }, children: [
         t.home.market,
         ": ",
         moodKey
@@ -4106,34 +4155,34 @@ function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
           /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.pattern.detailTitle }),
           /* @__PURE__ */ jsx("button", { onClick: onClose, className: "p-1 -m-1", children: /* @__PURE__ */ jsx(XIcon, { size: 16, style: { color: BASE.inkFaint } }) })
         ] }),
-        /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: pattern.title }),
+        /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: pattern.title }),
         /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-4", style: { color: BASE.inkDim }, children: pattern.description }),
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
             /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.tradesLabel }),
-            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: pattern.stats.trades })
+            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: pattern.stats.trades })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
             /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.winRateLabel }),
-            /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+            /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
               pattern.stats.winRate,
               "%"
             ] })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
             /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.pattern.avgRLabel }),
-            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
+            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
           ] })
         ] }),
         /* @__PURE__ */ jsxs(Card, { className: "mb-4", children: [
           /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.comparison }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-1", children: [
             /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: t.pattern.similarSituations }),
-            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
+            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.stats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(pattern.stats.avgR ?? 0, "R", currency) })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-1", children: [
             /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.pattern.otherTrades }),
-            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.comparisonStats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(pattern.comparisonStats.avgR ?? 0, "R", currency) })
+            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: (pattern.comparisonStats.avgR ?? 0) >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(pattern.comparisonStats.avgR ?? 0, "R", currency) })
           ] })
         ] }),
         /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.whereOnMap }),
@@ -4169,15 +4218,15 @@ function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
         /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.tradeExamples }),
         /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2 mb-4", children: pattern.sampleTrades.map((tr) => /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-sm py-1.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(tr.outcome) } }),
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, className: "text-xs shrink-0", children: tr.date.toLocaleDateString(lang === "en" ? "en-US" : "ru-RU", { day: "2-digit", month: "2-digit" }) }),
-          /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, className: "shrink-0", children: tr.instrument }),
+          /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, className: "text-xs shrink-0", children: tr.date.toLocaleDateString(lang === "en" ? "en-US" : "ru-RU", { day: "2-digit", month: "2-digit" }) }),
+          /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, className: "shrink-0", children: tr.instrument }),
           /* @__PURE__ */ jsxs("span", { className: "text-xs shrink-0", style: { color: BASE.inkFaint }, children: [
             "x",
             Math.round(tr.x),
             " y",
             Math.round(tr.y)
           ] }),
-          tr.r !== null && tr.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(tr.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(tr.r, "R", currency) })
+          tr.r !== null && tr.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(tr.outcome), fontFamily: "var(--font-mono)" }, children: formatResult(tr.r, "R", currency) })
         ] }, tr.id)) }),
         /* @__PURE__ */ jsxs(Card, { className: "mb-2", children: [
           /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: t.pattern.whyShown }),
@@ -4317,9 +4366,9 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     select(val);
     onCustomAdd && onCustomAdd(val);
   };
-  const rowStyle = (o) => ({ color: BASE.ink, fontFamily: mono ? "'JetBrains Mono', monospace" : "inherit", background: value === o ? `${accent}12` : "transparent" });
+  const rowStyle = (o) => ({ color: BASE.ink, fontFamily: mono ? "var(--font-mono)" : "inherit", background: value === o ? `${accent}12` : "transparent" });
   return /* @__PURE__ */ jsx("div", { ref: containerRef, className: "relative", children: !open ? /* @__PURE__ */ jsxs("button", { type: "button", onClick: () => setOpen(true), className: "w-full flex items-center justify-between border-b py-2.5 text-sm text-left", style: { borderColor: BASE.line }, children: [
-    /* @__PURE__ */ jsx("span", { style: { color: value ? BASE.ink : BASE.inkDim, fontFamily: value && mono ? "'JetBrains Mono', monospace" : "inherit" }, children: value || placeholder }),
+    /* @__PURE__ */ jsx("span", { style: { color: value ? BASE.ink : BASE.inkDim, fontFamily: value && mono ? "var(--font-mono)" : "inherit" }, children: value || placeholder }),
     /* @__PURE__ */ jsx(ChevronDown, { size: 14, style: { color: BASE.inkFaint } })
   ] }) : /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${accent}45`, background: BASE.surface2, boxShadow: ring(accent) }, children: [
     /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-3 py-2.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
@@ -4340,7 +4389,7 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
       ] }),
       filtered.length === 0 && !allowCustom && /* @__PURE__ */ jsx("div", { className: "px-3 py-3 text-xs", style: { color: BASE.inkFaint }, children: "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E" })
     ] }) : flat ? options.map((o) => /* @__PURE__ */ jsx("button", { type: "button", onClick: () => select(o), className: "w-full text-left px-3 py-2.5 text-sm transition-colors duration-100", style: rowStyle(o), children: o }, o)) : options.map((g) => /* @__PURE__ */ jsxs("div", { children: [
-      /* @__PURE__ */ jsx("div", { className: "px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: g.category }),
+      /* @__PURE__ */ jsx("div", { className: "px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children: g.category }),
       g.items.map((o) => /* @__PURE__ */ jsx("button", { type: "button", onClick: () => select(o), className: "w-full text-left px-3 py-2 text-sm transition-colors duration-100", style: rowStyle(o), children: o }, o))
     ] }, g.category)) })
   ] }) });
@@ -4523,9 +4572,9 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     setStopLoss("");
     setTakeProfit("");
   };
-  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
       " ",
       t.newEntry.title
@@ -4540,7 +4589,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
           onClick: () => recognizeInputRef.current?.click(),
           disabled: recognizing,
           className: "flex items-center gap-1.5 px-3 py-2 rounded-full text-xs transition-all active:scale-95",
-          style: { border: `1px solid ${accent}40`, color: accent, background: `${accent}0d`, opacity: recognizing ? 0.6 : 1, fontFamily: "'Space Grotesk', sans-serif" },
+          style: { border: `1px solid ${accent}40`, color: accent, background: `${accent}0d`, opacity: recognizing ? 0.6 : 1, fontFamily: "var(--font-display)" },
           children: [
             /* @__PURE__ */ jsx(Camera, { size: 13 }),
             recognizing ? "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u043C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u2026" : "\u0420\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443 \u043F\u043E \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0443"
@@ -4572,7 +4621,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
             step: "any",
             inputMode: "decimal",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
           }
         )
       ] }),
@@ -4603,7 +4652,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
             step: "any",
             inputMode: "decimal",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
           }
         )
       ] }),
@@ -4619,12 +4668,12 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
             step: "any",
             inputMode: "decimal",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
           }
         )
       ] })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "mb-5 text-xs", style: { color: plannedRRResult.ok ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: plannedRRResult.ok ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0423\u043A\u0430\u0436\u0438 Entry, SL \u0438 TP \u2014 RR \u0440\u0430\u0441\u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438" }),
+    /* @__PURE__ */ jsx("div", { className: "mb-5 text-xs", style: { color: plannedRRResult.ok ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: plannedRRResult.ok ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0423\u043A\u0430\u0436\u0438 Entry, SL \u0438 TP \u2014 RR \u0440\u0430\u0441\u0441\u0447\u0438\u0442\u0430\u0435\u0442\u0441\u044F \u0430\u0432\u0442\u043E\u043C\u0430\u0442\u0438\u0447\u0435\u0441\u043A\u0438" }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
@@ -4688,7 +4737,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
           color: "#06120F",
           opacity: canSave ? 1 : 0.3,
           cursor: canSave ? "pointer" : "not-allowed",
-          fontFamily: "'Space Grotesk', sans-serif",
+          fontFamily: "var(--font-display)",
           fontWeight: 600,
           boxShadow: canSave ? softLift(accent) : "none"
         },
@@ -4706,7 +4755,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
   const [exitScreenshots, setExitScreenshots] = useState([]);
   const fileInputRef = useRef(null);
   const MAX_SHOTS = 4;
-  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
   const effectiveExit = hasPlan ? closeType === "tp" ? entry.takeProfit : closeType === "sl" ? entry.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
   const realizedRR = hasPlan && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(entry.direction, entry.entryPrice, entry.stopLoss, effectiveExit) : null;
   const resultNum = resultR === "" ? null : parseFloat(resultR);
@@ -4750,7 +4799,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
   ];
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
       " \u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
     ] }),
@@ -4759,7 +4808,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : "",
       hasPlan ? ` \xB7 \u043F\u043B\u0430\u043D 1:${entry.plannedRR.toFixed(2)}` : ""
     ] }),
-    hasPlan && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 text-xs", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+    hasPlan && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 text-xs", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
       /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(entry.stopLoss)] }),
       /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(entry.takeProfit)] })
     ] }),
@@ -4790,11 +4839,11 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
           step: "any",
           inputMode: "decimal",
           className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
         }
       )
     ] }),
-    hasPlan && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
+    hasPlan && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
       /* @__PURE__ */ jsx(
@@ -4806,7 +4855,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
           type: "number",
           step: "0.1",
           className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+          style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
         }
       ),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-1.5", style: { color: BASE.inkFaint }, children: "\u0412\u0432\u0435\u0434\u0438 \u0438\u0442\u043E\u0433\u043E\u0432\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u2014 \u043E\u043D \u0438\u0434\u0451\u0442 \u0432 PnL \u0438 \u0431\u0430\u043B\u0430\u043D\u0441." })
@@ -4867,7 +4916,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
         {
           onClick: onCancel,
           className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
-          style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" },
+          style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "var(--font-display)" },
           children: "\u041E\u0442\u043C\u0435\u043D\u0430"
         }
       ),
@@ -4882,7 +4931,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
             color: "#06120F",
             opacity: canSave ? 1 : 0.3,
             cursor: canSave ? "pointer" : "not-allowed",
-            fontFamily: "'Space Grotesk', sans-serif",
+            fontFamily: "var(--font-display)",
             fontWeight: 600,
             boxShadow: canSave ? softLift(accent) : "none"
           },
@@ -4926,7 +4975,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   const resultNum = resultR === "" ? null : parseFloat(resultR);
   const derivedOutcome = resultNum == null || isNaN(resultNum) ? null : resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven";
   const canSave = instrument.trim() && point.x !== null && resultR !== "" && !isNaN(parseFloat(resultR));
-  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
   const makeHandleFiles = (list, setList) => (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -5001,7 +5050,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
   ];
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
       " \u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
     ] }),
@@ -5021,7 +5070,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.entry }),
-        /* @__PURE__ */ jsx("input", { value: entryPrice, onChange: (e) => setEntryPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+        /* @__PURE__ */ jsx("input", { value: entryPrice, onChange: (e) => setEntryPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ jsx(L, { children: t.newEntry.direction }),
@@ -5035,14 +5084,14 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-2", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ jsx(L, { children: "Stop Loss" }),
-        /* @__PURE__ */ jsx("input", { value: stopLoss, onChange: (e) => setStopLoss(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+        /* @__PURE__ */ jsx("input", { value: stopLoss, onChange: (e) => setStopLoss(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ jsx(L, { children: "Take Profit" }),
-        /* @__PURE__ */ jsx("input", { value: takeProfit, onChange: (e) => setTakeProfit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+        /* @__PURE__ */ jsx("input", { value: takeProfit, onChange: (e) => setTakeProfit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
       ] })
     ] }),
-    /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: hasPlanNow ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: hasPlanNow ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0411\u0435\u0437 SL/TP \u2014 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0431\u0443\u0434\u0435\u0442 \u0432\u0432\u043E\u0434\u0438\u0442\u044C\u0441\u044F \u0432\u0440\u0443\u0447\u043D\u0443\u044E" }),
+    /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: hasPlanNow ? accent : plannedRRResult.error ? LOSS : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: hasPlanNow ? `Planned RR \u2248 1:${plannedRRResult.rr.toFixed(2)}` : plannedRRResult.error || "\u0411\u0435\u0437 SL/TP \u2014 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0431\u0443\u0434\u0435\u0442 \u0432\u0432\u043E\u0434\u0438\u0442\u044C\u0441\u044F \u0432\u0440\u0443\u0447\u043D\u0443\u044E" }),
     /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
       /* @__PURE__ */ jsx(ShotRow, { list: screenshots, setList: setScreenshots, fileRef: entryFileRef, onFiles: makeHandleFiles(screenshots, setScreenshots) })
@@ -5069,12 +5118,12 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     (!hasPlanNow || closeType === "manual") && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.exit }),
-      /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } })
+      /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
     ] }),
-    hasPlanNow && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
+    hasPlanNow && /* @__PURE__ */ jsx("div", { className: "mb-4 text-xs", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `\u0420\u0430\u0441\u0447\u0451\u0442\u043D\u044B\u0439 RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C: ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "RR \u043F\u043E \u0446\u0435\u043D\u0430\u043C \u2014" }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.result(unitSymbol(measureMode, currency)) }),
-      /* @__PURE__ */ jsx("input", { value: resultR, onChange: (e) => setResultR(e.target.value), type: "number", step: "0.1", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" } }),
+      /* @__PURE__ */ jsx("input", { value: resultR, onChange: (e) => setResultR(e.target.value), type: "number", step: "0.1", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-1.5", style: { color: BASE.inkFaint }, children: "\u0418\u0442\u043E\u0433\u043E\u0432\u044B\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0432\u0432\u043E\u0434\u0438\u0442\u0441\u044F \u0432\u0440\u0443\u0447\u043D\u0443\u044E \u2014 \u043E\u043D \u0438\u0434\u0451\u0442 \u0432 PnL \u0438 \u0431\u0430\u043B\u0430\u043D\u0441." })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
@@ -5091,14 +5140,14 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" }),
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "var(--font-display)" }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: submit,
           disabled: !canSave,
           className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
-          style: { background: accent, color: "#06120F", opacity: canSave ? 1 : 0.3, cursor: canSave ? "pointer" : "not-allowed", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: canSave ? softLift(accent) : "none" },
+          style: { background: accent, color: "#06120F", opacity: canSave ? 1 : 0.3, cursor: canSave ? "pointer" : "not-allowed", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: canSave ? softLift(accent) : "none" },
           children: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"
         }
       )
@@ -5108,7 +5157,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
 function LogMiniStat({ label, value, color }) {
   return /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
     /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5 truncate", style: { color: BASE.inkFaint }, children: label }),
-    /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: value })
+    /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "var(--font-mono)" }, children: value })
   ] });
 }
 function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode, currency, t }) {
@@ -5136,7 +5185,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
   const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const netR = withR.reduce((s, e) => s + e.r, 0);
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(NotebookText, { size: 17, style: { color: accent } }),
       " ",
       t.log.title
@@ -5155,11 +5204,11 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       /* @__PURE__ */ jsxs("button", { onClick: () => setOpenId(openId === e.id ? null : e.id), className: "w-full text-left transition-colors duration-150", style: { background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-4 pt-3 pb-2.5", children: [
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
-          /* @__PURE__ */ jsx("span", { className: "text-sm truncate", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: e.instrument }),
+          /* @__PURE__ */ jsx("span", { className: "text-sm truncate", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: e.instrument }),
           /* @__PURE__ */ jsx("span", { className: "text-xs shrink-0", style: { color: BASE.inkDim }, children: DIRECTION_LABEL[e.direction] }),
           e.screenshots?.length > 0 && /* @__PURE__ */ jsx(ImagePlus, { size: 11, className: "shrink-0", style: { color: BASE.inkFaint } }),
           !isEntryClosed(e) && /* @__PURE__ */ jsx("span", { className: "text-[10px] ml-auto shrink-0 px-1.5 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: "\u041E\u0442\u043A\u0440\u044B\u0442\u0430" }),
-          isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "text-sm ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }, children: formatResult(e.r, measureMode, currency) }),
+          isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "text-sm ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "var(--font-mono)", fontWeight: 500 }, children: formatResult(e.r, measureMode, currency) }),
           /* @__PURE__ */ jsx("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint }, children: relTime(e.date) })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-4 gap-2 px-4 pb-3", children: [
@@ -5172,7 +5221,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       openId === e.id && /* @__PURE__ */ jsxs("div", { className: "tab-content px-4 py-3 space-y-3 text-sm", style: { background: BASE.bg, color: BASE.inkDim }, children: [
         /* @__PURE__ */ jsxs("div", { children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "ENTRY" }),
-          (e.stopLoss != null || e.takeProfit != null) && /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2", style: { fontFamily: "'JetBrains Mono', monospace" }, children: [
+          (e.stopLoss != null || e.takeProfit != null) && /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2", style: { fontFamily: "var(--font-mono)" }, children: [
             e.stopLoss != null && /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(e.stopLoss)] }),
             e.takeProfit != null && /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(e.takeProfit)] }),
             e.plannedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: accent }, children: ["\u041F\u043B\u0430\u043D 1:", e.plannedRR.toFixed(2)] })
@@ -5186,7 +5235,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
         ] }),
         isEntryClosed(e) && /* @__PURE__ */ jsxs("div", { className: "pt-2", style: { borderTop: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: "EXIT" }),
-          /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2 flex-wrap", style: { fontFamily: "'JetBrains Mono', monospace" }, children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2 flex-wrap", style: { fontFamily: "var(--font-mono)" }, children: [
             e.closeType && /* @__PURE__ */ jsx("span", { children: { tp: "\u041F\u043E TP", sl: "\u041F\u043E SL", manual: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }[e.closeType] || e.closeType }),
             e.exitPrice != null && /* @__PURE__ */ jsxs("span", { children: ["Exit ", formatPriceValue(e.exitPrice)] }),
             e.realizedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: outcomeColor(e.outcome) }, children: [e.realizedRR >= 0 ? "+" : "", e.realizedRR.toFixed(2), "R"] })
@@ -5233,7 +5282,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
 function StatCard({ label, value, accent }) {
   return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-xl px-3 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: label }),
-    /* @__PURE__ */ jsx("div", { className: "text-lg", style: { color: accent, fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }, children: value })
+    /* @__PURE__ */ jsx("div", { className: "text-lg", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
   ] });
 }
 function TagBars({ data, measureMode, currency }) {
@@ -5244,7 +5293,7 @@ function TagBars({ data, measureMode, currency }) {
     return /* @__PURE__ */ jsxs("div", { children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
         /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: d.tag }),
-        /* @__PURE__ */ jsxs("span", { className: "text-xs", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("span", { className: "text-xs", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           formatResult(d.avgR, measureMode, currency),
           " \xB7 ",
           d.count,
@@ -5305,7 +5354,7 @@ function CalendarView({ entries, accent, measureMode, currency }) {
   return /* @__PURE__ */ jsxs("div", { className: "tab-content max-w-md mx-auto", children: [
     /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-4", children: [
       /* @__PURE__ */ jsx("button", { onClick: () => changeMonth(-1), className: "w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90", style: { border: `1px solid ${BASE.line}` }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 14, style: { color: BASE.inkDim } }) }),
-      /* @__PURE__ */ jsx("span", { className: "text-sm capitalize", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: monthLabel }),
+      /* @__PURE__ */ jsx("span", { className: "text-sm capitalize", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: monthLabel }),
       /* @__PURE__ */ jsx("button", { onClick: () => changeMonth(1), className: "w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-150 active:scale-90", style: { border: `1px solid ${BASE.line}` }, children: /* @__PURE__ */ jsx(ChevronRight, { size: 14, style: { color: BASE.inkDim } }) })
     ] }),
     /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 gap-1.5 mb-1", children: weekdayLabels.map((w) => /* @__PURE__ */ jsx("div", { className: "text-center text-[10px]", style: { color: BASE.inkFaint }, children: w }, w)) }),
@@ -5332,18 +5381,18 @@ function CalendarView({ entries, accent, measureMode, currency }) {
     }) }),
     selectedDate ? /* @__PURE__ */ jsxs(Card, { accent, glowing: selectedEntries.length > 0, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) }),
-        selectedEntries.length > 0 && /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: selectedNet >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(selectedNet, measureMode, currency) })
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: selectedDate.toLocaleDateString("ru-RU", { day: "numeric", month: "long" }) }),
+        selectedEntries.length > 0 && /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: selectedNet >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(selectedNet, measureMode, currency) })
       ] }),
       selectedEntries.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "\u0421\u0434\u0435\u043B\u043E\u043A \u0432 \u044D\u0442\u043E\u0442 \u0434\u0435\u043D\u044C \u043D\u0435 \u0431\u044B\u043B\u043E." }) : /* @__PURE__ */ jsxs(Fragment, { children: [
         /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 gap-2 mb-3", children: [
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
             /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "\u0421\u0434\u0435\u043B\u043E\u043A" }),
-            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: selectedEntries.length })
+            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: selectedEntries.length })
           ] }),
           /* @__PURE__ */ jsxs("div", { className: "rounded-lg px-2 py-2 text-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
             /* @__PURE__ */ jsx("div", { className: "text-[9px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: "W / L / BE" }),
-            /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+            /* @__PURE__ */ jsxs("div", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
               daySummary.wins,
               "/",
               daySummary.losses,
@@ -5356,13 +5405,13 @@ function CalendarView({ entries, accent, measureMode, currency }) {
               "\u0421\u0440. ",
               unitSymbol(measureMode, currency)
             ] }),
-            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: daySummary.avgR >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(daySummary.avgR, measureMode, currency) })
+            /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: daySummary.avgR >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(daySummary.avgR, measureMode, currency) })
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex flex-col gap-1 mb-3 text-xs", children: [
           daySummary.topInstrument && /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between", children: [
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u041E\u0441\u043D\u043E\u0432\u043D\u043E\u0439 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442" }),
-            /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+            /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
               daySummary.topInstrument.value,
               daySummary.topInstrument.count > 1 ? ` \xD7${daySummary.topInstrument.count}` : ""
             ] })
@@ -5382,10 +5431,10 @@ function CalendarView({ entries, accent, measureMode, currency }) {
         /* @__PURE__ */ jsx("div", { className: "pt-3 space-y-2", style: { borderTop: `1px solid ${BASE.line}` }, children: selectedEntries.map((e) => /* @__PURE__ */ jsxs("div", { className: "text-sm", children: [
           /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
             /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
-            /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: e.instrument }),
+            /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: e.instrument }),
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkDim }, children: DIRECTION_LABEL[e.direction] }),
             !isEntryClosed(e) && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0 text-[10px]", style: { color: BASE.inkFaint }, children: "\u041E\u0442\u043A\u0440\u044B\u0442\u0430" }),
-            isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(e.r, measureMode, currency) })
+            isEntryClosed(e) && e.r !== null && e.r !== void 0 && /* @__PURE__ */ jsx("span", { className: "ml-auto shrink-0", style: { color: outcomeColor(e.outcome), fontFamily: "var(--font-mono)" }, children: formatResult(e.r, measureMode, currency) })
           ] }),
           e.lesson && e.lesson !== "\u2014" && /* @__PURE__ */ jsx("p", { className: "text-xs pl-3.5 mt-0.5", style: { color: BASE.inkFaint }, children: e.lesson })
         ] }, e.id)) })
@@ -5452,7 +5501,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         " \xB7 ",
         e.instrument
       ] }),
-      /* @__PURE__ */ jsxs("div", { style: { fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsxs("div", { style: { fontFamily: "var(--font-mono)" }, children: [
         "\u0418\u0442\u043E\u0433\u043E: ",
         formatResult(e.cum, measureMode, currency)
       ] }),
@@ -5466,7 +5515,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     if (!active || !payload?.length) return null;
     const e = payload[0].payload;
     return /* @__PURE__ */ jsxs("div", { className: "px-3 py-2 rounded-lg text-xs", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [
-      /* @__PURE__ */ jsx("div", { style: { fontFamily: "'JetBrains Mono', monospace" }, children: e.instrument }),
+      /* @__PURE__ */ jsx("div", { style: { fontFamily: "var(--font-mono)" }, children: e.instrument }),
       /* @__PURE__ */ jsxs("div", { style: { color: outcomeColor(e.outcome) }, children: [
         OUTCOME_LABEL[e.outcome],
         e.r !== null && e.r !== void 0 ? ` \xB7 ${formatResult(e.r, measureMode, currency)}` : ""
@@ -5477,7 +5526,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     return /* @__PURE__ */ jsx(JournalReview, { entries: closedEntries, accent, onClose: () => setReviewOpen(false), t, lang });
   }
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(LineChartIcon, { size: 17, style: { color: accent } }),
       " \u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430"
     ] }),
@@ -5495,7 +5544,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     view === "emotions" && /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-6", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: [
+          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkDim, fontFamily: "var(--font-display)" }, children: [
             /* @__PURE__ */ jsx(Sparkles, { size: 12, style: { color: accent } }),
             " \u0427\u0442\u043E \u0433\u043E\u0432\u043E\u0440\u0438\u0442 \u0436\u0443\u0440\u043D\u0430\u043B"
           ] }),
@@ -5504,7 +5553,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
             {
               onClick: () => setReviewOpen(true),
               className: "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] transition-all duration-150 active:scale-95",
-              style: { color: accent, border: `1px solid ${accent}40`, background: `${accent}0F`, fontFamily: "'Space Grotesk', sans-serif" },
+              style: { color: accent, border: `1px solid ${accent}40`, background: `${accent}0F`, fontFamily: "var(--font-display)" },
               children: "\u0420\u0430\u0437\u0431\u043E\u0440"
             }
           )
@@ -5580,8 +5629,8 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     ] }),
     view === "performance" && /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041A\u0440\u0438\u0432\u0430\u044F \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438" }),
-        equityCurve.length > 0 && /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: equityCurve[equityCurve.length - 1].cum >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: formatResult(equityCurve[equityCurve.length - 1].cum, measureMode, currency) })
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041A\u0440\u0438\u0432\u0430\u044F \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438" }),
+        equityCurve.length > 0 && /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: equityCurve[equityCurve.length - 1].cum >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(equityCurve[equityCurve.length - 1].cum, measureMode, currency) })
       ] }),
       equityCurve.length < 2 ? /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0445\u043E\u0442\u044F \u0431\u044B \u043A \u043F\u0430\u0440\u0435 \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u043A\u0440\u0438\u0432\u0443\u044E \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438 \u0432\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0438." }) : /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 220 }, className: "mb-6", children: /* @__PURE__ */ jsx(ResponsiveContainer, { children: /* @__PURE__ */ jsxs(AreaChart, { data: equityCurve, margin: { top: 10, right: 10, bottom: 0, left: -10 }, children: [
         /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsxs("linearGradient", { id: "eqGrad", x1: "0", y1: "0", x2: "0", y2: "1", children: [
@@ -5594,29 +5643,29 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         /* @__PURE__ */ jsx(Tooltip, { content: /* @__PURE__ */ jsx(EquityTooltip, {}), cursor: { stroke: BASE.line } }),
         /* @__PURE__ */ jsx(Area, { type: "monotone", dataKey: "cum", stroke: accent, strokeWidth: 2, fill: "url(#eqGrad)", dot: { r: 3, fill: accent, strokeWidth: 0 }, isAnimationActive: true, animationDuration: 700 })
       ] }) }) }),
-      /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E \u0442\u0438\u043F\u0443 \u0441\u0435\u0442\u0430\u043F\u0430" }),
+      /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E \u0442\u0438\u043F\u0443 \u0441\u0435\u0442\u0430\u043F\u0430" }),
       /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start", children: [
       tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm lg:col-span-2", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
       analytics.rrStats && analytics.rrStats.sampleSize > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "Average RR \u0438 Win Rate" }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "Average RR \u0438 Win Rate" }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2", children: [
           /* @__PURE__ */ jsx(StatCard, { label: "Average RR", value: analytics.rrStats.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "\u2014", accent: analytics.rrStats.avgRealizedRR != null ? analytics.rrStats.avgRealizedRR >= 0 ? WIN : LOSS : BASE.ink }),
           /* @__PURE__ */ jsx(StatCard, { label: "Win Rate", value: analytics.rrStats.winRate != null ? `${analytics.rrStats.winRate}%` : "\u2014", accent: BASE.ink })
         ] }),
-        /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           /* @__PURE__ */ jsxs("span", { children: ["Wins ", analytics.rrStats.wins] }),
           /* @__PURE__ */ jsxs("span", { children: ["Losses ", analytics.rrStats.losses] }),
           /* @__PURE__ */ jsxs("span", { children: ["Breakeven ", analytics.rrStats.breakevens] })
         ] })
       ] }),
       planVsFact && /* @__PURE__ */ jsxs(Card, { children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041F\u043B\u0430\u043D vs \u0424\u0430\u043A\u0442" }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041F\u043B\u0430\u043D vs \u0424\u0430\u043A\u0442" }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-3", children: [
           /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Planned RR", value: `${planVsFact.avgPlanned.toFixed(1)}R`, accent: BASE.ink }),
           /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Realized RR", value: `${planVsFact.avgRealized.toFixed(1)}R`, accent: planVsFact.avgRealized >= 0 ? WIN : LOSS }),
           planVsFact.captureRatio != null && /* @__PURE__ */ jsx(StatCard, { label: "TP Capture", value: `${Math.round(planVsFact.captureRatio)}%`, accent: BASE.ink })
         ] }),
-        planVsFact.closeTotal > 0 && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        planVsFact.closeTotal > 0 && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           /* @__PURE__ */ jsxs("span", { children: ["TP ", Math.round(planVsFact.closeCounts.tp / planVsFact.closeTotal * 100), "%"] }),
           /* @__PURE__ */ jsxs("span", { children: ["SL ", Math.round(planVsFact.closeCounts.sl / planVsFact.closeTotal * 100), "%"] }),
           /* @__PURE__ */ jsxs("span", { children: ["Manual ", Math.round(planVsFact.closeCounts.manual / planVsFact.closeTotal * 100), "%"] })
@@ -5633,7 +5682,7 @@ function ChallengeCard({ icon: Icon, title, desc, progress, goal, accent }) {
     /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-1", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
         /* @__PURE__ */ jsx("span", { className: "w-7 h-7 rounded-full flex items-center justify-center shrink-0", style: { background: completed ? `${accent}14` : BASE.surface2, border: `1px solid ${completed ? accent + "40" : BASE.line}` }, children: /* @__PURE__ */ jsx(Icon, { size: 13, style: { color: completed ? accent : BASE.inkDim } }) }),
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: title })
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: title })
       ] }),
       completed && /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: [
         /* @__PURE__ */ jsx(Check, { size: 10 }),
@@ -5643,7 +5692,7 @@ function ChallengeCard({ icon: Icon, title, desc, progress, goal, accent }) {
     /* @__PURE__ */ jsx("p", { className: "text-xs mb-2.5", style: { color: BASE.inkFaint }, children: desc }),
     /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
       /* @__PURE__ */ jsx("div", { className: "flex-1 h-1 rounded-full", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-700 ease-out", style: { width: `${pct}%`, background: completed ? accent : BASE.inkDim } }) }),
-      /* @__PURE__ */ jsxs("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+      /* @__PURE__ */ jsxs("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
         Math.min(progress, goal),
         "/",
         goal
@@ -5659,21 +5708,21 @@ function Challenge({ entries, accent, weeklyGoal, t, lang }) {
   const CHALLENGE_ICONS = { revenge: ShieldCheck, reflect: PenLine, winstreak: TrendingUp };
   const challenges = useMemo(() => calculateChallengeProgress(entries, lang), [entries, lang]);
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(Flame, { size: 17, style: { color: "#D98A4A" } }),
       " ",
       t.challenge.title
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
     /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-4 text-center py-6", children: [
-      /* @__PURE__ */ jsx("div", { className: "text-4xl mb-1", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: animatedStreak }),
+      /* @__PURE__ */ jsx("div", { className: "text-4xl mb-1", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: animatedStreak }),
       /* @__PURE__ */ jsx("div", { className: "text-xs uppercase tracking-wide", style: { color: BASE.inkFaint }, children: t.challenge.daysInARow })
     ] }),
     /* @__PURE__ */ jsx(ChallengeCard, { icon: CalendarCheck, title: t.challenge.weeklyConsistency, desc: t.challenge.weeklyConsistencyDesc(weeklyGoal), progress: daysThisWeek, goal: weeklyGoal, accent }),
     challenges.map((c) => /* @__PURE__ */ jsx(ChallengeCard, { icon: CHALLENGE_ICONS[c.id], title: c.title, desc: c.desc, progress: c.progress, goal: c.goal, accent }, c.id)),
     /* @__PURE__ */ jsxs(Card, { className: "mt-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-3", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: t.challenge.thisWeek }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: t.challenge.thisWeek }),
         /* @__PURE__ */ jsxs("span", { className: "text-xs", style: { color: BASE.inkFaint }, children: [
           daysThisWeek,
           "/",
@@ -5709,7 +5758,7 @@ function CalibrationRing({ pct, color, size = 172 }) {
         style: { transform: "rotate(-90deg)", transformOrigin: "50% 50%" }
       }
     ),
-    /* @__PURE__ */ jsxs("text", { x: "50%", y: "50%", textAnchor: "middle", dy: "0.35em", fill: BASE.ink, fontSize: "30", fontFamily: "'Space Grotesk', sans-serif", fontWeight: "600", children: [
+    /* @__PURE__ */ jsxs("text", { x: "50%", y: "50%", textAnchor: "middle", dy: "0.35em", fill: BASE.ink, fontSize: "30", fontFamily: "var(--font-display)", fontWeight: "600", children: [
       Math.round(animated),
       "%"
     ] })
@@ -5797,7 +5846,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Gauge, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.calibration.heading }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.calibration.heading }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.calibration.subtitle }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: t.calibration.intro }),
       /* @__PURE__ */ jsx(
@@ -5805,7 +5854,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
         {
           onClick: prepareAndStart,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
-          style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
+          style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.calibration.start
         }
       )
@@ -5834,7 +5883,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
         /* @__PURE__ */ jsx(Sparkles, { size: 11 }),
         t.calibration.adaptiveNote
       ] }),
-      /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: q.text }),
+      /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: q.text }),
       /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: q.options.map((opt) => /* @__PURE__ */ jsx(
         "button",
         {
@@ -5849,7 +5898,7 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId }
   }
   return /* @__PURE__ */ jsxs("div", { className: "text-center stagger", children: [
     /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-4", children: /* @__PURE__ */ jsx(CalibrationRing, { pct: result.pct, color: result.tier.color }) }),
-    /* @__PURE__ */ jsx("p", { className: "text-base mb-6 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: result.tier.label }),
+    /* @__PURE__ */ jsx("p", { className: "text-base mb-6 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "var(--font-display)", fontWeight: 500 }, children: result.tier.label }),
     result.riskFactors.length > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1.5", children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 14, style: { color: LOSS } }),
@@ -5896,14 +5945,14 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
   if (issues.length === 0) {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-8 px-4 leading-relaxed", style: { color: BASE.inkFaint }, children: t.review.notEnough }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: onClose,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
-          style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
+          style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.review.back
         }
       )
@@ -5912,7 +5961,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.review.questionsCount(issues.length) }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: t.review.intro }),
       /* @__PURE__ */ jsx(
@@ -5920,7 +5969,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
         {
           onClick: () => setStage("quiz"),
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
-          style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
+          style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.calibration.start
         }
       ),
@@ -5936,7 +5985,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
       /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full mb-6", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${qIndex / issues.length * 100}%`, background: accent } }) }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: q.title }),
       /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-4", style: { color: BASE.inkDim }, children: q.evidence }),
-      /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 500 }, children: q.question }),
+      /* @__PURE__ */ jsx("h3", { className: "text-lg mb-5 leading-snug", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: q.question }),
       /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-2", children: likert.map((opt) => /* @__PURE__ */ jsx(
         "button",
         {
@@ -5953,7 +6002,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
   const dataDrivenAnswered = result ? result.confirmed.filter((q2) => q2.dataDriven).length + result.clear.filter((q2) => q2.dataDriven).length : 0;
   return /* @__PURE__ */ jsxs("div", { className: "text-center stagger", children: [
     /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-4", children: /* @__PURE__ */ jsx(CalibrationRing, { pct: result.pct, color: result.tier.color }) }),
-    /* @__PURE__ */ jsx("p", { className: "text-base mb-1 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: result.tier.label }),
+    /* @__PURE__ */ jsx("p", { className: "text-base mb-1 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "var(--font-display)", fontWeight: 500 }, children: result.tier.label }),
     /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: t.review.questionsAnswered(totalAnswered, dataDrivenAnswered) }),
     /* @__PURE__ */ jsx(Card, { className: "text-left mb-4", children: /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: result.narrative }) }),
     result.priority && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
@@ -5987,7 +6036,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
         {
           onClick: onClose,
           className: "px-8 py-2.5 rounded-full text-sm transition-all active:scale-95",
-          style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600 },
+          style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600 },
           children: t.review.done
         }
       )
@@ -6090,7 +6139,7 @@ function drawChart(canvas, eng, opts) {
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
     ctx.fillStyle = color;
-    ctx.font = "10px 'JetBrains Mono', monospace";
+    ctx.font = "10px var(--font-mono)";
     ctx.textBaseline = "middle";
     ctx.fillText(label, w - padR + 8, y);
   };
@@ -6117,7 +6166,7 @@ function drawChart(canvas, eng, opts) {
   ctx.fillStyle = tagColor;
   ctx.fillRect(w - padR + 4, tagY - 8, padR - 6, 16);
   ctx.fillStyle = "#06120F";
-  ctx.font = "600 10px 'JetBrains Mono', monospace";
+  ctx.font = "600 10px var(--font-mono)";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   ctx.fillText(formatPrice(last), w - padR + 8, tagY);
@@ -6157,7 +6206,7 @@ function drawRadar(canvas, eng, opts) {
   const rangePct = 0.016;
   const lo = price * (1 - rangePct), hi = price * (1 + rangePct);
   const yOf = (p) => padY + (1 - (p - lo) / (hi - lo)) * plotH;
-  ctx.font = "9px 'JetBrains Mono', monospace";
+  ctx.font = "9px var(--font-mono)";
   ctx.textBaseline = "middle";
   const steps = 4;
   for (let i = 0; i <= steps; i++) {
@@ -6186,7 +6235,7 @@ function drawRadar(canvas, eng, opts) {
   ctx.setLineDash([]);
   ctx.globalAlpha = 1;
   ctx.fillStyle = accent;
-  ctx.font = "600 9px 'JetBrains Mono', monospace";
+  ctx.font = "600 9px var(--font-mono)";
   ctx.fillText(formatPrice(price), plotW + 6, clamp(yPrice, padY + 8, h - padY - 8));
   const orders = eng.radarOrders || [];
   for (const o of orders) {
@@ -6262,7 +6311,7 @@ function LeverageBar({ value, onChange, accent, disabled }) {
           background: value === lv ? accent : "transparent",
           color: value === lv ? "#06120F" : disabled ? BASE.inkFaint : BASE.inkDim,
           border: `1px solid ${value === lv ? accent : BASE.line}`,
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: "var(--font-mono)",
           fontWeight: value === lv ? 700 : 400,
           opacity: disabled ? 0.5 : 1
         },
@@ -7089,7 +7138,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+      /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
         /* @__PURE__ */ jsx(Bot, { size: 17, style: { color: accent } }),
         " ",
         /* @__PURE__ */ jsx(DecodeText, { text: t.coach.title })
@@ -7097,7 +7146,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
       /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkDim }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.subtitle }) })
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
-      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeTitle }) }),
+      /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: accent, fontFamily: "var(--font-display)" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeTitle }) }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-4 mb-4", children: [
         /* @__PURE__ */ jsx("div", { className: "flex-1", children: analyzing ? /* @__PURE__ */ jsx("div", { className: "flex items-center gap-2 py-1", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 20, accent }) }) : analysis ? /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { as: "span", text: analysis, maxTotalMs: 750 }) }) : /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: entries.length === 0 ? t.coach.analyzeNoEntries : t.coach.analyzeDesc }) }) }),
         /* @__PURE__ */ jsxs("div", { className: "relative shrink-0 w-16 h-16 rounded-full flex items-center justify-center", style: { background: `radial-gradient(circle at 35% 30%, ${accent}30, transparent 72%)`, border: `1px solid ${accent}35`, boxShadow: ring(accent) }, children: [
@@ -7111,7 +7160,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
           onClick: runAnalyze,
           disabled: analyzing || entries.length === 0,
           className: "w-full py-2.5 rounded-xl text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2",
-          style: { border: `1px solid ${accent}40`, background: `linear-gradient(135deg, ${accent}30, ${accent}12)`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
+          style: { border: `1px solid ${accent}40`, background: `linear-gradient(135deg, ${accent}30, ${accent}12)`, color: accent, fontFamily: "var(--font-display)" },
           children: [
             /* @__PURE__ */ jsx(Sparkles, { size: 14 }),
             /* @__PURE__ */ jsx(DecodeText, { text: analyzing ? t.coach.analyzeBusy : t.coach.analyzeBtn })
@@ -7125,7 +7174,7 @@ function Coach({ entries, analytics, accent, userId, lang, t }) {
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4 flex flex-col", style: { height: "52vh", maxHeight: 560 }, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-        /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide", style: { color: accent, fontFamily: "'Space Grotesk', sans-serif" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
+        /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide", style: { color: accent, fontFamily: "var(--font-display)" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.chatTitle }) }),
         chatMessages.length > 0 && /* @__PURE__ */ jsxs(
           "button",
           {
@@ -7438,11 +7487,11 @@ function Simulator({ accent, onWin, t, lang }) {
   if (stage === "intro") {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Swords, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
-      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.sim.heading }),
+      /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.sim.heading }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-8", style: { color: BASE.inkDim }, children: t.sim.subtitle }),
       /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "text-left mb-4", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: t.sim.terminal }),
+          /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: t.sim.terminal }),
           /* @__PURE__ */ jsx("span", { className: "text-[10px] px-2 py-0.5 rounded-full", style: { color: accent, border: `1px solid ${accent}40` }, children: t.sim.beta })
         ] }),
         /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkDim }, children: t.sim.introText })
@@ -7452,7 +7501,7 @@ function Simulator({ accent, onWin, t, lang }) {
         {
           onClick: startSession,
           className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
-          style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
+          style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.sim.startSession
         }
       )
@@ -7462,14 +7511,14 @@ function Simulator({ accent, onWin, t, lang }) {
     return /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: "SYNTH/USD" }),
+          /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children: "SYNTH/USD" }),
           /* @__PURE__ */ jsx("div", { className: "flex gap-1", children: [5, 15].map((tf) => /* @__PURE__ */ jsxs(
             "button",
             {
               onClick: () => setTimeframeSec(tf),
               className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150",
               style: {
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-mono)",
                 color: timeframeSec === tf ? accent : BASE.inkFaint,
                 border: `1px solid ${timeframeSec === tf ? accent + "40" : BASE.line}`,
                 background: timeframeSec === tf ? `${accent}0F` : "transparent"
@@ -7482,7 +7531,7 @@ function Simulator({ accent, onWin, t, lang }) {
             tf
           )) })
         ] }),
-        /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: secondsLeft <= 10 ? LOSS : BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: secondsLeft <= 10 ? LOSS : BASE.ink, fontFamily: "var(--font-mono)" }, children: [
           mm,
           ":",
           ss
@@ -7492,8 +7541,8 @@ function Simulator({ accent, onWin, t, lang }) {
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsxs("div", { children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.capital }),
-          /* @__PURE__ */ jsx("div", { className: "text-[22px] leading-none", style: { fontFamily: "'JetBrains Mono', monospace", color: BASE.ink, fontWeight: 500 }, children: formatSimMoney(liveEquity) }),
-          /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: liveEquity >= SIM_START_CAPITAL ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[22px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: formatSimMoney(liveEquity) }),
+          /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: liveEquity >= SIM_START_CAPITAL ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
             liveEquity >= SIM_START_CAPITAL ? "+" : "",
             ((liveEquity - SIM_START_CAPITAL) / SIM_START_CAPITAL * 100).toFixed(1),
             "%"
@@ -7501,7 +7550,7 @@ function Simulator({ accent, onWin, t, lang }) {
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "text-right", children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.price }),
-          /* @__PURE__ */ jsx("div", { className: "text-[18px] leading-none transition-colors duration-150", style: { fontFamily: "'JetBrains Mono', monospace", color: upTick ? WIN : LOSS, fontWeight: 500 }, children: formatPrice(uiPrice) })
+          /* @__PURE__ */ jsx("div", { className: "text-[18px] leading-none transition-colors duration-150", style: { fontFamily: "var(--font-mono)", color: upTick ? WIN : LOSS, fontWeight: 500 }, children: formatPrice(uiPrice) })
         ] })
       ] }),
       /* @__PURE__ */ jsxs(Card, { className: "mb-2", style: { padding: "8px 6px 4px 6px", position: "relative", overflow: "hidden" }, children: [
@@ -7527,12 +7576,12 @@ function Simulator({ accent, onWin, t, lang }) {
             children: [
               /* @__PURE__ */ jsx(Newspaper, { size: 11, style: { color: accent, flexShrink: 0 } }),
               /* @__PURE__ */ jsx("span", { className: "text-[10.5px] leading-tight overflow-hidden text-ellipsis whitespace-nowrap", style: { color: BASE.ink }, children: uiNews.headline }),
-              uiNews.ageMs < uiNews.rampMs && /* @__PURE__ */ jsx("span", { className: "text-[9px] shrink-0 ml-auto", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: t.sim.reacting })
+              uiNews.ageMs < uiNews.rampMs && /* @__PURE__ */ jsx("span", { className: "text-[9px] shrink-0 ml-auto", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: t.sim.reacting })
             ]
           }
         ),
-        liquidated && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: LOSS, color: "#1A0806", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: t.sim.positionLiquidated }) }),
-        autoClosedTag && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${autoClosedTag === "tp" ? WIN : LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: autoClosedTag === "tp" ? WIN : LOSS, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 700 }, children: autoClosedTag === "tp" ? t.sim.takeProfitHit : t.sim.stopLossHit }) })
+        liquidated && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: LOSS, color: "#1A0806", fontFamily: "var(--font-display)", fontWeight: 700 }, children: t.sim.positionLiquidated }) }),
+        autoClosedTag && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center", style: { background: `${autoClosedTag === "tp" ? WIN : LOSS}18`, backdropFilter: "blur(1px)" }, children: /* @__PURE__ */ jsx("span", { className: "px-3 py-1.5 rounded-full text-[12px]", style: { background: autoClosedTag === "tp" ? WIN : LOSS, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 700 }, children: autoClosedTag === "tp" ? t.sim.takeProfitHit : t.sim.stopLossHit }) })
       ] }),
       /* @__PURE__ */ jsx(LeverageBar, { value: leverage, onChange: setLeverage, accent, disabled: !!position }),
       /* @__PURE__ */ jsxs("div", { className: "mb-2.5", children: [
@@ -7544,7 +7593,7 @@ function Simulator({ accent, onWin, t, lang }) {
               onClick: () => setTakeProfitPct(v),
               className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150 shrink-0",
               style: {
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-mono)",
                 color: takeProfitPct === v ? WIN : BASE.inkFaint,
                 border: `1px solid ${takeProfitPct === v ? WIN + "40" : BASE.line}`,
                 background: takeProfitPct === v ? `${WIN}0F` : "transparent"
@@ -7562,7 +7611,7 @@ function Simulator({ accent, onWin, t, lang }) {
               onClick: () => setStopLossPct(v),
               className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150 shrink-0",
               style: {
-                fontFamily: "'JetBrains Mono', monospace",
+                fontFamily: "var(--font-mono)",
                 color: stopLossPct === v ? LOSS : BASE.inkFaint,
                 border: `1px solid ${stopLossPct === v ? LOSS + "40" : BASE.line}`,
                 background: stopLossPct === v ? `${LOSS}0F` : "transparent"
@@ -7575,7 +7624,7 @@ function Simulator({ accent, onWin, t, lang }) {
       ] }),
       position ? /* @__PURE__ */ jsxs(Card, { className: "mb-2.5", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
-          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2 text-sm", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: [
+          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2 text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: [
             /* @__PURE__ */ jsxs("span", { className: "px-2 py-0.5 rounded-full text-[11px]", style: { color: position.direction === "long" ? WIN : LOSS, border: `1px solid ${position.direction === "long" ? WIN : LOSS}40` }, children: [
               position.direction === "long" ? t.sim.long : t.sim.short,
               " x",
@@ -7585,13 +7634,13 @@ function Simulator({ accent, onWin, t, lang }) {
             " ",
             formatPrice(position.entryPrice)
           ] }),
-          /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: liveFloatingPct >= 0 ? WIN : LOSS, fontFamily: "'JetBrains Mono', monospace" }, children: [
+          /* @__PURE__ */ jsxs("span", { className: "text-sm", style: { color: liveFloatingPct >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
             liveFloatingPct >= 0 ? "+" : "",
             (liveFloatingPct * 100).toFixed(1),
             "%"
           ] })
         ] }),
-        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-[11px] mb-3", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-[11px] mb-3", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           /* @__PURE__ */ jsxs("span", { children: [
             t.sim.margin,
             " ",
@@ -7617,7 +7666,7 @@ function Simulator({ accent, onWin, t, lang }) {
           /* @__PURE__ */ jsx("button", { onClick: closePosition, className: "flex-1 py-2.5 rounded-full text-[13px] transition-all duration-150 active:scale-95", style: { border: `1px solid ${BASE.line}`, color: BASE.ink, background: BASE.surface2 }, children: t.sim.closePosition })
         ] })
       ] }) : /* @__PURE__ */ jsxs(Fragment, { children: [
-        /* @__PURE__ */ jsxs("div", { className: "text-[11px] text-center mb-1.5", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("div", { className: "text-[11px] text-center mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           t.sim.margin,
           " ",
           formatSimMoney(capital * MARGIN_FRACTION),
@@ -7638,22 +7687,22 @@ function Simulator({ accent, onWin, t, lang }) {
   }
   const r = result;
   return /* @__PURE__ */ jsxs("div", { className: "text-center stagger", children: [
-    /* @__PURE__ */ jsx("h2", { className: "text-lg mb-1 tracking-wide", style: { fontFamily: "'Space Grotesk', sans-serif", color: BASE.ink, fontWeight: 600 }, children: t.sim.sessionOver }),
+    /* @__PURE__ */ jsx("h2", { className: "text-lg mb-1 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.sim.sessionOver }),
     /* @__PURE__ */ jsxs("p", { className: "text-xs mb-6", style: { color: BASE.inkFaint }, children: [
       t.sim.finalCapital,
       ": ",
       formatSimMoney(r.finalCapital)
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "text-[40px] leading-none mb-2", style: { fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, color: r.playerReturn >= 0 ? WIN : LOSS }, children: [
+    /* @__PURE__ */ jsxs("div", { className: "text-[40px] leading-none mb-2", style: { fontFamily: "var(--font-display)", fontWeight: 600, color: r.playerReturn >= 0 ? WIN : LOSS }, children: [
       r.playerReturn >= 0 ? "+" : "",
       (r.playerReturn * 100).toFixed(1),
       "%"
     ] }),
-    /* @__PURE__ */ jsx("p", { className: "text-base mb-6", style: { color: r.beatMarket ? WIN : LOSS, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: r.beatMarket ? t.sim.beatMarket : t.sim.lostToMarket }),
+    /* @__PURE__ */ jsx("p", { className: "text-base mb-6", style: { color: r.beatMarket ? WIN : LOSS, fontFamily: "var(--font-display)", fontWeight: 500 }, children: r.beatMarket ? t.sim.beatMarket : t.sim.lostToMarket }),
     /* @__PURE__ */ jsxs(Card, { className: "text-left mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
         /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.marketReturn }),
-        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
           r.marketReturn >= 0 ? "+" : "",
           (r.marketReturn * 100).toFixed(1),
           "%"
@@ -7661,18 +7710,18 @@ function Simulator({ accent, onWin, t, lang }) {
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
         /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.tradesCount }),
-        /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: r.tradesCount })
+        /* @__PURE__ */ jsx("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: r.tradesCount })
       ] }),
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
         /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.maxDrawdown }),
-        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }, children: [
+        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
           (r.maxDD * 100).toFixed(1),
           "%"
         ] })
       ] }),
       r.liquidated && /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-sm py-1", children: [
         /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: t.sim.liquidations }),
-        /* @__PURE__ */ jsx("span", { style: { color: WARN, fontFamily: "'JetBrains Mono', monospace" }, children: t.sim.wasLiquidated })
+        /* @__PURE__ */ jsx("span", { style: { color: WARN, fontFamily: "var(--font-mono)" }, children: t.sim.wasLiquidated })
       ] })
     ] }),
     r.achievements.length > 0 && /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "text-left mb-4", children: [
@@ -7687,7 +7736,7 @@ function Simulator({ accent, onWin, t, lang }) {
       {
         onClick: startSession,
         className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
-        style: { background: accent, color: "#06120F", fontFamily: "'Space Grotesk', sans-serif", fontWeight: 600, boxShadow: softLift(accent) },
+        style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
         children: t.sim.playAgain
       }
     )
@@ -7697,7 +7746,7 @@ function SettingsSection({ children }) {
   return /* @__PURE__ */ jsx("div", { className: "mb-6 break-inside-avoid", children });
 }
 function SettingsSectionLabel({ children }) {
-  return /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2.5", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children });
+  return /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
 }
 function Settings({
   accent,
@@ -7744,7 +7793,7 @@ function Settings({
   const Section = SettingsSection;
   const SectionLabel = SettingsSectionLabel;
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif", fontWeight: 500 }, children: [
+    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(SettingsIcon, { size: 17, style: { color: accent } }),
       " ",
       t.settings.title
@@ -7790,7 +7839,7 @@ function Settings({
           " ",
           username || "\u2014"
         ] }),
-        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkFaint, fontFamily: "'JetBrains Mono', monospace" }, children: accountProvider || "\u2014" })
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: accountProvider || "\u2014" })
       ] }),
       /* @__PURE__ */ jsxs("button", { onClick: onLogout, className: "w-full flex items-center gap-2.5 px-4 py-3 rounded-xl text-sm transition-all duration-200 active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, color: BASE.inkDim }, children: [
         /* @__PURE__ */ jsx(LogOut, { size: 15 }),
@@ -7831,7 +7880,7 @@ function Settings({
           {
             onClick: () => setCurrency(c.code),
             className: "px-3.5 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
-            style: { background: currency === c.code ? `${accent}12` : "transparent", color: currency === c.code ? accent : BASE.inkDim, border: `1px solid ${currency === c.code ? accent + "40" : BASE.line}`, fontFamily: "'JetBrains Mono', monospace" },
+            style: { background: currency === c.code ? `${accent}12` : "transparent", color: currency === c.code ? accent : BASE.inkDim, border: `1px solid ${currency === c.code ? accent + "40" : BASE.line}`, fontFamily: "var(--font-mono)" },
             children: [
               c.symbol,
               " ",
@@ -7876,7 +7925,7 @@ function Settings({
             type: "text",
             inputMode: "decimal",
             className: "w-full bg-transparent border-b outline-none py-2 text-sm",
-            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "'JetBrains Mono', monospace" }
+            style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
           }
         )
       ] })
@@ -8152,7 +8201,14 @@ async function loadProfile(userId) {
   if (!fbAuth.currentUser || !userId) return null;
   const res = await storageGet(profileKey(userId), false);
   if (!res?.value) return null;
-  return migrateProfile(JSON.parse(res.value));
+  // A document that EXISTS but can't be parsed or migrated is not the same thing as "no profile
+  // yet". Returning null here would let the app treat a real account as brand new and then
+  // overwrite the (possibly recoverable) document with empty state on the next autosave. Throwing
+  // routes this into tryLoad's failure path instead, which leaves canPersistRef false \u2014 nothing
+  // auto-saves for the session and the person is told to reload.
+  const parsed = migrateProfile(JSON.parse(res.value));
+  if (!parsed) throw new Error("profile_unreadable");
+  return parsed;
 }
 async function saveProfile(userId, profile) {
   if (!fbAuth.currentUser || !userId) return;
@@ -8536,7 +8592,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
       ] }),
       /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
         /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
-          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041B\u043E\u0433\u0438\u043D" }),
+          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children: "\u041B\u043E\u0433\u0438\u043D" }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 border-b py-2", style: { borderColor: BASE.line }, children: [
             /* @__PURE__ */ jsx(User, { size: 14, style: { color: BASE.inkFaint } }),
             /* @__PURE__ */ jsx(
@@ -8555,7 +8611,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           ] })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: mode === "register" ? "mb-4" : "mb-1", children: [
-          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041F\u0430\u0440\u043E\u043B\u044C" }),
+          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children: "\u041F\u0430\u0440\u043E\u043B\u044C" }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 border-b py-2", style: { borderColor: BASE.line }, children: [
             /* @__PURE__ */ jsx(KeyRound, { size: 14, style: { color: BASE.inkFaint } }),
             /* @__PURE__ */ jsx(
@@ -8573,7 +8629,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           ] })
         ] }),
         mode === "register" && /* @__PURE__ */ jsxs("div", { className: "mb-1", children: [
-          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0430\u0440\u043E\u043B\u044C" }),
+          /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children: "\u041F\u043E\u0432\u0442\u043E\u0440\u0438\u0442\u0435 \u043F\u0430\u0440\u043E\u043B\u044C" }),
           /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 border-b py-2", style: { borderColor: BASE.line }, children: [
             /* @__PURE__ */ jsx(KeyRound, { size: 14, style: { color: BASE.inkFaint } }),
             /* @__PURE__ */ jsx(
@@ -8597,7 +8653,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           onClick: submit,
           disabled,
           className: "w-full py-3 rounded-xl text-sm mb-3 transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
-          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
+          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "var(--font-display)" },
           children: busy ? "\u2026" : mode === "register" ? "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0430\u043A\u043A\u0430\u0443\u043D\u0442" : "\u0412\u043E\u0439\u0442\u0438"
         }
       ),
@@ -8650,7 +8706,7 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "relative w-full max-w-sm text-center", children: [
       /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-6", children: /* @__PURE__ */ jsx(LogoMark, { size: 32, accent }) }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm mb-2", style: { color: BASE.ink, fontFamily: "'Space Grotesk', sans-serif" }, children: "\u041D\u0430\u0439\u0434\u0435\u043D \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0439 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441" }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-2", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041D\u0430\u0439\u0434\u0435\u043D \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0439 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441" }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-8 leading-relaxed", style: { color: BASE.inkFaint }, children: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A, \u043A\u043E\u0448\u0435\u043B\u0451\u043A MindCoin, streak \u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435 \u0440\u0430\u043D\u044C\u0448\u0435. \u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u0438\u0445 \u0432 \u043D\u043E\u0432\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442?" }),
       /* @__PURE__ */ jsx(
         "button",
@@ -8658,7 +8714,7 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
           onClick: () => run(onMigrate),
           disabled: busy,
           className: "w-full py-3 rounded-xl text-sm mb-3 transition-all duration-200 active:scale-[0.98] disabled:opacity-50",
-          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "'Space Grotesk', sans-serif" },
+          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "var(--font-display)" },
           children: "\u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438"
         }
       ),
@@ -8711,7 +8767,7 @@ function BootIntro({ accent, name, lang, onDone }) {
           className: "text-sm mb-2",
           style: {
             color: i === lines.length - 1 ? accent : BASE.inkDim,
-            fontFamily: "'JetBrains Mono', monospace",
+            fontFamily: "var(--font-mono)",
             opacity: 0,
             animation: `riseIn 0.4s ease ${i * 0.42}s forwards`
           },
@@ -8744,7 +8800,7 @@ function DesktopSidebar({ nav, tab, setTab, accent, mindCoins, onWalletClick }) 
               style: { background: active ? `${accent}12` : "transparent", border: `1px solid ${active ? accent + "35" : "transparent"}` },
               children: [
                 /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: active ? accent : BASE.inkFaint } }),
-                /* @__PURE__ */ jsx("span", { className: "text-[13px]", style: { color: active ? accent : BASE.inkDim, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
+                /* @__PURE__ */ jsx("span", { className: "text-[13px]", style: { color: active ? accent : BASE.inkDim, fontFamily: "var(--font-display)" }, children: n.label })
               ]
             },
             n.id
@@ -8788,6 +8844,15 @@ function MindExe() {
   const firstLoadRef = useRef(true);
   const firstDailyRewardRef = useRef(true);
   const canPersistRef = useRef(false);
+  // Holds the profile document exactly as it was loaded. buildPayload merges its output ON TOP of
+  // this, so any field written by a NEWER build of the app (or one this build simply doesn't know
+  // about) survives a save instead of being silently dropped \u2014 which is what would otherwise make
+  // an app update, or a browser still running a cached older app.js, erase settings.
+  const rawProfileRef = useRef(null);
+  // One snapshot of the pre-existing document per session, written just before this session's first
+  // overwrite. Cheap insurance: even a catastrophic future bug leaves a recoverable copy in
+  // users/{uid}/data/mind-exe-journal-state:backup.
+  const backupPendingRef = useRef(false);
   const { status: authStatus, user: authUser, register: authRegister, login: authLogin, loginWithGoogle: authLoginWithGoogle, logout: authLogout } = useAuth();
   const userId = authUser?.id || null;
   const [migrateFor, setMigrateFor] = useState(null);
@@ -8834,6 +8899,8 @@ function MindExe() {
   const handleLogout = async () => {
     await authLogout();
     canPersistRef.current = false;
+    rawProfileRef.current = null;
+    backupPendingRef.current = false;
     resetMediaCache();
     setLoaded(false);
     setIntroResolved(false);
@@ -8859,6 +8926,8 @@ function MindExe() {
     let cancelled = false;
     setLoaded(false);
     canPersistRef.current = false;
+    rawProfileRef.current = null;
+    backupPendingRef.current = false;
     resetMediaCache();
     resetInMemoryState();
     const tryLoad = async (attempt = 0) => {
@@ -8911,6 +8980,8 @@ function MindExe() {
         // Firestore answered (with or without an existing profile) without throwing \u2014 that's the
         // only condition under which we trust the in-memory state enough to let it overwrite the
         // cloud copy. A thrown error below deliberately does NOT reach this line.
+        rawProfileRef.current = profile || null;
+        backupPendingRef.current = !!profile;
         canPersistRef.current = true;
         firstLoadRef.current = false;
         if (!cancelled) setLoaded(true);
@@ -8938,14 +9009,19 @@ function MindExe() {
     };
   }, [authStatus, userId, migrateFor]);
   const buildPayload = (overrides = {}) => {
+    const prev = rawProfileRef.current || {};
     const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
     return {
+      // spread the previously stored document first so unknown / future top-level fields are kept;
+      // every section below then overwrites only the keys this build actually owns.
+      ...prev,
       version: SCHEMA_VERSION,
-      user: { name: src.name, anonId },
+      user: { ...prev.user, name: src.name, anonId },
       journal: {
         entries: src.entries.map(({ screenshots, exitScreenshots, ...rest }) => ({ ...rest, date: rest.date instanceof Date ? rest.date.toISOString() : rest.date, exitDate: rest.exitDate instanceof Date ? rest.exitDate.toISOString() : rest.exitDate }))
       },
       settings: {
+        ...prev.settings,
         accentIndex: src.accentIndex,
         soundOn: src.soundOn,
         weeklyGoal: src.weeklyGoal,
@@ -8957,8 +9033,8 @@ function MindExe() {
         customInstruments: src.customInstruments,
         customTags: src.customTags
       },
-      progress: { lastCalibration: src.lastCalibration },
-      wallet: { mindCoins: src.mindCoins, coinLedger: src.coinLedger, lastDailyReward: src.lastDailyReward }
+      progress: { ...prev.progress, lastCalibration: src.lastCalibration },
+      wallet: { ...prev.wallet, mindCoins: src.mindCoins, coinLedger: src.coinLedger, lastDailyReward: src.lastDailyReward }
     };
   };
   const persistNow = async (overrides = {}) => {
@@ -8967,7 +9043,16 @@ function MindExe() {
     // session, otherwise a failed load would let empty in-memory state overwrite real cloud data.
     if (!canPersistRef.current || !fbAuth.currentUser || !userId) return;
     try {
-      await saveProfile(userId, buildPayload(overrides));
+      if (backupPendingRef.current && rawProfileRef.current) {
+        backupPendingRef.current = false;
+        try {
+          await storageSet(`${PROFILE_KEY}:backup:${userId}`, JSON.stringify(rawProfileRef.current), false);
+        } catch (_) {
+        }
+      }
+      const payload = buildPayload(overrides);
+      await saveProfile(userId, payload);
+      rawProfileRef.current = payload;
       const srcEntries = overrides.entries ?? entries;
       const mediaMap = {};
       for (const e of srcEntries) {
@@ -9211,7 +9296,24 @@ function MindExe() {
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "'Inter', sans-serif" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap');
+        /* V5.1 typography. Everything in the app now points at two CSS variables instead of naming
+           families inline in 78 + 77 places, so a future type change is a one-line edit here.
+           Display: Sora \u2014 geometric grotesk with a slightly astronomical, engineered feel; tighter
+           apertures and a more distinctive lowercase g/a than Space Grotesk, which read generic at
+           small sizes. Mono: IBM Plex Mono for figures \u2014 the digits have real character (open 4,
+           flat-top 3, slashed 0 off by default) and it sits warmer against the dark UI than
+           JetBrains Mono without losing tabular alignment. Both are variable-weight on Google Fonts.
+           The <link> tags in index.html load these; this @import is the belt-and-braces fallback so
+           the bundle is self-sufficient if index.html is ever served stale. */
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        :root {
+          --font-display: 'Sora', 'Space Grotesk', system-ui, -apple-system, sans-serif;
+          --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+        }
+        body, #root { font-family: var(--font-display); }
+        /* Sora runs a touch wider than Space Grotesk at the same size; a small negative tracking on
+           headings and figures keeps existing layouts from re-wrapping. */
+        h1, h2, h3 { letter-spacing: -0.015em; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes logoPulseFade { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.04); } }
         @keyframes softReveal { from { opacity: 0; filter: blur(5px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
@@ -9547,12 +9649,12 @@ function MindExe() {
           if (n.primary) {
             return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 -mt-2 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
               /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-xl flex items-center justify-center", style: { background: "#EDEDF0", boxShadow: "0 0 12px 2px rgba(255,255,255,0.18), 0 3px 8px rgba(0,0,0,0.3)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2.1, style: { color: "#141416" } }) }),
-              /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "'Space Grotesk', sans-serif" }, children: n.label })
+              /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "var(--font-display)" }, children: n.label })
             ] }, n.id);
           }
           return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
             /* @__PURE__ */ jsx("div", { className: "w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}10` : "transparent" }, children: /* @__PURE__ */ jsx(n.icon, { size: 15, strokeWidth: 1.8, style: { color: active ? accent : BASE.inkFaint } }) }),
-            /* @__PURE__ */ jsx("span", { className: "text-[8.5px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "'Space Grotesk', sans-serif", transition: "color 0.25s ease" }, children: n.label })
+            /* @__PURE__ */ jsx("span", { className: "text-[8.5px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "var(--font-display)", transition: "color 0.25s ease" }, children: n.label })
           ] }, n.id);
         })
       }) }) })
