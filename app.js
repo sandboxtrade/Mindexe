@@ -1,15 +1,21 @@
-// mind.exe — V0.2
+// mind.exe — V0.3
 //
-// V0.2 (на базе V5.8, архитектура не менялась):
-//  1) Глобально скрыты полосы прокрутки (боковые полоски при скролле страницы).
-//  2) Чёрный экран вкладки «Аналитика»: в компоненте Patterns не была объявлена переменная
-//     withR, которую читают equityCurve и tagStats — рендер падал с ReferenceError.
-//  3) Калибровка: вечная загрузка на экране «Готовим вопросы...» — добавлен caWithTimeout
-//     на вызов Gemini (20с) и на чтение истории из Firestore (10с), дальше идёт уже
-//     существующий локальный fallback.
-//  4) Калибровка: варианты ответов больше не сводятся к «Да/Нет» — добавлены 6 шкал
-//     (ease, comfort, likelihood, frequency, presence, energy), обновлён промпт и
-//     привязка шкалы к каждому fallback-вопросу. CALIBRATION_CACHE_SCHEMA 2 → 3.
+// V0.3 — переработан блок «Инсайт» на главном экране (гибрид: рынок + статистика трейдера):
+//  1) buildMarketPrompt требует проверяемую конкретику (число / уровень / названное событие
+//     в каждом предложении) и явно запрещает типовые пустые формулировки. Снапшот теперь
+//     возвращает ещё facts[] — короткие фактические строки.
+//  2) Снапшот помечается grounded: true/false. Если Google Search недоступен и сводка получена
+//     без веба, под текстом показывается пометка t.home.marketStale.
+//  3) Новый второй слой: aiMarketPersonalDigest (выжимка из уже существующей аналитики) +
+//     aiGenerateMarketLink — одна фраза, связывающая рынок с реальными цифрами пользователя.
+//     Кэш приватный (users/{uid}/data, ключ market-link:{asset}), одна генерация в час,
+//     сбрасывается при смене сводки или статистики. Запрос только из useEffect по хэшу.
+//
+// V0.2:
+//  1) Глобально скрыты полосы прокрутки.
+//  2) Чёрный экран «Аналитики»: в Patterns не была объявлена переменная withR (ReferenceError).
+//  3) Калибровка: caWithTimeout на Gemini (20с) и на чтение истории из Firestore (10с).
+//  4) Калибровка: 6 новых шкал ответов вместо всегдашнего «Да/Нет». CACHE_SCHEMA 2 → 3.
 //
 // mind.exe V5.8 \u2014 fixes two "nothing changed after update" causes: a same-day calibration
 // cache with no schema check, and index.html serving app.js with no cache-busting query.
@@ -800,6 +806,8 @@ var STRINGS = {
       calibrationCta: "\u041F\u0440\u043E\u0439\u0442\u0438 \u043A\u0430\u043B\u0438\u0431\u0440\u043E\u0432\u043A\u0443 \u043F\u0435\u0440\u0435\u0434 \u0441\u0435\u0441\u0441\u0438\u0435\u0439",
       insight: "\u0418\u043D\u0441\u0430\u0439\u0442",
       marketRefresh: "\u041E\u0431\u043D\u043E\u0432\u0438\u0442\u044C",
+      // V0.3
+      marketStale: "\u0411\u0435\u0437 \u0441\u0432\u0435\u0436\u0438\u0445 \u0434\u0430\u043D\u043D\u044B\u0445 \u2014 \u043F\u043E\u0438\u0441\u043A \u043D\u0435\u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D, \u0441\u0432\u043E\u0434\u043A\u0430 \u043F\u043E \u043F\u0430\u043C\u044F\u0442\u0438 \u043C\u043E\u0434\u0435\u043B\u0438",
       moodPrefix: "\u041D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u0438\u0435 \u0440\u044B\u043D\u043A\u0430: ",
       insightConfident: "\u041F\u043E\u0441\u043B\u0435\u0434\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u044E\u0442, \u0447\u0442\u043E \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u043E\u043A\u0443\u043F\u0430\u0435\u0442\u0441\u044F \u2014 \u0434\u0435\u0440\u0436\u0438 \u043E\u0431\u044A\u0451\u043C \u0441\u043E\u043E\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u043C.",
       insightFocus: "\u0421\u0444\u043E\u043A\u0443\u0441\u0438\u0440\u0443\u0439\u0441\u044F \u043D\u0430 \u0440\u0435\u0433\u0443\u043B\u044F\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u043F\u0440\u043E\u044F\u0432\u0438\u043B\u0441\u044F \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0430\u0442\u0442\u0435\u0440\u043D.",
@@ -1083,6 +1091,7 @@ var STRINGS = {
       calibrationCta: "Calibrate before your session",
       insight: "Insight",
       marketRefresh: "Refresh",
+      marketStale: "No live data \u2014 search unavailable, summary from the model's own knowledge",
       moodPrefix: "Market mood: ",
       insightConfident: "Recent trades show confidence is paying off \u2014 keep your size consistent.",
       insightFocus: "Focus on consistency. Add a few more trades for a real pattern to show up.",
@@ -4297,6 +4306,32 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       cancelled = true;
     };
   }, [tradingAsset, lang]);
+  // V0.3 — вторая, персональная часть инсайта. Считается ТОЛЬКО когда уже есть рыночный снапшот,
+  // и пересчитывается только при смене снапшота/статистики/часа (см. marketLinkStamp) — не на
+  // каждом рендере Home.
+  const [marketLink, setMarketLink] = useState(null);
+  const marketDigest = useMemo(() => aiMarketPersonalDigest(entries, analytics), [entries, analytics]);
+  const marketLinkStamp = useMemo(
+    () => marketSnapshot ? aiHashContext({ s: marketSnapshot.summary || "", f: marketSnapshot.facts || [], d: marketDigest, l: lang, h: marketSnapshot.hourBucket }) : null,
+    [marketSnapshot, marketDigest, lang]
+  );
+  useEffect(() => {
+    if (!marketSnapshot || !tradingAsset) {
+      setMarketLink(null);
+      return;
+    }
+    let cancelled = false;
+    getMarketLink(tradingAsset, marketSnapshot, marketDigest, lang).then((text) => {
+      if (!cancelled && text) setMarketLink(text);
+    }).catch((err) => {
+      console.error("mind.exe market link failed:", err);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // marketLinkStamp покрывает snapshot+digest+lang; остальное читается внутри и не должно
+    // само по себе перезапускать запрос.
+  }, [marketLinkStamp, tradingAsset]);
   const refreshMarketSnapshot = async () => {
     if (marketRefreshing) return;
     if (!tradingAsset) {
@@ -4425,7 +4460,13 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
         ".",
         " ",
         marketSnapshot?.summary || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus)
-      ] })
+      ] }),
+      // V0.3 — персональная связка рынка со статистикой этого трейдера. Отдельным абзацем, чтобы
+      // рыночный факт и вывод про себя не смешивались в одно предложение.
+      marketLink && /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mt-2", style: { color: BASE.inkDim }, children: marketLink }),
+      // Пометка появляется, только когда сводка построена БЕЗ доступа к вебу — то есть это
+      // знание модели, а не текущий рынок.
+      marketSnapshot && marketSnapshot.grounded === false && /* @__PURE__ */ jsx("p", { className: "text-[10.5px] mt-2", style: { color: BASE.inkFaint }, children: t.home.marketStale })
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 divide-x", style: { borderColor: BASE.line }, children: [
@@ -7361,12 +7402,30 @@ function marketFocusText(assetClass) {
   if (assetClass === "stocks") return "the stock market \u2014 major indices, macro catalysts, earnings or data releases that could move equities in the next few hours";
   return "the crypto market (BTC, ETH and majors) \u2014 price action, the dominant narrative, and anything that could move prices in the next few hours";
 }
+// V0.3 — прежний промпт просил буквально "summarize the market right now" в 1-2 предложения и
+// ничего больше, поэтому на выходе стабильно получалась вода вида "рынок консолидируется, ожидая
+// сигналов". Теперь от модели требуется проверяемая конкретика: каждое предложение должно
+// содержать число, уровень или названное событие, а список типовых пустых формулировок запрещён
+// явно. Дополнительно возвращается facts[] — короткие фактические строки, которые второй слой
+// (aiGenerateMarketLink) связывает со статистикой конкретного трейдера.
 function buildMarketPrompt(assetClass, lang, grounded) {
   const langName = lang === "en" ? "English" : "Russian";
-  const lead = grounded ? "Using current, real information from the web, summarize" : "Summarize, using your best current knowledge,";
+  const lead = grounded ? "Using current, real information from the web, describe" : "Describe, using your best current knowledge,";
   return `${lead} ${marketFocusText(assetClass)} right now.
+
+Hard requirements for "summary" and "facts":
+- Every sentence must carry something verifiable: a price, a percentage move, a concrete level,
+  a named asset, or a named event with its timing. No sentence without one.
+- Banned as empty filler \u2014 do not write these or anything equivalent: "cautious optimism",
+  "the market is consolidating", "awaiting new signals", "moderate volatility", "mixed sentiment",
+  "traders are watching closely", "holding its positions".
+- Name what actually moved and by how much, and what specifically is driving it, instead of
+  characterising the mood in the abstract.
+- If you are not confident about a number, leave it out rather than inventing it \u2014 but then say
+  plainly what is unknown instead of filling the space with a generic sentence.
+
 Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
-{"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 concise sentences in ${langName}>","btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
+{"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 sentences in ${langName}, each with a concrete number, level or named event>","facts":["<up to 3 short factual strings in ${langName}, each with a number or a named event>"],"btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
 }
 async function aiRunMarketModel(model, prompt) {
   const result = await model.generateContent(prompt);
@@ -7378,6 +7437,8 @@ async function aiRunMarketModel(model, prompt) {
   return {
     moodLabel: typeof parsed.moodLabel === "string" && parsed.moodLabel.trim() ? parsed.moodLabel.trim() : null,
     summary: typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : null,
+    // V0.3 — факты нужны второму слою (персональная связка); в UI напрямую не выводятся.
+    facts: Array.isArray(parsed.facts) ? parsed.facts.filter((f) => typeof f === "string" && f.trim()).map((f) => f.trim()).slice(0, 3) : [],
     btcDominance: num(parsed.btcDominance),
     sentimentScore: num(parsed.sentimentScore),
     sentimentLabel: typeof parsed.sentimentLabel === "string" && parsed.sentimentLabel.trim() ? parsed.sentimentLabel.trim() : null
@@ -7385,15 +7446,103 @@ async function aiRunMarketModel(model, prompt) {
 }
 async function aiFetchMarketSnapshot(assetClass, lang) {
   try {
-    return await aiRunMarketModel(aiGetMarketModel(), buildMarketPrompt(assetClass, lang, true));
+    // V0.3 — grounded: true означает, что сводка построена по реальным данным из веба.
+    // При false (fallback ниже) UI показывает пометку "без свежих данных", а не выдаёт
+    // догадку модели за актуальную картину рынка.
+    const snap = await aiRunMarketModel(aiGetMarketModel(), buildMarketPrompt(assetClass, lang, true));
+    return { ...snap, grounded: true };
   } catch (groundedErr) {
     // Google Search grounding (tools:[{googleSearch:{}}]) may not be supported for this
     // model/SDK combo, or may refuse strict-JSON output while grounded — either way, fall back to
     // a plain (non-grounded) call so the insight still updates with Gemini's own knowledge instead
     // of silently doing nothing. Logged clearly so the actual cause is visible in devtools.
     console.error("mind.exe market snapshot: grounded call failed, retrying without Search tool:", groundedErr);
-    return await aiRunMarketModel(aiGetMarketModelPlain(), buildMarketPrompt(assetClass, lang, false));
+    const snap = await aiRunMarketModel(aiGetMarketModelPlain(), buildMarketPrompt(assetClass, lang, false));
+    return { ...snap, grounded: false };
   }
+}
+// ---- V0.3: персональный слой над рыночным снапшотом --------------------------
+// Рыночная сводка общая для всех (shared-кэш по классу актива), поэтому персонализировать её
+// внутри того же вызова нельзя. Второй слой берёт уже готовый снапшот + компактную выжимку из
+// СУЩЕСТВУЮЩЕЙ аналитики этого пользователя и просит одну фразу-связку: чем текущий рынок
+// опасен или удобен именно для его статистики. Никакой новой системы: та же модель aiGetModel()
+// (её system instruction запрещает выдумывать факты вне переданных данных), тот же storageGet/
+// storageSet, ключ приватный (shared=false) — то есть лежит в users/{uid}/data и не может
+// утечь другому пользователю.
+function aiMarketPersonalDigest(entries, analytics) {
+  const rr = analytics?.rrStats || null;
+  const violation = (id) => analytics?.discipline?.violations?.find((v) => v.id === id)?.value ?? null;
+  const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
+  const closed = validEntries.filter(isEntryClosed);
+  const sorted = [...closed].sort((a, b) => a.date - b.date);
+  const streaks = aiComputeStreaks(sorted);
+  const tagCount = {};
+  closed.forEach((e) => {
+    if (e.tag) tagCount[e.tag] = (tagCount[e.tag] || 0) + 1;
+  });
+  const topTag = Object.entries(tagCount).sort((a, b) => b[1] - a[1])[0] || null;
+  return {
+    closedTrades: closed.length,
+    winRate: aiSafeNum(rr?.winRate),
+    avgRealizedRR: aiSafeNum(rr?.avgRealizedRR),
+    avgWinR: aiSafeNum(rr?.avgWinR),
+    avgLossR: aiSafeNum(rr?.avgLossR),
+    maxLossStreak: aiSafeNum(streaks?.maxLossStreak),
+    maxWinStreak: aiSafeNum(streaks?.maxWinStreak),
+    awarenessScore: aiSafeNum(analytics?.awareness?.score?.value),
+    disciplineScore: aiSafeNum(analytics?.discipline?.score?.value),
+    riskStability: aiSafeNum(analytics?.risk?.stability?.value),
+    revengeRatePct: violation("revenge_rate"),
+    overtradingDaysPct: violation("overtrading_days"),
+    riskChangeAfterLossPct: violation("risk_after_loss"),
+    mostUsedSetup: topTag ? { tag: topTag[0], count: topTag[1] } : null,
+    topPatternInsight: (analytics?.insights || []).find((i) => i && i.text)?.text || null
+  };
+}
+var AI_MARKET_LINK_TASK = `You are writing ONE short sentence for a trading journal app's home screen.
+You get MARKET (a snapshot of the current market, already gathered) and TRADER (this specific
+trader's own journal statistics, already computed by the app).
+
+Write a single sentence, in the language given by TRADER.lang, that connects the market situation
+to THIS trader's actual numbers. Rules:
+- Reference at least one concrete number from TRADER (win rate, average RR, streak, discipline
+  metric, setup count) and at least one concrete thing from MARKET.
+- No generic trading advice, no motivational phrasing, no diagnosis of the person.
+- If TRADER.closedTrades is under 5, say plainly that there isn't enough of their own history yet
+  to tie the market to their statistics, and name what's missing \u2014 don't invent a connection.
+- Never invent numbers that are not in MARKET or TRADER.
+- Return ONLY the sentence itself. No JSON, no quotes, no markdown.`;
+async function aiGenerateMarketLink(snapshot, digest, lang) {
+  const payload = {
+    MARKET: { moodLabel: snapshot?.moodLabel || null, summary: snapshot?.summary || null, facts: snapshot?.facts || [], grounded: snapshot?.grounded !== false },
+    TRADER: { ...digest, lang: lang === "en" ? "en" : "ru" }
+  };
+  const text = await aiCallGemini(`${AI_MARKET_LINK_TASK}
+
+${JSON.stringify(payload)}`);
+  return text.replace(/^["'\s]+|["'\s]+$/g, "");
+}
+function marketLinkKey(assetClass) {
+  return `market-link:${assetClass}`;
+}
+// Кэш: одна генерация на час на класс актива, и дополнительно сбрасывается, если изменились
+// либо рыночная сводка, либо статистика трейдера. Запрос уходит только из useEffect, который
+// зависит от этих же хэшей, — то есть не на каждый рендер Home.
+async function getMarketLink(assetClass, snapshot, digest, lang) {
+  if (!assetClass || !snapshot) return null;
+  const bucket = marketHourBucket();
+  const stamp = aiHashContext({ s: snapshot?.summary || "", f: snapshot?.facts || [], d: digest, l: lang });
+  try {
+    const res = await caWithTimeout(storageGet(marketLinkKey(assetClass), false), 1e4, "market_link_cache_timeout");
+    const cached = res?.value ? JSON.parse(res.value) : null;
+    if (cached && cached.hourBucket === bucket && cached.stamp === stamp && cached.text) return cached.text;
+  } catch (_) {
+  }
+  const text = await caWithTimeout(aiGenerateMarketLink(snapshot, digest, lang), 2e4, "market_link_timeout");
+  if (!text) return null;
+  storageSet(marketLinkKey(assetClass), JSON.stringify({ hourBucket: bucket, stamp, text }), false).catch(() => {
+  });
+  return text;
 }
 function marketHourBucket() {
   return Math.floor(Date.now() / 36e5);
