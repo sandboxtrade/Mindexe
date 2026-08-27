@@ -1,22 +1,26 @@
-// mind.exe — V0.7
+// mind.exe — V0.9
 //
-// V0.7 — аудит Gemini и Firebase. Найдено и исправлено:
-//  1) Ни один вызов Gemini, кроме калибровки и совета на Главной, не имел таймаута.
-//     generateContent() у Firebase AI Logic при потере сети может не резолвиться никогда —
-//     значит «Анализирую…» в Coach, распознавание скриншота, полировка заметки и рыночная
-//     сводка могли висеть бесконечно. Таймаут теперь стоит внутри aiCallGemini (30с),
-//     aiCallGeminiVision (45с), aiPolishText (20с) и aiRunMarketModel (30с) — то есть в одной
-//     точке на каждый тип вызова, а не у каждого потребителя.
-// Проверено без замечаний: инициализация Firebase (app/auth/firestore/AI Logic/App Check),
-// один общий aiLogic на все модели, изоляция данных по uid в fsDocRef, сброс состояния Coach
-// при смене аккаунта, очистка state при logout, обработка ошибок и fallback во всех AI-путях.
+// V0.9 — чёрный экран после сплэша. Причин было две, обе исправлены:
+//  1) ГЛАВНАЯ: loadProfile/loadMedia идут через getDoc, у которого нет собственного таймаута.
+//     Если запрос повисает (типично для iOS PWA на плохой сети), промис не резолвится и не
+//     отклоняется — catch в tryLoad не срабатывает, setLoaded(true) не вызывается никогда,
+//     и приложение остаётся в состоянии «загружается» навсегда. Обе загрузки обёрнуты в
+//     caWithTimeout (15с профиль, 20с медиа): зависание превращается в обычную ошибку,
+//     срабатывает существующий retry, затем штатный путь с тостом и отключённым автосейвом
+//     (canPersistRef остаётся false, поэтому пустой стейт не перезапишет облако).
+//  2) Между «сплэш закончился» и «профиль загрузился» не рендерилось НИЧЕГО: при
+//     authStatus === "checking" и при authenticated с loaded === false ни одна ветка не
+//     подходила, экран был просто чёрным. Добавлен компонент BootLoading — теперь любое
+//     промежуточное состояние показывает индикатор, а не пустоту.
 //
-// V0.6: сохранение черновика стратегии при уходе с экрана; висящие запятые в children;
-//       breakAfter для заголовков групп настроек.
-// V0.5: прозрачная шапка без sticky/blur; локализованы Stop Loss, Take Profit, ENTRY, EXIT,
-//       W/L/BE, «Average RR и Win Rate»; настройки сгруппированы.
-// V0.4: блок «Инсайт» — совет по собственному журналу; поле «Твоя стратегия» в настройках
-//       во всех AI-контекстах; правило «стиль торговли — не ошибка».
+// V0.8: safe-area для шапки (регрессия V0.5); сетка рыночных метрик; сглаженный Sparkline
+//       с заливкой.
+// V0.7: таймауты на все вызовы Gemini (aiCallGemini 30с, vision 45с, polish 20с, market 30с).
+// V0.6: сохранение черновика стратегии при уходе с экрана; висящие запятые в children.
+// V0.5: прозрачная шапка; локализованы Stop Loss/Take Profit/ENTRY/EXIT/W-L-BE; настройки
+//       сгруппированы (Профиль / Торговля / Приложение / Данные и сброс).
+// V0.4: блок «Инсайт» — совет по собственному журналу; поле «Твоя стратегия» во всех
+//       AI-контекстах; правило «стиль торговли — не ошибка».
 // V0.3: промпт рыночной сводки требует конкретику, снапшот помечается grounded.
 // V0.2: скрыты полосы прокрутки; withR в Patterns; caWithTimeout в калибровке; 6 новых шкал.
 //
@@ -3497,6 +3501,16 @@ var SPLASH_BLACKHOLE_MASK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAaoAA
 // on screen as the fallback if autoplay is refused or the file 404s, so the splash can never be
 // blank. muted + playsInline + autoPlay is the combination iOS Safari requires for inline autoplay.
 var SPLASH_VIDEO_SRC = "./splash.mp4";
+// V0.9 — раньше между «сплэш закончился» и «профиль загрузился» не рендерилось НИЧЕГО: при
+// authStatus === "checking" (Firebase ещё не ответил, кто вошёл) или при authenticated с
+// loaded === false экран оставался просто чёрным. Теперь эти состояния показывают
+// нейтральный индикатор, поэтому даже долгая загрузка не выглядит как зависшее приложение.
+function BootLoading({ accent }) {
+  return /* @__PURE__ */ jsx("div", { className: "fixed inset-0 flex items-center justify-center", style: { background: BASE.bg }, children: /* @__PURE__ */ jsxs("div", { className: "flex flex-col items-center gap-4", children: [
+    /* @__PURE__ */ jsx("div", { className: "w-8 h-8 rounded-full", style: { border: `2px solid ${BASE.line}`, borderTopColor: accent, animation: "spin 0.9s linear infinite" } }),
+    /* @__PURE__ */ jsx("span", { className: "text-[11px] tracking-[0.14em] uppercase", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: "mind.exe" })
+  ] }) });
+}
 function Splash({ accent, fading }) {
   const videoRef = useRef(null);
   const [flare, setFlare] = useState(false);
@@ -3718,14 +3732,37 @@ function WeekDots({ week, accent }) {
     /* @__PURE__ */ jsx("span", { className: "w-2 h-2 rounded-full transition-all duration-300", style: { background: d.filled ? accent : "transparent", border: `1px solid ${d.filled ? accent : BASE.line}` } })
   ] }, i)) });
 }
-function Sparkline({ points, color, width = 68, height = 26 }) {
+// V0.8 — раньше это была голая ломаная в 1.6px с острыми углами: при двух-трёх сделках она
+// выглядела как случайная «галочка» в углу карточки. Теперь линия сглажена (кубическая кривая
+// по средним точкам — без библиотек), под ней мягкая заливка тем же цветом, а последнее
+// значение отмечено точкой, чтобы читалось направление.
+function Sparkline({ points, color, width = 84, height = 30 }) {
   if (points.length < 2) return null;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const range = max - min || 1;
+  const padY = 4;
   const stepX = width / (points.length - 1);
-  const coords = points.map((v, i) => `${(i * stepX).toFixed(1)},${(height - 3 - (v - min) / range * (height - 6)).toFixed(1)}`).join(" ");
-  return /* @__PURE__ */ jsx("svg", { width, height, viewBox: `0 0 ${width} ${height}`, children: /* @__PURE__ */ jsx("polyline", { points: coords, fill: "none", stroke: color, strokeWidth: "1.6", strokeLinecap: "round", strokeLinejoin: "round" }) });
+  const xy = points.map((v, i) => [i * stepX, height - padY - (v - min) / range * (height - padY * 2)]);
+  let line = `M ${xy[0][0].toFixed(1)} ${xy[0][1].toFixed(1)}`;
+  for (let i = 1; i < xy.length; i++) {
+    const [px, py] = xy[i - 1];
+    const [cx, cy] = xy[i];
+    const mx = (px + cx) / 2;
+    line += ` C ${mx.toFixed(1)} ${py.toFixed(1)}, ${mx.toFixed(1)} ${cy.toFixed(1)}, ${cx.toFixed(1)} ${cy.toFixed(1)}`;
+  }
+  const area = `${line} L ${width} ${height} L 0 ${height} Z`;
+  const gradId = `spark-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const last = xy[xy.length - 1];
+  return /* @__PURE__ */ jsxs("svg", { width, height, viewBox: `0 0 ${width} ${height}`, style: { overflow: "visible" }, children: [
+    /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsxs("linearGradient", { id: gradId, x1: "0", y1: "0", x2: "0", y2: "1", children: [
+      /* @__PURE__ */ jsx("stop", { offset: "0%", stopColor: color, stopOpacity: "0.22" }),
+      /* @__PURE__ */ jsx("stop", { offset: "100%", stopColor: color, stopOpacity: "0" })
+    ] }) }),
+    /* @__PURE__ */ jsx("path", { d: area, fill: `url(#${gradId})`, stroke: "none" }),
+    /* @__PURE__ */ jsx("path", { d: line, fill: "none", stroke: color, strokeWidth: "1.5", strokeLinecap: "round", strokeLinejoin: "round", opacity: "0.9" }),
+    /* @__PURE__ */ jsx("circle", { cx: last[0], cy: last[1], r: "2", fill: color })
+  ] });
 }
 function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
   const total = entries.length;
@@ -4041,28 +4078,18 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       tile.id
     )) })
     ] }),
-    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between text-xs px-1 pt-3", style: { borderTop: `1px solid ${BASE.line}`, color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
-      (!tradingAsset || tradingAsset === "crypto") && /* @__PURE__ */ jsxs("span", { children: [
-        "BTC.D ",
-        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink }, children: [
-          marketSnapshot?.btcDominance ?? BTC_DOMINANCE,
-          "%"
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxs("span", { children: [
-        "F&G ",
-        /* @__PURE__ */ jsxs("span", { style: { color: BASE.ink }, children: [
-          marketSnapshot?.sentimentScore ?? FEAR_GREED.score,
-          " \xB7 ",
-          marketSnapshot?.sentimentLabel || FEAR_GREED.label
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxs("span", { style: { fontFamily: "var(--font-display)" }, children: [
-        t.home.market,
-        ": ",
-        moodKey
-      ] })
-    ] })
+    /* V0.8 — раньше три показателя лежали в flex justify-between: длинная подпись вроде
+       «Экстремальная жадность» переносилась и разъезжалась относительно соседей. Теперь это
+       сетка равных колонок «подпись сверху / значение снизу» — переносится только значение,
+       внутри своей колонки, и строка остаётся выровненной при любой длине текста. */
+    /* @__PURE__ */ jsx("div", { className: "pt-3.5 px-1", style: { borderTop: `1px solid ${BASE.line}` }, children: /* @__PURE__ */ jsx("div", { className: "grid gap-3", style: { gridTemplateColumns: `repeat(${!tradingAsset || tradingAsset === "crypto" ? 3 : 2}, minmax(0, 1fr))` }, children: [
+      (!tradingAsset || tradingAsset === "crypto") && { key: "btcd", label: "BTC.D", value: `${marketSnapshot?.btcDominance ?? BTC_DOMINANCE}%`, mono: true },
+      { key: "fng", label: "F&G", value: `${marketSnapshot?.sentimentScore ?? FEAR_GREED.score} \xB7 ${marketSnapshot?.sentimentLabel || FEAR_GREED.label}`, mono: true },
+      { key: "mood", label: t.home.market, value: moodKey, mono: false }
+    ].filter(Boolean).map((m) => /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[9.5px] uppercase tracking-[0.08em] mb-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label }),
+      /* @__PURE__ */ jsx("div", { className: "text-[11.5px] leading-snug", style: { color: BASE.inkDim, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)" }, children: m.value })
+    ] }, m.key)) }) })
   ] });
 }
 function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
@@ -9338,10 +9365,15 @@ function MindExe() {
         return;
       }
       try {
-        const profile = await loadProfile(userId);
+        // V0.9 — getDoc не имеет собственного таймаута. Если запрос повисает (типичный случай
+        // для iOS PWA при плохой сети), промис не резолвится и не отклоняется, catch ниже не
+        // срабатывает, setLoaded(true) не вызывается никогда — и после сплэша остаётся чёрный
+        // экран. Таймаут переводит зависание в обычную ошибку: сработает retry, а затем
+        // штатный путь "загрузить не удалось" с тостом и отключённым автосейвом.
+        const profile = await caWithTimeout(loadProfile(userId), 15e3, "profile_load_timeout");
         if (cancelled) return;
         const mediaIds = Array.isArray(profile?.journal?.entries) ? profile.journal.entries.map((e) => e?.id).filter(Boolean) : [];
-        const media = await loadMedia(userId, mediaIds);
+        const media = await caWithTimeout(loadMedia(userId, mediaIds), 2e4, "media_load_timeout");
         if (cancelled) return;
         if (profile) {
           const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
@@ -9743,6 +9775,8 @@ function MindExe() {
            headings and figures keeps existing layouts from re-wrapping. */
         h1, h2, h3 { letter-spacing: -0.015em; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        /* V0.9 — для BootLoading: Tailwind-класс animate-spin здесь не используется, вращение задаётся инлайн. */
+        @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes logoPulseFade { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.04); } }
         @keyframes softReveal { from { opacity: 0; filter: blur(5px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: translateY(0); } }
         @keyframes toastIn { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
@@ -9954,6 +9988,7 @@ function MindExe() {
         .stagger > *:nth-child(6) { animation-delay: 300ms; }
       ` }),
     showSplash && /* @__PURE__ */ jsx(Splash, { accent, fading: splashFading }),
+    !showSplash && (authStatus === "checking" || authStatus === "authenticated" && !migrateFor && !introResolved && !showBootIntro) && /* @__PURE__ */ jsx(BootLoading, { accent }),
     !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin, onGoogle: handleGoogleLogin }),
     !showSplash && authStatus === "authenticated" && migrateFor && /* @__PURE__ */ jsx(LegacyMigratePrompt, { accent, onMigrate: handleMigrate, onSkip: handleSkipMigrate }),
     !showSplash && authStatus === "authenticated" && !migrateFor && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { accent, name, lang, onDone: () => setShowBootIntro(false) }),
@@ -9976,8 +10011,11 @@ function MindExe() {
             // залитая на 88% полоса с blur, которая при открытом приложении читалась как вторая
             // «чёлка» поверх системной. Теперь логотип просто стоит в начале страницы и уезжает
             // вместе с контентом; фон один на весь экран.
-            className: "-mx-5 px-5 pt-6 pb-5 relative md:hidden",
-            style: { background: "transparent" },
+            // V0.8 — вместе с sticky в V0.5 пропал и учёт системной чёлки: логотип оказался
+            // вплотную к статус-бару (viewport-fit=cover в index.html отдаёт весь экран, а
+            // safe-area раньше компенсировалась запасом pt-8 у залитой панели).
+            className: "-mx-5 px-5 pb-5 relative md:hidden",
+            style: { background: "transparent", paddingTop: "calc(env(safe-area-inset-top, 0px) + 18px)" },
             children: [
               /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
                 /* @__PURE__ */ jsx("div", {}),
