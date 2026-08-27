@@ -1,4 +1,23 @@
-// mind.exe — V1.1
+// mind.exe — V1.2
+//
+// V1.2 — исправлена ЛОГИКА, а не только оболочка. В V1.1 шкалы были новым интерфейсом
+//        поверх старой модели: четыре процента сводились в две оси x/y, и всё приложение
+//        читало только их. Из-за этого «уверенность 70% + страх 100%» превращалось в
+//        x=35, y=85 и подписывалось как «Спокойно и ровно» — прямо противоположное тому,
+//        что отметил трейдер. Теперь исходные данные — сами проценты:
+//        1) Подпись состояния (в форме и в журнале) собирается из процентов и называет
+//           конкретные эмоции с числами, а при одновременно набранных противоположных
+//           полюсах помечает состояние как смешанное (emotionValuesText / emotionConflict).
+//        2) Gemini получает проценты по каждой эмоции плюс conflict, а не две усреднённые
+//           оси; в системный промпт добавлено, что эмоции независимы и усреднять
+//           противоположные нельзя (aiEmotionState).
+//        3) Психологический движок: pd_confidenceTension, pd_fear и pd_tooCalm проверяют
+//           проценты напрямую. «Слишком спокойный» больше не срабатывает, если рядом
+//           высокий страх или напряжение.
+//        x/y сохраняются и считаются из процентов по-прежнему — на них построены зоны и
+//        скаттер паттернов, и на них же держатся все записи, созданные до появления шкал:
+//        у них процентов нет, и для них везде оставлен прежний путь через оси.
+//        Шаг ползунка 1% вместо 5%, дорожка показывает заполнение.
 //
 // V1.1 — карта эмоций при открытии и закрытии сделки переделана с квадрата (нужно было
 //        ставить точку) на набор процентных шкал: уверенность 70%, страх 10% и т.д.
@@ -297,6 +316,9 @@ var STRINGS = {
       emotionQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0432 \u043C\u043E\u043C\u0435\u043D\u0442 \u0432\u0445\u043E\u0434\u0430 \u0432 \u0441\u0434\u0435\u043B\u043A\u0443?",
       emotionExitQuestion: "\u0427\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u043B \u0441\u0440\u0430\u0437\u0443 \u043F\u043E\u0441\u043B\u0435 \u0437\u0430\u043A\u0440\u044B\u0442\u0438\u044F?",
       emotionExitOptional: "\u041C\u043E\u0436\u043D\u043E \u043F\u0440\u043E\u043F\u0443\u0441\u0442\u0438\u0442\u044C \u2014 \u043D\u043E \u0438\u043C\u0435\u043D\u043D\u043E \u0440\u0430\u0437\u043D\u0438\u0446\u0430 \u0434\u043E/\u043F\u043E\u0441\u043B\u0435 \u043F\u043E\u043A\u0430\u0437\u044B\u0432\u0430\u0435\u0442 \u0440\u0435\u0430\u043A\u0446\u0438\u044E \u043D\u0430 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442.",
+      // V1.2 — состояние теперь описывается самими процентами, а не клеткой сетки.
+      emotionMixed: "смешанное",
+      emotionFlat: "без выраженных эмоций",
       stateBeforeLabel: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0434\u043E",
       stateAfterLabel: "\u0421\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043F\u043E\u0441\u043B\u0435",
       save: "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u044C",
@@ -598,6 +620,8 @@ var STRINGS = {
       emotionQuestion: "What did you feel the moment you entered?",
       emotionExitQuestion: "What did you feel right after closing?",
       emotionExitOptional: "Optional \u2014 but the before/after gap is what shows your reaction to the result.",
+      emotionMixed: "mixed",
+      emotionFlat: "no strong emotions",
       stateBeforeLabel: "State before",
       stateAfterLabel: "State after",
       save: "Save entry",
@@ -2515,10 +2539,27 @@ function pe_lessonSimilarity(aWords, bWords) {
   const union = (/* @__PURE__ */ new Set([...a, ...b])).size;
   return union ? intersection / union : 0;
 }
+// V1.2 — эмоциональные предикаты паттернов. Раньше они читали только x/y, а те сводят
+// четыре шкалы в две оси и теряют одновременность: уверенность 70% + страх 100% давали
+// x=35, y=85 и попадали в «слишком спокойный», хотя это ровно противоположный случай.
+// Теперь у записей со шкалами проверяются сами проценты, а x/y остаются запасным путём
+// для записей, созданных до перехода на шкалы (у них процентов физически нет).
+function pe_emo(t) {
+  return normalizeEmotions(t?.emotions, "entry");
+}
+function pe_match(t, byPct, byAxes) {
+  const v = pe_emo(t);
+  return v ? byPct(v) : byAxes(t);
+}
 function pd_confidenceTension(complete, lang = "ru") {
-  const group = complete.filter((t) => t.x >= 80 && t.y <= 20);
+  const test = (t) => pe_match(
+    t,
+    (v) => v.confidence >= 60 && v.tension >= 50,
+    (t2) => t2.x >= 80 && t2.y <= 20
+  );
+  const group = complete.filter(test);
   if (group.length < PATTERN_MIN_GROUP) return null;
-  const rest = complete.filter((t) => !(t.x >= 80 && t.y <= 20));
+  const rest = complete.filter((t) => !test(t));
   return lang === "en" ? {
     id: "confidence_tension",
     title: "Confidence + tension",
@@ -2536,9 +2577,10 @@ function pd_confidenceTension(complete, lang = "ru") {
   };
 }
 function pd_fear(complete, lang = "ru") {
-  const group = complete.filter((t) => t.x <= 20);
+  const test = (t) => pe_match(t, (v) => v.fear >= 60, (t2) => t2.x <= 20);
+  const group = complete.filter(test);
   if (group.length < PATTERN_MIN_GROUP) return null;
-  const rest = complete.filter((t) => t.x > 20);
+  const rest = complete.filter((t) => !test(t));
   return lang === "en" ? {
     id: "fear",
     title: "Entering out of fear",
@@ -2556,9 +2598,16 @@ function pd_fear(complete, lang = "ru") {
   };
 }
 function pd_tooCalm(complete, lang = "ru") {
-  const group = complete.filter((t) => t.y >= 80);
+  // Спокойствие засчитывается только когда оно НЕ соседствует с сильным страхом или
+  // напряжением: иначе «спокоен на 70% и одновременно боится на 100%» попадало сюда.
+  const test = (t) => pe_match(
+    t,
+    (v) => v.calm >= 70 && v.tension <= 30 && v.fear <= 30,
+    (t2) => t2.y >= 80
+  );
+  const group = complete.filter(test);
   if (group.length < PATTERN_MIN_GROUP) return null;
-  const rest = complete.filter((t) => t.y < 80);
+  const rest = complete.filter((t) => !test(t));
   return lang === "en" ? {
     id: "too_calm",
     title: "Too calm",
@@ -4314,6 +4363,67 @@ function pointToEmotions(x, y, variant = "entry") {
     [k[3]]: dy < 0 ? emotionClampPct(-dy) : 0
   };
 }
+// V1.2 — состояние читается ИЗ ПРОЦЕНТОВ, а не из клетки сетки. Прежняя схема сводила
+// четыре шкалы в две оси и теряла конфликт: уверенность 70% + страх 100% давали x=35,
+// y=85 и подпись «Спокойно и ровно», хотя это прямо противоположное — сильный внутренний
+// конфликт. Ниже проценты остаются исходными данными, а x/y считаются из них только для
+// графиков и зон, которые построены на осях (скаттер паттернов, ta_zoneStats).
+//
+// Конфликт = оба полюса одной оси набраны высоко одновременно. По каждой оси считается
+// отдельно: страх/уверенность и напряжение/спокойствие.
+function emotionConflict(values, variant = "entry") {
+  if (!values) return { x: 0, y: 0, max: 0, has: false };
+  const k = emotionScaleKeys(variant);
+  const g = (n) => emotionClampPct(values[n]);
+  // min(a,b) — насколько сильно выражен более слабый из двух противоположных полюсов.
+  // Оба по 100 -> конфликт 100. Один 100, второй 0 -> конфликта нет, состояние однозначное.
+  const cx = Math.min(g(k[0]), g(k[1]));
+  const cy = Math.min(g(k[2]), g(k[3]));
+  const max = Math.max(cx, cy);
+  return { x: cx, y: cy, max, has: max >= 40 };
+}
+// Общая насыщенность: насколько вообще что-то чувствовалось. Все ползунки на нуле —
+// это не «нейтрально и ровно», это «ничего не отмечено», и подпись должна отличаться.
+function emotionIntensity(values, variant = "entry") {
+  if (!values) return 0;
+  const k = emotionScaleKeys(variant);
+  return Math.max(...k.map((n) => emotionClampPct(values[n])));
+}
+// Подпись состояния: перечисление того, что реально отмечено, от сильного к слабому.
+// Именно эта строка теперь показывается трейдеру и в журнале, вместо формулировки из
+// 3x3-сетки, которая при смешанных состояниях врала.
+function emotionValuesText(values, t, variant = "entry") {
+  if (!values) return null;
+  const k = emotionScaleKeys(variant);
+  const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
+  const labels = Array.isArray(eg.scales) ? eg.scales : k;
+  const parts = k.map((key, i) => ({ label: labels[i], pct: emotionClampPct(values[key]) })).filter((p) => p.pct > 0).sort((a, b) => b.pct - a.pct);
+  if (parts.length === 0) return t.newEntry.emotionFlat;
+  const body = parts.slice(0, 3).map((p) => `${p.label} ${p.pct}%`).join(" \u00B7 ");
+  return emotionConflict(values, variant).has ? `${body} \u2014 ${t.newEntry.emotionMixed}` : body;
+}
+// Цвет подписи. Сильный конфликт всегда тянет в предупреждающий, даже если по балансу
+// осей состояние выглядит благополучным — иначе «страх 100%» подсвечивался бы зелёным.
+function emotionValuesColor(values, variant = "entry") {
+  if (!values) return BASE.inkFaint;
+  if (emotionIntensity(values, variant) === 0) return BASE.inkFaint;
+  const c = emotionConflict(values, variant);
+  const p = emotionsToPoint(values, variant);
+  const base = emotionPositionColor(p.x, p.y);
+  if (c.max >= 60) return LOSS;
+  if (c.max >= 40) return WARN;
+  return base;
+}
+// Единая точка входа для журнала: у записей с процентами читаем проценты, у старых
+// (до V1.1) процентов нет — для них остаётся прежняя формулировка по сетке.
+function entryStateText(values, x, y, t, variant = "entry") {
+  const v = normalizeEmotions(values, variant);
+  return v ? emotionValuesText(v, t, variant) : emotionStateText(x, y, t, variant);
+}
+function entryStateColor(values, x, y, variant = "entry") {
+  const v = normalizeEmotions(values, variant);
+  return v ? emotionValuesColor(v, variant) : emotionPositionColor(x, y);
+}
 function normalizeEmotions(v, variant = "entry") {
   if (!v || typeof v !== "object") return null;
   const k = emotionScaleKeys(variant);
@@ -4328,9 +4438,8 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
   const labels = Array.isArray(eg.scales) ? eg.scales : keys;
   const has = !!values;
   const current = values || {};
-  const point = has ? emotionsToPoint(values, variant) : { x: null, y: null };
-  const stateText = has ? emotionStateText(point.x, point.y, t, variant) : null;
-  const stateColor = has ? emotionPositionColor(point.x, point.y) : BASE.inkFaint;
+  const stateText = has ? emotionValuesText(values, t, variant) : null;
+  const stateColor = has ? emotionValuesColor(values, variant) : BASE.inkFaint;
   const setKey = (key, raw) => {
     const next = {};
     for (const k of keys) next[k] = emotionClampPct(current[k]);
@@ -4355,11 +4464,18 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
             type: "range",
             min: 0,
             max: 100,
-            step: 5,
+            step: 1,
             value: pct,
             onChange: (e) => setKey(key, e.target.value),
             className: "w-full emotion-range",
-            style: { accentColor: accent, color: accent }
+            // Заливка дорожки до бегунка рисуется градиентом с жёсткой границей на
+            // текущем проценте: нативного «прогресса» у input[type=range] нет ни в
+            // WebKit, ни в Firefox, а отдельный div поверх ломал бы попадание пальцем.
+            style: {
+              accentColor: accent,
+              color: accent,
+              backgroundImage: `linear-gradient(to right, ${accent} 0%, ${accent} ${pct}%, rgba(255,255,255,0.10) ${pct}%, rgba(255,255,255,0.10) 100%)`
+            }
           }
         )
       ] }, key);
@@ -5314,12 +5430,12 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
           (e.x != null || e.exitX != null) && /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 text-[11px] mb-2 flex-wrap", children: [
             e.x != null && /* @__PURE__ */ jsxs("span", { children: [
               /* @__PURE__ */ jsxs("span", { style: { color: BASE.inkFaint }, children: [t.newEntry.stateBeforeLabel, " "] }),
-              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.x, e.y) }, children: emotionStateText(e.x, e.y, t) })
+              /* @__PURE__ */ jsx("span", { style: { color: entryStateColor(e.emotions, e.x, e.y) }, children: entryStateText(e.emotions, e.x, e.y, t) })
             ] }),
             e.x != null && e.exitX != null && /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u2192" }),
             e.exitX != null && /* @__PURE__ */ jsxs("span", { children: [
               /* @__PURE__ */ jsxs("span", { style: { color: BASE.inkFaint }, children: [t.newEntry.stateAfterLabel, " "] }),
-              /* @__PURE__ */ jsx("span", { style: { color: emotionPositionColor(e.exitX, e.exitY) }, children: emotionStateText(e.exitX, e.exitY, t, "exit") })
+              /* @__PURE__ */ jsx("span", { style: { color: entryStateColor(e.exitEmotions, e.exitX, e.exitY, "exit") }, children: entryStateText(e.exitEmotions, e.exitX, e.exitY, t, "exit") })
             ] })
           ] }),
           e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
@@ -6738,6 +6854,20 @@ function aiHashContext(context) {
   h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
 }
+// V1.2 — сериализация состояния для модели. Проценты идут как есть; conflict считается
+// здесь же, чтобы модель не выводила его сама и не ошибалась.
+function aiEmotionState(values, x, y, variant) {
+  const v = normalizeEmotions(values, variant);
+  if (v) {
+    const k = emotionScaleKeys(variant);
+    const out = {};
+    for (const key of k) out[key] = emotionClampPct(v[key]);
+    out.conflict = emotionConflict(v, variant).max;
+    return out;
+  }
+  if (x == null || y == null) return null;
+  return variant === "exit" ? { axes: { satisfaction: x, calm: y } } : { axes: { confidence: x, calm: y } };
+}
 function aiCompactRecentEntries(entries, limit) {
   // V5.6: this used to slice(-limit) straight off the array. For normally-created trades that is
   // chronological (every new entry gets new Date() and is appended), but an imported journal keeps
@@ -6760,13 +6890,13 @@ function aiCompactRecentEntries(entries, limit) {
     closeType: e.closeType || null,
     // V5.4: state-before-entry and hold time were already on the entry but never reached the model,
     // which is why it could not connect "anxious before the trade" to "closed it by hand early".
-    // Same axes as EmotionGrid/EMOTION_ZONES: x = doubt(0)..confidence(100), y = tension(0)..calm(100).
-    // stateBefore reads the entry grid's confidence/calm axes. stateAfter reads the exit grid,
-    // which since V5.7 measures disappointed\u2192pleased and stung\u2192at peace \u2014 a reaction to the
-    // RESULT, not a read on the setup \u2014 so it's keyed as satisfaction/calm rather than reusing
-    // "confidence" for a different construct.
-    stateBefore: e.x != null && e.y != null ? { confidence: e.x, calm: e.y } : null,
-    stateAfter: e.exitX != null && e.exitY != null ? { satisfaction: e.exitX, calm: e.exitY } : null,
+    // V1.2: модель получала только две сведённые оси и из-за этого не различала
+    // «уверен и спокоен» и «уверен, но при этом сильно боится» — обе ситуации давали
+    // близкие confidence/calm. Теперь отдаются сами проценты по каждой эмоции плюс
+    // conflict (насколько одновременно набраны противоположные полюса). Оси оставлены
+    // как axes только для записей, где процентов нет (созданы до перехода на шкалы).
+    stateBefore: aiEmotionState(e.emotions, e.x, e.y, "entry"),
+    stateAfter: aiEmotionState(e.exitEmotions, e.exitX, e.exitY, "exit"),
     minutesHeld: aiEntryMinutesHeld(e),
     pull: e.pull && e.pull !== "\u2014" ? String(e.pull).slice(0, 200) : null,
     lesson: e.lesson && e.lesson !== "\u2014" ? String(e.lesson).slice(0, 200) : null
@@ -6827,9 +6957,16 @@ Hard requirements:
   slRespectedPct, earlyExitCount, avgRRLostToEarlyExit, avgConfidenceBeforeEarlyExit,
   avgSatisfactionAfterEarlyExit), afterStreakBehavior (riskChangeVsBaselinePct, manualClosePct
   after two wins or two losses), recentClosedSequence (an actual run of recent trades \u2014 you may
-  say "N of the last M"; each carries stateBefore \u2014 confidence/calm going into the trade \u2014 and,
-  where the trader filled it in, stateAfter \u2014 satisfaction/calm right after closing, a reaction to
-  the RESULT, not the same axis as stateBefore), emotionalShift (calmShift plus avgSatisfactionAfter,
+  say "N of the last M"; each carries stateBefore and, where the trader filled it in, stateAfter.
+  Both are self-reported intensities, 0-100, one number PER EMOTION, and they are independent: the
+  trader can report high confidence AND high fear at the same time. stateBefore holds confidence,
+  fear, calm, tension; stateAfter holds pleased, disappointed, atPeace, stung \u2014 a reaction to the
+  RESULT, not a read on the setup. Each also carries conflict (0-100): how strongly OPPOSITE
+  emotions were reported together. High conflict means a genuinely mixed state \u2014 do not describe
+  it as calm or as confident, describe the tension between the two. Never average opposing
+  emotions into a single "mood" number. Older entries instead carry an "axes" object (two combined
+  axes, no per-emotion detail); treat those as coarser and do not compare them numerically with
+  per-emotion entries), emotionalShift (calmShift plus avgSatisfactionAfter,
   split by outcome and by close type \u2014 e.g. wins that still end with low satisfaction or low calm,
   or losses the trader takes calmly),
   journal.repeatedLessons (the same lesson written repeatedly), calibration.statedVsActualNote
@@ -9906,13 +10043,31 @@ function MindExe() {
            photo's own composition already carries the chart-flowing-into-the-hole story the full
            height of a phone screen. Rotating the whole photo is still avoided (perspective/lensing
            reasons carry over unchanged from the original photo). ---------- */
-        /* V1.1 — ползунки шкал эмоций. Дорожка и бегунок задаются явно, иначе на iOS
-           Safari нативный контрол рисуется светлым и теряется на чёрном фоне. */
-        .emotion-range { -webkit-appearance: none; appearance: none; background: transparent; height: 22px; touch-action: pan-y; }
-        .emotion-range::-webkit-slider-runnable-track { height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); }
-        .emotion-range::-moz-range-track { height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); }
-        .emotion-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6.5px; border-radius: 50%; background: currentColor; border: none; }
-        .emotion-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: currentColor; border: none; }
+        /* V1.2 — ползунки шкал эмоций. Дорожка рисуется на самом input (градиент задаётся
+           инлайн и показывает заполнение до текущего значения), а нативные track делаются
+           прозрачными — иначе в WebKit они перекрывают этот градиент. Бегунок описан явно:
+           дефолтный на iOS светлый и на чёрном фоне выглядит инородно. */
+        .emotion-range {
+          -webkit-appearance: none; appearance: none;
+          height: 26px; touch-action: pan-y; cursor: pointer;
+          background-repeat: no-repeat; background-position: center;
+          background-size: 100% 4px; border-radius: 999px;
+        }
+        .emotion-range::-webkit-slider-runnable-track { height: 4px; background: transparent; border: none; }
+        .emotion-range::-moz-range-track { height: 4px; background: transparent; border: none; }
+        .emotion-range::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none;
+          width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
+          background: #fff; border: none;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.55), 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+          transition: transform 0.12s ease-out;
+        }
+        .emotion-range::-moz-range-thumb {
+          width: 18px; height: 18px; border-radius: 50%;
+          background: #fff; border: none;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.55), 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+        }
+        .emotion-range:active::-webkit-slider-thumb { transform: scale(1.12); }
         .splash2-root { background: #000; overflow: hidden; }
         @keyframes splash2RiseFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes splash2RingExpand { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
