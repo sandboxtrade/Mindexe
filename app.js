@@ -1,4 +1,14 @@
-// mind.exe — V1.0
+// mind.exe — V1.1
+//
+// V1.1 — карта эмоций при открытии и закрытии сделки переделана с квадрата (нужно было
+//        ставить точку) на набор процентных шкал: уверенность 70%, страх 10% и т.д.
+//        Модель данных НЕ менялась: x/y остаются двумя осями 0-100 и по-прежнему
+//        единственное, что читают аналитика, психологический движок и Gemini. Проценты
+//        сводятся в те же x/y (emotionsToPoint) и дополнительно сохраняются в
+//        entry.emotions / entry.exitEmotions — только чтобы редактирование записи
+//        открывалось с теми же ползунками. Записи, созданные раньше, читаются как есть:
+//        процентов у них нет, ползунки восстанавливаются из x/y приближённо
+//        (pointToEmotions), сама точка при этом не смещается.
 //
 // V1.0 — две правки:
 //  1) ДОЛГАЯ СТАРТОВАЯ ЗАГРУЗКА. tryLoad ждал loadMedia ДО setLoaded(true). loadMedia делает
@@ -296,6 +306,10 @@ var STRINGS = {
         axisLeft: "\u0421\u0442\u0440\u0430\u0445",
         axisRight: "\u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C",
         hint: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0433\u0434\u0435 \u0431\u044B\u043B \u0442\u044B, \u0430 \u043D\u0435 \u0433\u0434\u0435 \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u043B \u0431\u044B\u0442\u044C",
+        // V1.1 — подписи ползунков. Порядок строго соответствует EMOTION_SCALE_KEYS:
+        // [0] и [1] — полюса оси X (страх↔уверенность), [2] и [3] — полюса оси Y
+        // (нервы↔спокойствие). Порядок менять нельзя: по нему считаются x/y.
+        scales: ["Уверенность", "Страх", "Спокойствие", "Напряжение"],
         states: [
           "\u0421\u0442\u0440\u0430\u0448\u043D\u043E \u0438 \u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
           "\u0422\u0440\u0435\u0432\u043E\u0436\u043D\u043E, \u0431\u0435\u0437 \u0447\u0451\u0442\u043A\u043E\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438",
@@ -319,6 +333,7 @@ var STRINGS = {
         axisLeft: "\u0420\u0430\u0437\u043E\u0447\u0430\u0440\u043E\u0432\u0430\u043D",
         axisRight: "\u0414\u043E\u0432\u043E\u043B\u0435\u043D",
         hint: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0447\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u0443\u0435\u0448\u044C \u043F\u043E \u0438\u0442\u043E\u0433\u0443 \u0441\u0434\u0435\u043B\u043A\u0438, \u0430 \u043D\u0435 \u0442\u043E, \u0447\u0442\u043E \u00AB\u043D\u0443\u0436\u043D\u043E\u00BB \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C",
+        scales: ["Доволен", "Разочарован", "Принял", "Задело"],
         states: [
           "\u041E\u0431\u0438\u0434\u0430 \u0438 \u0437\u043B\u043E\u0441\u0442\u044C",
           "\u0417\u0430\u0434\u0435\u043B\u043E, \u0441\u0430\u043C \u043D\u0435 \u043F\u043E\u043D\u0438\u043C\u0430\u044E \u043F\u043E\u0447\u0435\u043C\u0443",
@@ -592,6 +607,7 @@ var STRINGS = {
         axisLeft: "Fear",
         axisRight: "Confidence",
         hint: "Mark where you actually were, not where you should've been",
+        scales: ["Confidence", "Fear", "Calm", "Tension"],
         states: [
           "Scared and on edge",
           "Uneasy, no clear footing",
@@ -610,6 +626,7 @@ var STRINGS = {
         axisLeft: "Disappointed",
         axisRight: "Pleased",
         hint: "Mark how you feel about the result, not how you think you should feel",
+        scales: ["Pleased", "Disappointed", "At peace", "Stung"],
         states: [
           "Resentful and angry",
           "Stung, not sure why",
@@ -822,6 +839,12 @@ function migrateEntry(e) {
     // where the trader skipped it, and every consumer must handle null rather than assume present.
     exitX: typeof e.exitX === "number" && !isNaN(e.exitX) ? e.exitX : null,
     exitY: typeof e.exitY === "number" && !isNaN(e.exitY) ? e.exitY : null,
+    // V1.1 — проценты по шкалам эмоций. Это НЕ замена x/y, а их источник: x/y считаются
+    // из этих значений и остаются единственным, что читает аналитика. Здесь они хранятся
+    // только чтобы редактирование записи открывалось с теми же ползунками. У записей до
+    // V1.1 поля нет — остаётся null, и все потребители обязаны это допускать.
+    emotions: normalizeEmotions(e.emotions, "entry"),
+    exitEmotions: normalizeEmotions(e.exitEmotions, "exit"),
     exitScreenshots: Array.isArray(e.exitScreenshots) ? e.exitScreenshots : []
   };
 }
@@ -4247,87 +4270,101 @@ function emotionStateText(x, y, t, variant = "entry") {
   const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
   return eg.states[emotionBand(y) * 3 + emotionBand(x)] || null;
 }
-function EmotionGrid({ x, y, onChange, accent, t, variant = "entry" }) {
-  const ref = useRef(null);
-  const [dragging, setDragging] = useState(false);
-  const [justPlaced, setJustPlaced] = useState(false);
+// V1.1 — вместо квадрата, по которому нужно было ставить точку, состояние набирается
+// ползунками в процентах (уверенность 70%, страх 10% и т.д.). Модель данных НЕ менялась:
+// x/y по-прежнему две оси 0-100, на которых держится вся аналитика (ta_zoneStats,
+// pd_confidenceTension, скаттер паттернов, emotionStateText, Gemini-контекст). Проценты
+// сводятся в те же x/y через emotionsToPoint, а сами значения дополнительно сохраняются
+// в entry.emotions / entry.exitEmotions, чтобы при редактировании записи ползунки
+// вставали на те же места, а не на восстановленное приближение.
+var EMOTION_SCALE_KEYS = {
+  entry: ["confidence", "fear", "calm", "tension"],
+  exit: ["pleased", "disappointed", "atPeace", "stung"]
+};
+function emotionScaleKeys(variant) {
+  return EMOTION_SCALE_KEYS[variant] || EMOTION_SCALE_KEYS.entry;
+}
+function emotionClampPct(v) {
+  const n = Number(v);
+  if (n === null || n === void 0 || isNaN(n)) return 0;
+  return Math.max(0, Math.min(100, Math.round(n)));
+}
+// Проценты -> точка на прежних осях. Ось = разница противоположных полюсов, центр 50.
+// confidence 70 / fear 10 -> x = 50 + (70-10)/2 = 80, то есть та же правая треть сетки,
+// куда трейдер раньше ставил точку руками.
+function emotionsToPoint(values, variant = "entry") {
+  if (!values) return { x: null, y: null };
+  const k = emotionScaleKeys(variant);
+  const axis = (a, b) => Math.max(0, Math.min(100, Math.round(50 + (emotionClampPct(values[a]) - emotionClampPct(values[b])) / 2)));
+  return { x: axis(k[0], k[1]), y: axis(k[2], k[3]) };
+}
+// Обратное восстановление — только для записей, созданных до V1.1: у них есть x/y, но нет
+// сохранённых процентов. Однозначного разложения нет (x=80 это и 60/0, и 70/10), поэтому
+// берётся простейший вариант: перевес идёт в один полюс, противоположный обнуляется.
+// Точка на сетке при этом сохраняется без сдвига, аналитика не меняется.
+function pointToEmotions(x, y, variant = "entry") {
+  if (x === null || x === void 0 || y === null || y === void 0 || isNaN(x) || isNaN(y)) return null;
+  const k = emotionScaleKeys(variant);
+  const dx = (x - 50) * 2;
+  const dy = (y - 50) * 2;
+  return {
+    [k[0]]: dx >= 0 ? emotionClampPct(dx) : 0,
+    [k[1]]: dx < 0 ? emotionClampPct(-dx) : 0,
+    [k[2]]: dy >= 0 ? emotionClampPct(dy) : 0,
+    [k[3]]: dy < 0 ? emotionClampPct(-dy) : 0
+  };
+}
+function normalizeEmotions(v, variant = "entry") {
+  if (!v || typeof v !== "object") return null;
+  const k = emotionScaleKeys(variant);
+  if (!k.some((key) => typeof v[key] === "number" && !isNaN(v[key]))) return null;
+  const out = {};
+  for (const key of k) out[key] = emotionClampPct(v[key]);
+  return out;
+}
+function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
   const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
-  const place = (e) => {
-    const rect = ref.current.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    const px = (clientX - rect.left) / rect.width * 100;
-    const py = (clientY - rect.top) / rect.height * 100;
-    onChange({ x: Math.min(100, Math.max(0, Math.round(px))), y: Math.min(100, Math.max(0, Math.round(py))) });
+  const keys = emotionScaleKeys(variant);
+  const labels = Array.isArray(eg.scales) ? eg.scales : keys;
+  const has = !!values;
+  const current = values || {};
+  const point = has ? emotionsToPoint(values, variant) : { x: null, y: null };
+  const stateText = has ? emotionStateText(point.x, point.y, t, variant) : null;
+  const stateColor = has ? emotionPositionColor(point.x, point.y) : BASE.inkFaint;
+  const setKey = (key, raw) => {
+    const next = {};
+    for (const k of keys) next[k] = emotionClampPct(current[k]);
+    next[key] = emotionClampPct(raw);
+    onChange(next);
   };
-  const onDown = (e) => {
-    setDragging(true);
-    if (ref.current.setPointerCapture && e.pointerId !== void 0) {
-      try {
-        ref.current.setPointerCapture(e.pointerId);
-      } catch (_) {
-      }
-    }
-    place(e);
-  };
-  const onMove = (e) => {
-    if (dragging) place(e);
-  };
-  const onUp = () => {
-    setDragging(false);
-    setJustPlaced(true);
-    setTimeout(() => setJustPlaced(false), 500);
-  };
-  const has = x !== null && y !== null;
-  const label = "text-[10px] uppercase tracking-wide";
-  // 3x3 banding (fear/neutral/confidence x nervous/balanced/calm) instead of the old 4-quadrant
-  // split, so the written-out state actually reflects a middling position instead of forcing it
-  // into one of two extremes either axis is closest to.
-  const stateText = has ? emotionStateText(x, y, t, variant) : null;
-  const stateColor = has ? emotionPositionColor(x, y) : BASE.inkFaint;
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsx("div", { className: "text-center mb-1.5", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisTop }) }),
-    /* @__PURE__ */ jsxs("div", { className: "flex gap-2.5", children: [
-      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl", transform: "rotate(180deg)" }, children: eg.axisLeft }),
-      /* @__PURE__ */ jsxs(
-        "div",
-        {
-          ref,
-          onPointerDown: onDown,
-          onPointerMove: onMove,
-          onPointerUp: onUp,
-          onPointerLeave: onUp,
-          className: "relative flex-1 aspect-square rounded-2xl cursor-crosshair touch-none select-none overflow-hidden",
-          style: {
-            background: `radial-gradient(circle at 10% 10%, ${LOSS}1A 0%, transparent 50%), radial-gradient(circle at 90% 90%, ${WIN}1A 0%, transparent 50%), radial-gradient(circle at 50% 50%, ${WARN}0D 0%, transparent 55%), ${BASE.surface2}`,
-            border: `1px solid ${BASE.line}`,
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), inset 0 0 24px rgba(0,0,0,0.25)"
-          },
-          children: [
-            [33.333, 66.667].map((p) => /* @__PURE__ */ jsx("div", { className: "absolute top-0 bottom-0 w-px", style: { left: `${p}%`, background: BASE.line, opacity: 0.4 } }, `v${p}`)),
-            [33.333, 66.667].map((p) => /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0 h-px", style: { top: `${p}%`, background: BASE.line, opacity: 0.4 } }, `h${p}`)),
-            /* @__PURE__ */ jsx("div", { className: "absolute left-1/2 top-0 bottom-0 w-px", style: { background: BASE.line } }),
-            /* @__PURE__ */ jsx("div", { className: "absolute top-1/2 left-0 right-0 h-px", style: { background: BASE.line } }),
-            has && /* @__PURE__ */ jsxs(Fragment, { children: [
-              /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0", style: { top: `${y}%`, borderTop: `1px dashed ${accent}45`, transition: dragging ? "none" : "top 0.15s ease-out" } }),
-              /* @__PURE__ */ jsx("div", { className: "absolute top-0 bottom-0", style: { left: `${x}%`, borderLeft: `1px dashed ${accent}45`, transition: dragging ? "none" : "left 0.15s ease-out" } }),
-              justPlaced && /* @__PURE__ */ jsx("div", { className: "absolute rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none emotion-ripple", style: { left: `${x}%`, top: `${y}%`, border: `1.5px solid ${stateColor}` } }),
-              /* @__PURE__ */ jsx(
-                "div",
-                {
-                  className: "absolute w-3 h-3 rounded-full -translate-x-1/2 -translate-y-1/2",
-                  style: { left: `${x}%`, top: `${y}%`, background: stateColor, boxShadow: `0 0 0 5px ${stateColor}28, 0 0 14px ${stateColor}55`, transition: dragging ? "none" : "left 0.15s ease-out, top 0.15s ease-out, background 0.15s ease-out" }
-                }
-              )
-            ] }),
-            !has && /* @__PURE__ */ jsx("div", { className: "absolute inset-0 flex items-center justify-center text-center px-6 text-xs", style: { color: BASE.inkFaint }, children: eg.hint })
-          ]
-        }
-      ),
-      /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint, writingMode: "vertical-rl" }, children: eg.axisRight })
-    ] }),
-    /* @__PURE__ */ jsx("div", { className: "text-center mt-1.5 mb-1", children: /* @__PURE__ */ jsx("span", { className: label, style: { color: BASE.inkFaint }, children: eg.axisBottom }) }),
-    has && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-1", style: { color: stateColor }, children: stateText })
+    /* @__PURE__ */ jsx("p", { className: "text-[11px] leading-relaxed mb-3", style: { color: BASE.inkFaint }, children: eg.hint }),
+    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-3.5", children: keys.map((key, i) => {
+      const pct = emotionClampPct(current[key]);
+      return /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-baseline justify-between mb-1.5", children: [
+          /* @__PURE__ */ jsx("span", { className: "text-[12px]", style: { color: BASE.ink }, children: labels[i] }),
+          /* @__PURE__ */ jsxs("span", { className: "text-[12px]", style: { color: has ? BASE.inkDim : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
+            has ? pct : 0,
+            "%"
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx(
+          "input",
+          {
+            type: "range",
+            min: 0,
+            max: 100,
+            step: 5,
+            value: pct,
+            onChange: (e) => setKey(key, e.target.value),
+            className: "w-full emotion-range",
+            style: { accentColor: accent, color: accent }
+          }
+        )
+      ] }, key);
+    }) }),
+    has && stateText && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-4", style: { color: stateColor }, children: stateText })
   ] });
 }
 function PickerField({ value, onChange, options, placeholder, accent, allowCustom, flat, mono, onCustomAdd }) {
@@ -4458,7 +4495,10 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [tag, setTag] = useState("");
-  const [point, setPoint] = useState({ x: null, y: null });
+  // V1.1 — состоянием теперь владеют проценты; x/y выводятся из них перед сохранением,
+  // поэтому формат записи в журнале не изменился.
+  const [emotions, setEmotions] = useState(null);
+  const point = emotionsToPoint(emotions, "entry");
   const [pull, setPull] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [recognizing, setRecognizing] = useState(false);
@@ -4546,6 +4586,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
       tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
       x: point.x,
       y: point.y,
+      emotions,
       pull: pull.trim() || "\u2014",
       lesson: "\u2014",
       date: /* @__PURE__ */ new Date(),
@@ -4564,7 +4605,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     setInstrument("");
     setDirection("Long");
     setTag("");
-    setPoint({ x: null, y: null });
+    setEmotions(null);
     setPull("");
     setScreenshots([]);
     setEntryPrice("");
@@ -4722,7 +4763,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     ] }),
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
-    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent, t })
+    /* @__PURE__ */ jsx(EmotionScales, { values: emotions, onChange: setEmotions, accent, t })
     ] })
     ] }),
     /* @__PURE__ */ jsx(
@@ -4754,7 +4795,8 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
   const [exitScreenshots, setExitScreenshots] = useState([]);
   // V5.5: state after the trade. Deliberately NOT part of canSave \u2014 forcing it would push people
   // to tap something arbitrary just to close a trade, which is worse than a null.
-  const [exitPoint, setExitPoint] = useState({ x: null, y: null });
+  const [exitEmotions, setExitEmotions] = useState(null);
+  const exitPoint = emotionsToPoint(exitEmotions, "exit");
   const fileInputRef = useRef(null);
   const MAX_SHOTS = 4;
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
@@ -4793,6 +4835,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       exitDate: /* @__PURE__ */ new Date(),
       exitX: exitPoint.x,
       exitY: exitPoint.y,
+      exitEmotions,
       exitScreenshots
     });
   };
@@ -4914,7 +4957,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
-      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t, variant: "exit" }),
+      /* @__PURE__ */ jsx(EmotionScales, { values: exitEmotions, onChange: setExitEmotions, accent, t, variant: "exit" }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
@@ -4957,7 +5000,12 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   const [entryPrice, setEntryPrice] = useState(entry?.entryPrice != null ? String(entry.entryPrice) : "");
   const [stopLoss, setStopLoss] = useState(entry?.stopLoss != null ? String(entry.stopLoss) : "");
   const [takeProfit, setTakeProfit] = useState(entry?.takeProfit != null ? String(entry.takeProfit) : "");
-  const [point, setPoint] = useState({ x: entry?.x ?? null, y: entry?.y ?? null });
+  // V1.1 — для записей, созданных до перехода на ползунки, процентов нет: восстанавливаем
+  // их приближённо из x/y, чтобы редактирование не открывалось с пустыми шкалами.
+  const [emotions, setEmotions] = useState(
+    () => normalizeEmotions(entry?.emotions, "entry") || pointToEmotions(entry?.x ?? null, entry?.y ?? null, "entry")
+  );
+  const point = emotionsToPoint(emotions, "entry");
   const [pull, setPull] = useState(entry?.pull === "\u2014" ? "" : entry?.pull || "");
   const [screenshots, setScreenshots] = useState(entry?.screenshots || []);
   const [closeType, setCloseType] = useState(entry?.closeType || "manual");
@@ -4966,7 +5014,10 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   const [lesson, setLesson] = useState(entry?.lesson === "\u2014" ? "" : entry?.lesson || "");
   const [exitScreenshots, setExitScreenshots] = useState(entry?.exitScreenshots || []);
   // V5.5: editable so a trade closed before this field existed can be completed retroactively.
-  const [exitPoint, setExitPoint] = useState({ x: entry?.exitX ?? null, y: entry?.exitY ?? null });
+  const [exitEmotions, setExitEmotions] = useState(
+    () => normalizeEmotions(entry?.exitEmotions, "exit") || pointToEmotions(entry?.exitX ?? null, entry?.exitY ?? null, "exit")
+  );
+  const exitPoint = emotionsToPoint(exitEmotions, "exit");
   const entryFileRef = useRef(null);
   const exitFileRef = useRef(null);
   const MAX_SHOTS = 4;
@@ -5039,6 +5090,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
       x: point.x,
       y: point.y,
+      emotions,
       pull: pull.trim() || "\u2014",
       screenshots,
       entryPrice: num(entryPrice),
@@ -5053,6 +5105,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       lesson: lesson.trim() || "\u2014",
       exitX: exitPoint.x,
       exitY: exitPoint.y,
+      exitEmotions,
       exitScreenshots
     });
   };
@@ -5119,7 +5172,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionQuestion }),
-    /* @__PURE__ */ jsx(EmotionGrid, { x: point.x, y: point.y, onChange: setPoint, accent, t }),
+    /* @__PURE__ */ jsx(EmotionScales, { values: emotions, onChange: setEmotions, accent, t }),
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mt-6 mb-2", style: { color: BASE.inkFaint }, children: t.home.exitSection }),
     hasPlanNow && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
       /* @__PURE__ */ jsx(L, { children: "\u041A\u0430\u043A \u0437\u0430\u043A\u0440\u044B\u043B\u0430\u0441\u044C \u0441\u0434\u0435\u043B\u043A\u0430" }),
@@ -5152,7 +5205,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
       /* @__PURE__ */ jsx(L, { children: t.newEntry.emotionExitQuestion }),
-      /* @__PURE__ */ jsx(EmotionGrid, { x: exitPoint.x, y: exitPoint.y, onChange: setExitPoint, accent, t, variant: "exit" }),
+      /* @__PURE__ */ jsx(EmotionScales, { values: exitEmotions, onChange: setExitEmotions, accent, t, variant: "exit" }),
       /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.newEntry.emotionExitOptional })
     ] })
     ] })
@@ -9853,6 +9906,13 @@ function MindExe() {
            photo's own composition already carries the chart-flowing-into-the-hole story the full
            height of a phone screen. Rotating the whole photo is still avoided (perspective/lensing
            reasons carry over unchanged from the original photo). ---------- */
+        /* V1.1 — ползунки шкал эмоций. Дорожка и бегунок задаются явно, иначе на iOS
+           Safari нативный контрол рисуется светлым и теряется на чёрном фоне. */
+        .emotion-range { -webkit-appearance: none; appearance: none; background: transparent; height: 22px; touch-action: pan-y; }
+        .emotion-range::-webkit-slider-runnable-track { height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); }
+        .emotion-range::-moz-range-track { height: 3px; border-radius: 999px; background: rgba(255,255,255,0.12); }
+        .emotion-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; margin-top: -6.5px; border-radius: 50%; background: currentColor; border: none; }
+        .emotion-range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: currentColor; border: none; }
         .splash2-root { background: #000; overflow: hidden; }
         @keyframes splash2RiseFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes splash2RingExpand { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
