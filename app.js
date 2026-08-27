@@ -1,4 +1,17 @@
-// mind.exe — V0.9
+// mind.exe — V1.0
+//
+// V1.0 — две правки:
+//  1) ДОЛГАЯ СТАРТОВАЯ ЗАГРУЗКА. tryLoad ждал loadMedia ДО setLoaded(true). loadMedia делает
+//     по одному getDoc на каждую запись журнала, и в каждом лежат base64-скриншоты
+//     (~150-300 КБ). При 20-30 записях это несколько мегабайт, которые на LTE качаются
+//     десятки секунд — всё это время висел BootLoading. Скриншоты не нужны для первого
+//     рендера: теперь профиль применяется сразу, setLoaded(true) вызывается без ожидания
+//     медиа, а сами скриншоты догружаются фоном и домерживаются в entries. Сохранение не
+//     страдает: saveMedia удаляет только те документы, чьи id уже есть в __mediaHashes,
+//     а он пуст до конца фоновой загрузки, поэтому ранний автосейв ничего не сотрёт.
+//  2) Рыночный блок на главной перерисован в отдельную карточку: круглая иконка + подпись +
+//     крупное значение, колонки разделены вертикальными линиями. У BTC.D — полоса прогресса
+//     по значению доминации, у F&G — пилюля с текстовой меткой настроения.
 //
 // V0.9 — чёрный экран после сплэша. Причин было две, обе исправлены:
 //  1) ГЛАВНАЯ: loadProfile/loadMedia идут через getDoc, у которого нет собственного таймаута.
@@ -150,7 +163,9 @@ import {
   RotateCcw,
   Zap,
   Info,
-  Camera
+  Camera,
+  Bitcoin,
+  Activity
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 var BASE = {
@@ -3863,6 +3878,17 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
   // out of no data. The fallback is only used once awareness actually rests on some history.
   const awarenessKnown = analytics.awareness.score.value != null && (analytics.awareness.evidence ?? 0) >= 6;
   const moodKey = marketSnapshot?.moodLabel || (!awarenessKnown ? t.home.moodStable : consciousScoreTarget > 80 ? t.home.moodCalm : consciousScoreTarget > 60 ? t.home.moodStable : t.home.moodReactive);
+  // V1.0 — данные для рыночной карточки внизу главной. Источник тот же, что и был:
+  // marketSnapshot от Gemini с фолбэком на константы BTC_DOMINANCE / FEAR_GREED.
+  const showBtcD = !tradingAsset || tradingAsset === "crypto";
+  const btcDValue = marketSnapshot?.btcDominance ?? BTC_DOMINANCE;
+  const fngValue = marketSnapshot?.sentimentScore ?? FEAR_GREED.score;
+  const fngLabel = marketSnapshot?.sentimentLabel || FEAR_GREED.label;
+  const marketCells = [
+    showBtcD && { key: "btcd", label: "BTC.D", value: `${btcDValue}%`, mono: true, icon: Bitcoin, bar: Number(btcDValue) || 0 },
+    { key: "fng", label: "F&G", value: `${fngValue}`, mono: true, icon: Gauge, pill: fngLabel },
+    { key: "mood", label: t.home.market, value: moodKey, mono: false, icon: Activity }
+  ].filter(Boolean);
   // Prefer a fact-based insight computed from this user's own journal (analytics.insights are
   // always backed by a real sample) over the two hardcoded generic sentences.
   const localInsight = (analytics.insights || []).find((i) => i && i.text)?.text || null;
@@ -4078,18 +4104,28 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       tile.id
     )) })
     ] }),
-    /* V0.8 — раньше три показателя лежали в flex justify-between: длинная подпись вроде
-       «Экстремальная жадность» переносилась и разъезжалась относительно соседей. Теперь это
-       сетка равных колонок «подпись сверху / значение снизу» — переносится только значение,
-       внутри своей колонки, и строка остаётся выровненной при любой длине текста. */
-    /* @__PURE__ */ jsx("div", { className: "pt-3.5 px-1", style: { borderTop: `1px solid ${BASE.line}` }, children: /* @__PURE__ */ jsx("div", { className: "grid gap-3", style: { gridTemplateColumns: `repeat(${!tradingAsset || tradingAsset === "crypto" ? 3 : 2}, minmax(0, 1fr))` }, children: [
-      (!tradingAsset || tradingAsset === "crypto") && { key: "btcd", label: "BTC.D", value: `${marketSnapshot?.btcDominance ?? BTC_DOMINANCE}%`, mono: true },
-      { key: "fng", label: "F&G", value: `${marketSnapshot?.sentimentScore ?? FEAR_GREED.score} \xB7 ${marketSnapshot?.sentimentLabel || FEAR_GREED.label}`, mono: true },
-      { key: "mood", label: t.home.market, value: moodKey, mono: false }
-    ].filter(Boolean).map((m) => /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
-      /* @__PURE__ */ jsx("div", { className: "text-[9.5px] uppercase tracking-[0.08em] mb-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label }),
-      /* @__PURE__ */ jsx("div", { className: "text-[11.5px] leading-snug", style: { color: BASE.inkDim, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)" }, children: m.value })
-    ] }, m.key)) }) })
+    /* V1.0 — рыночная строка перерисована в карточку: круглая иконка + подпись + крупное
+       значение, колонки разделены вертикальными линиями (см. макет). Значения те же самые
+       и из того же источника (marketSnapshot с фолбэком на константы) — изменилась только
+       подача. Полоса под BTC.D показывает саму доминацию в процентах, пилюля под F&G —
+       текстовую метку настроения. Ничего, чего нет в данных, здесь не рисуется. */
+    /* @__PURE__ */ jsx("div", { className: "pt-3.5", children: /* @__PURE__ */ jsx("div", { className: "rounded-[22px] px-3 py-4", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: /* @__PURE__ */ jsx("div", { className: "grid", style: { gridTemplateColumns: `repeat(${showBtcD ? 3 : 2}, minmax(0, 1fr))` }, children: marketCells.map((m, i) => /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: "min-w-0 px-2.5",
+        style: i === 0 ? void 0 : { borderLeft: `1px solid ${BASE.line}` },
+        children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1.5", children: [
+            /* @__PURE__ */ jsx("span", { className: "shrink-0 flex items-center justify-center rounded-full", style: { width: 26, height: 26, border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx(m.icon, { size: 13, style: { color: BASE.inkDim } }) }),
+            /* @__PURE__ */ jsx("span", { className: "text-[9px] uppercase tracking-[0.12em] truncate", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label })
+          ] }),
+          /* @__PURE__ */ jsx("div", { className: "text-[19px] leading-tight break-words", style: { color: BASE.ink, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)", fontWeight: 600 }, children: m.value }),
+          m.bar !== void 0 && /* @__PURE__ */ jsx("div", { className: "w-full h-[3px] rounded-full mt-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[3px] rounded-full transition-all duration-700 ease-out", style: { width: `${Math.max(0, Math.min(100, m.bar))}%`, background: accent } }) }),
+          m.pill && /* @__PURE__ */ jsx("div", { className: "inline-block mt-2 px-2 py-[3px] rounded-full max-w-full", style: { border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx("span", { className: "text-[9.5px] leading-tight", style: { color: BASE.inkDim }, children: m.pill }) })
+        ]
+      },
+      m.key
+    )) }) }) })
   ] });
 }
 function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
@@ -9373,8 +9409,8 @@ function MindExe() {
         const profile = await caWithTimeout(loadProfile(userId), 15e3, "profile_load_timeout");
         if (cancelled) return;
         const mediaIds = Array.isArray(profile?.journal?.entries) ? profile.journal.entries.map((e) => e?.id).filter(Boolean) : [];
-        const media = await caWithTimeout(loadMedia(userId, mediaIds), 2e4, "media_load_timeout");
-        if (cancelled) return;
+        // V1.0 — медиа больше НЕ ждём здесь (см. шапку файла): скриншоты догружаются фоном
+        // после setLoaded(true), иначе стартовый экран висит на время скачивания всех base64.
         if (profile) {
           const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
           const rawEntries = Array.isArray(journal.entries) ? journal.entries : [];
@@ -9382,8 +9418,8 @@ function MindExe() {
             ...e,
             date: new Date(e.date),
             exitDate: e.exitDate ? new Date(e.exitDate) : null,
-            screenshots: Array.isArray(media?.[e.id]) ? media[e.id] : Array.isArray(media?.[e.id]?.entry) ? media[e.id].entry : [],
-            exitScreenshots: Array.isArray(media?.[e.id]?.exit) ? media[e.id].exit : []
+            screenshots: [],
+            exitScreenshots: []
           }));
           setEntries(restoredEntries);
           if (user.name !== void 0) setName(user.name);
@@ -9414,6 +9450,22 @@ function MindExe() {
         canPersistRef.current = true;
         firstLoadRef.current = false;
         if (!cancelled) setLoaded(true);
+        // Фоновая догрузка скриншотов. Ошибка здесь некритична: журнал уже открыт, записи на
+        // месте, не хватает только картинок — поэтому она не трогает canPersistRef и не
+        // показывает тост о потере данных.
+        if (mediaIds.length > 0) {
+          caWithTimeout(loadMedia(userId, mediaIds), 2e4, "media_load_timeout").then((media) => {
+            if (cancelled || !media) return;
+            setEntries((prev) => prev.map((e) => {
+              const m = media[e.id];
+              if (!m) return e;
+              const entryShots = Array.isArray(m) ? m : Array.isArray(m.entry) ? m.entry : [];
+              const exitShots = Array.isArray(m?.exit) ? m.exit : [];
+              if (entryShots.length === 0 && exitShots.length === 0) return e;
+              return { ...e, screenshots: entryShots, exitScreenshots: exitShots };
+            }));
+          }).catch((err2) => console.warn("mind.exe: media load failed", err2));
+        }
       } catch (err) {
         // A network/permission hiccup here must never be allowed to fall through to the auto-save
         // effect with whatever's currently in memory (freshly reset to empty by resetInMemoryState
