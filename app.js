@@ -1,4 +1,16 @@
-// mind.exe — V1.3
+// mind.exe — V1.4
+//
+// V1.4 — вкладка «Эмоции» в аналитике. Вместо скаттера (каждая сделка точкой в
+//        координатах страх→уверенность / нервы→спокойствие) теперь прямое сравнение
+//        среднего результата: сделки, где эмоция отмечена от 60%, против тех, где до 40%,
+//        по каждой из четырёх шкал плюс отдельная строка «смешанное состояние». Скаттер
+//        удалён потому, что из него не следовал никакой вывод: точки не подписаны, форма
+//        облака ничего не сообщает, а сами оси после V1.2 стали производной величиной, а
+//        не исходными данными. Записи, созданные до появления шкал, участвуют: их состояние
+//        восстанавливается из осей приблизительно, и их доля показывается под блоком.
+//        Строка метрик (осознанность / дисциплина / стабильность риска / рефлексия),
+//        которая на телефоне переносилась посреди подписи, стала сеткой 2x2 с полосой
+//        заполнения. Удалён ChartTooltip — он обслуживал только скаттер.
 //
 // V1.3 — вид ползунков шкал эмоций. В V1.2 дорожка рисовалась background-image на самом
 //        input: в WebKit нативный трек перекрывает фон элемента, поэтому на iOS вместо
@@ -5508,6 +5520,112 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
     ] }, e.id)) })
   ] });
 }
+// V1.4 — блок «Эмоции» в аналитике. Раньше там был скаттер: каждая сделка точкой в
+// координатах страх→уверенность / нервы→спокойствие. Читать его было нечем — точки не
+// подписаны, никакого вывода из облака не следует, а после перехода на процентные шкалы
+// оси вообще стали производной величиной. Вместо него считается прямое сравнение: при
+// какой эмоции результат в среднем лучше, а при какой хуже.
+//
+// Порог 60/40 — намеренно с зазором: сделки, где эмоция отмечена в середине, не попадают
+// ни в одну группу, иначе сравнение размывается пограничными случаями.
+var EMOTION_IMPACT_HIGH = 60;
+var EMOTION_IMPACT_LOW = 40;
+var EMOTION_IMPACT_MIN = 3;
+function ei_avg(rows) {
+  return rows.length ? rows.reduce((sum, x) => sum + x.r, 0) / rows.length : null;
+}
+function emotionImpactStats(entries, t) {
+  const keys = emotionScaleKeys("entry");
+  const eg = t.newEntry.emotionGrid;
+  const labels = Array.isArray(eg.scales) ? eg.scales : keys;
+  // У записей до V1.1 процентов нет — для них проценты восстанавливаются из осей, иначе
+  // блок был бы пустым у всех, кто вёл журнал раньше. Восстановление приблизительное
+  // (см. pointToEmotions), поэтому доля таких сделок показывается отдельно.
+  const rows = (entries || []).filter((e) => typeof e.r === "number" && !isNaN(e.r)).map((e) => {
+    const exact = normalizeEmotions(e.emotions, "entry");
+    return { r: e.r, v: exact || pointToEmotions(e.x, e.y, "entry"), exact: !!exact };
+  }).filter((x) => x.v);
+  if (rows.length < EMOTION_IMPACT_MIN * 2) {
+    return { available: false, sample: rows.length, needed: EMOTION_IMPACT_MIN * 2 };
+  }
+  const scales = keys.map((key, i) => {
+    const high = rows.filter((x) => emotionClampPct(x.v[key]) >= EMOTION_IMPACT_HIGH);
+    const low = rows.filter((x) => emotionClampPct(x.v[key]) <= EMOTION_IMPACT_LOW);
+    return { key, label: labels[i], highN: high.length, lowN: low.length, highAvg: ei_avg(high), lowAvg: ei_avg(low) };
+  }).filter((s2) => s2.highN >= EMOTION_IMPACT_MIN && s2.lowN >= EMOTION_IMPACT_MIN).map((s2) => ({ ...s2, diff: s2.highAvg - s2.lowAvg })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const withConflict = rows.map((x) => ({ ...x, c: emotionConflict(x.v, "entry").max }));
+  const mixed = withConflict.filter((x) => x.c >= 40);
+  const clear = withConflict.filter((x) => x.c < 40);
+  const conflict = mixed.length >= EMOTION_IMPACT_MIN && clear.length >= EMOTION_IMPACT_MIN ? { mixedN: mixed.length, clearN: clear.length, mixedAvg: ei_avg(mixed), clearAvg: ei_avg(clear) } : null;
+  return { available: scales.length > 0 || !!conflict, sample: rows.length, approxCount: rows.filter((x) => !x.exact).length, scales, conflict };
+}
+// Одна строка сравнения: подпись, число сделок и средний результат столбиком в обе
+// стороны от общей базовой линии. Ширина считается от максимума по всему блоку, чтобы
+// строки были сопоставимы между собой, а не каждая в своём масштабе.
+function EmotionImpactRow({ label, count, avg, scale, measureMode, currency }) {
+  const pct = scale > 0 ? Math.min(100, Math.abs(avg) / scale * 100) : 0;
+  const positive = avg >= 0;
+  const color = positive ? WIN : LOSS;
+  return /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2.5 py-1", children: [
+    /* @__PURE__ */ jsx("span", { className: "text-[11px] shrink-0 text-right", style: { color: BASE.inkDim, width: 62 }, children: label }),
+    /* @__PURE__ */ jsxs("div", { className: "relative flex-1 h-4", children: [
+      /* @__PURE__ */ jsx("div", { className: "absolute top-0 bottom-0 w-px left-1/2", style: { background: BASE.line } }),
+      /* @__PURE__ */ jsx(
+        "div",
+        {
+          className: "absolute top-1/2 -translate-y-1/2 h-2 rounded-full",
+          style: { width: `${pct / 2}%`, background: color, opacity: 0.85, left: positive ? "50%" : void 0, right: positive ? void 0 : "50%" }
+        }
+      )
+    ] }),
+    /* @__PURE__ */ jsx("span", { className: "text-[11px] shrink-0 text-right", style: { color, fontFamily: "var(--font-mono)", width: 54 }, children: formatResult(avg, measureMode, currency) }),
+    /* @__PURE__ */ jsxs("span", { className: "text-[10px] shrink-0 text-right", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)", width: 26 }, children: [
+      "\u00D7",
+      count
+    ] })
+  ] });
+}
+function EmotionImpact({ stats, measureMode, currency }) {
+  if (!stats.available) {
+    return /* @__PURE__ */ jsxs("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: [
+      "\u041D\u0443\u0436\u043D\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C ",
+      stats.needed || EMOTION_IMPACT_MIN * 2,
+      " \u0437\u0430\u043A\u0440\u044B\u0442\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u0441 \u043E\u0442\u043C\u0435\u0447\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C, \u0447\u0442\u043E\u0431\u044B \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0447\u0442\u043E-\u0442\u043E \u0437\u043D\u0430\u0447\u0438\u043B\u043E. \u0421\u0435\u0439\u0447\u0430\u0441 ",
+      stats.sample || 0,
+      "."
+    ] });
+  }
+  const all = [];
+  stats.scales.forEach((s) => all.push(s.highAvg, s.lowAvg));
+  if (stats.conflict) all.push(stats.conflict.mixedAvg, stats.conflict.clearAvg);
+  const scale = Math.max(0.01, ...all.map((v) => Math.abs(v || 0)));
+  return /* @__PURE__ */ jsxs("div", { children: [
+    stats.scales.map((s) => /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-baseline justify-between mb-1", children: [
+        /* @__PURE__ */ jsx("span", { className: "text-[13px]", style: { color: BASE.ink }, children: s.label }),
+        /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: s.diff >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
+          s.diff >= 0 ? "+" : "\u2212",
+          Math.abs(s.diff).toFixed(2),
+          "R \u0440\u0430\u0437\u043D\u0438\u0446\u0430"
+        ] })
+      ] }),
+      /* @__PURE__ */ jsx(EmotionImpactRow, { label: `\u043E\u0442 ${EMOTION_IMPACT_HIGH}%`, count: s.highN, avg: s.highAvg, scale, measureMode, currency }),
+      /* @__PURE__ */ jsx(EmotionImpactRow, { label: `\u0434\u043E ${EMOTION_IMPACT_LOW}%`, count: s.lowN, avg: s.lowAvg, scale, measureMode, currency })
+    ] }, s.key)),
+    stats.conflict && /* @__PURE__ */ jsxs("div", { className: "pt-3", style: { borderTop: `1px solid ${BASE.line}` }, children: [
+      /* @__PURE__ */ jsx("span", { className: "text-[13px] block mb-1", style: { color: BASE.ink }, children: "\u0421\u043C\u0435\u0448\u0430\u043D\u043D\u043E\u0435 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435" }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-1.5 leading-relaxed", style: { color: BASE.inkFaint }, children: "\u0421\u0434\u0435\u043B\u043A\u0438, \u0433\u0434\u0435 \u043F\u0440\u043E\u0442\u0438\u0432\u043E\u043F\u043E\u043B\u043E\u0436\u043D\u044B\u0435 \u044D\u043C\u043E\u0446\u0438\u0438 \u043E\u0442\u043C\u0435\u0447\u0435\u043D\u044B \u043E\u0434\u043D\u043E\u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E \u2014 \u043D\u0430\u043F\u0440\u0438\u043C\u0435\u0440 \u0443\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C \u0432\u043C\u0435\u0441\u0442\u0435 \u0441\u043E \u0441\u0442\u0440\u0430\u0445\u043E\u043C." }),
+      /* @__PURE__ */ jsx(EmotionImpactRow, { label: "\u0441\u043C\u0435\u0448\u0430\u043D\u043D\u043E", count: stats.conflict.mixedN, avg: stats.conflict.mixedAvg, scale, measureMode, currency }),
+      /* @__PURE__ */ jsx(EmotionImpactRow, { label: "\u043E\u0434\u043D\u043E\u0437\u043D\u0430\u0447\u043D\u043E", count: stats.conflict.clearN, avg: stats.conflict.clearAvg, scale, measureMode, currency })
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-[10.5px] mt-3 leading-relaxed", style: { color: BASE.inkFaint }, children: [
+      "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E ",
+      stats.sample,
+      " \u0441\u0434\u0435\u043B\u043A\u0430\u043C. \u0413\u0440\u0443\u043F\u043F\u044B \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0442\u0441\u044F: \u043E\u0434\u043D\u0430 \u0441\u0434\u0435\u043B\u043A\u0430 \u043F\u043E\u043F\u0430\u0434\u0430\u0435\u0442 \u0432 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0448\u043A\u0430\u043B \u0441\u0440\u0430\u0437\u0443.",
+      stats.approxCount > 0 ? ` \u0423 ${stats.approxCount} \u0441\u0434\u0435\u043B\u043E\u043A \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E \u0438\u0437 \u0441\u0442\u0430\u0440\u043E\u0433\u043E \u0444\u043E\u0440\u043C\u0430\u0442\u0430 \u043F\u0440\u0438\u0431\u043B\u0438\u0437\u0438\u0442\u0435\u043B\u044C\u043D\u043E.` : ""
+    ] })
+  ] });
+}
 function StatCard({ label, value, accent }) {
   return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-xl px-3 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: label }),
@@ -5709,6 +5827,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     });
     return Object.entries(stats).map(([tag, s]) => ({ tag, avgR: s.sumR / s.count, count: s.count })).sort((a, b) => b.avgR - a.avgR);
   }, [withR]);
+  const emotionImpact = useMemo(() => emotionImpactStats(closedEntries, t), [closedEntries, t]);
   const planVsFact = useMemo(() => {
     const withPlan = closedEntries.filter((e) => typeof e.plannedRR === "number" && typeof e.realizedRR === "number");
     if (withPlan.length < 3) return null;
@@ -5742,17 +5861,8 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
       ] })
     ] });
   };
-  const ChartTooltip = ({ active, payload }) => {
-    if (!active || !payload?.length) return null;
-    const e = payload[0].payload;
-    return /* @__PURE__ */ jsxs("div", { className: "px-3 py-2 rounded-lg text-xs", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [
-      /* @__PURE__ */ jsx("div", { style: { fontFamily: "var(--font-mono)" }, children: e.instrument }),
-      /* @__PURE__ */ jsxs("div", { style: { color: outcomeColor(e.outcome) }, children: [
-        OUTCOME_LABEL[e.outcome],
-        e.r !== null && e.r !== void 0 ? ` \xB7 ${formatResult(e.r, measureMode, currency)}` : ""
-      ] })
-    ] });
-  };
+  // V1.4: ChartTooltip обслуживал только скаттер эмоций и после его замены не имел
+  // вызовов — удалён, чтобы не тянуть за собой мёртвый код.
   if (reviewOpen) {
     return /* @__PURE__ */ jsx(JournalReview, { entries: closedEntries, accent, onClose: () => setReviewOpen(false), t, lang });
   }
@@ -5791,72 +5901,41 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         ] }),
         /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: insight })
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 flex-wrap text-[10px] mb-6", style: { color: BASE.inkFaint }, children: [
-        analytics.awareness.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          t.home.awareness,
-          " ",
-          analytics.awareness.score.value,
-          "%",
-          TREND_ARROW[analytics.awareness.trend] || ""
-        ] }),
-        analytics.discipline.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 ",
-          t.home.discipline,
-          " ",
-          analytics.discipline.score.value,
-          "%",
-          TREND_ARROW[analytics.discipline.trend] || ""
-        ] }),
-        analytics.risk.stability.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 ",
-          t.home.riskStability,
-          " ",
-          analytics.risk.stability.value,
-          "%",
-          TREND_ARROW[analytics.risk.stability.trend] || ""
-        ] }),
-        analytics.reflection.score.value != null && /* @__PURE__ */ jsxs("span", { children: [
-          "\xB7 ",
-          t.home.reflection,
-          " ",
-          analytics.reflection.score.value,
-          "%",
-          TREND_ARROW[analytics.reflection.trend] || ""
-        ] })
+      /* V1.4 — метрики стояли одной строкой из четырёх «· подпись N%», которая на телефоне
+         переносилась посреди подписи. Теперь сетка 2x2 из карточек одинаковой ширины. */
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2 mb-6", children: [
+        { key: "awareness", label: t.home.awareness, score: analytics.awareness.score.value, trend: analytics.awareness.trend },
+        { key: "discipline", label: t.home.discipline, score: analytics.discipline.score.value, trend: analytics.discipline.trend },
+        { key: "risk", label: t.home.riskStability, score: analytics.risk.stability.value, trend: analytics.risk.trend },
+        { key: "reflection", label: t.home.reflection, score: analytics.reflection.score.value, trend: analytics.reflection.trend }
+      ].filter((m) => m.score != null).map((m) => /* @__PURE__ */ jsxs(
+        "div",
+        {
+          className: "rounded-xl px-3 py-2.5",
+          style: { border: `1px solid ${BASE.line}`, background: BASE.surface },
+          children: [
+            /* @__PURE__ */ jsx("div", { className: "text-[9.5px] uppercase tracking-[0.08em] mb-1.5 truncate", style: { color: BASE.inkFaint }, children: m.label }),
+            /* @__PURE__ */ jsxs("div", { className: "flex items-baseline gap-1 mb-1.5", children: [
+              /* @__PURE__ */ jsxs("span", { className: "text-[17px] leading-none", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
+                m.score,
+                "%"
+              ] }),
+              /* @__PURE__ */ jsx("span", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: TREND_ARROW[m.trend] || "" })
+            ] }),
+            /* @__PURE__ */ jsx("div", { className: "w-full h-[3px] rounded-full", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[3px] rounded-full transition-all duration-700 ease-out", style: { width: `${Math.max(0, Math.min(100, m.score))}%`, background: accent } }) })
+          ]
+        },
+        m.key
+      )) }),
+      /* V1.4 — на месте скаттера теперь прямое сравнение «при какой эмоции результат
+         лучше». Облако точек в координатах страх/уверенность ничего не сообщало: точки
+         не подписаны, вывода из формы облака не следует, а сами оси после перехода на
+         процентные шкалы стали производной величиной, а не исходными данными. */
+      /* @__PURE__ */ jsxs("div", { className: "mb-2 flex items-baseline justify-between gap-2", children: [
+        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041A\u0430\u043A \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u043B\u0438\u044F\u0435\u0442 \u043D\u0430 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442" }),
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] shrink-0", style: { color: BASE.inkFaint }, children: "\u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442" })
       ] }),
-      /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 300 }, children: /* @__PURE__ */ jsx(ResponsiveContainer, { children: /* @__PURE__ */ jsxs(ScatterChart, { margin: { top: 10, right: 20, bottom: 20, left: 0 }, children: [
-        /* @__PURE__ */ jsx(CartesianGrid, { stroke: BASE.line }),
-        /* @__PURE__ */ jsx(
-          XAxis,
-          {
-            type: "number",
-            dataKey: "x",
-            domain: [0, 100],
-            tick: { fill: BASE.inkFaint, fontSize: 11 },
-            stroke: BASE.line,
-            label: { value: "\u0421\u0442\u0440\u0430\u0445  \u2192  \u0423\u0432\u0435\u0440\u0435\u043D\u043D\u043E\u0441\u0442\u044C", position: "insideBottom", offset: -10, fill: BASE.inkFaint, fontSize: 11 }
-          }
-        ),
-        /* @__PURE__ */ jsx(
-          YAxis,
-          {
-            type: "number",
-            dataKey: "y",
-            domain: [0, 100],
-            reversed: true,
-            tick: { fill: BASE.inkFaint, fontSize: 11 },
-            stroke: BASE.line,
-            label: { value: "\u041D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445  \u2192  \u0421\u043F\u043E\u043A\u043E\u0435\u043D", angle: -90, position: "insideLeft", fill: BASE.inkFaint, fontSize: 11 }
-          }
-        ),
-        /* @__PURE__ */ jsx(ZAxis, { range: [90, 90] }),
-        /* @__PURE__ */ jsx(Tooltip, { content: /* @__PURE__ */ jsx(ChartTooltip, {}), cursor: { stroke: BASE.line } }),
-        /* @__PURE__ */ jsx(Scatter, { data: entries, isAnimationActive: true, animationDuration: 600, children: entries.map((e) => /* @__PURE__ */ jsx(Cell, { fill: outcomeColor(e.outcome) }, e.id)) })
-      ] }) }) }),
-      /* @__PURE__ */ jsx("div", { className: "flex gap-5 mt-2 justify-center", children: ["Win", "Loss", "Breakeven"].map((o) => /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5", children: [
-        /* @__PURE__ */ jsx("span", { className: "w-2 h-2 rounded-full", style: { background: outcomeColor(o) } }),
-        /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: BASE.inkFaint }, children: OUTCOME_LABEL[o] })
-      ] }, o)) })
+      /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsx(EmotionImpact, { stats: emotionImpact, measureMode, currency }) })
     ] }),
     view === "performance" && /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
