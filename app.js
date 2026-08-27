@@ -1,4 +1,12 @@
-// mind.exe — V1.2
+// mind.exe — V1.3
+//
+// V1.3 — вид ползунков шкал эмоций. В V1.2 дорожка рисовалась background-image на самом
+//        input: в WebKit нативный трек перекрывает фон элемента, поэтому на iOS вместо
+//        тонкой линии выводилась сплошная белая «таблетка» во всю высоту контрола.
+//        Дорожка, заполнение и бегунок теперь обычные div, а input лежит поверх полностью
+//        прозрачным — перетаскивание, шаг 1% и доступность остаются нативными. Ширина
+//        невидимого нативного бегунка приравнена к нарисованному, иначе кружок отстаёт
+//        от пальца у краёв. Логика состояния (V1.2) не менялась.
 //
 // V1.2 — исправлена ЛОГИКА, а не только оболочка. В V1.1 шкалы были новым интерфейсом
 //        поверх старой модели: четыре процента сводились в две оси x/y, и всё приложение
@@ -4432,6 +4440,11 @@ function normalizeEmotions(v, variant = "entry") {
   for (const key of k) out[key] = emotionClampPct(v[key]);
   return out;
 }
+// V1.3 — дорожка больше НЕ рисуется фоном самого input. В WebKit (iOS) нативный трек
+// перекрывает background-image элемента, из-за чего вместо тонкой линии выводилась
+// сплошная белая «таблетка» во всю высоту контрола. Теперь дорожка и заполнение — это
+// обычные div, а input лежит поверх прозрачным на всю ширину и с высотой под палец,
+// поэтому перетаскивание и доступность остаются нативными, а вид полностью наш.
 function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
   const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
   const keys = emotionScaleKeys(variant);
@@ -4447,40 +4460,58 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
     onChange(next);
   };
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsx("p", { className: "text-[11px] leading-relaxed mb-3", style: { color: BASE.inkFaint }, children: eg.hint }),
-    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-3.5", children: keys.map((key, i) => {
+    /* @__PURE__ */ jsx("p", { className: "text-[11px] leading-relaxed mb-4", style: { color: BASE.inkFaint }, children: eg.hint }),
+    /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-1", children: keys.map((key, i) => {
       const pct = emotionClampPct(current[key]);
-      return /* @__PURE__ */ jsxs("div", { children: [
-        /* @__PURE__ */ jsxs("div", { className: "flex items-baseline justify-between mb-1.5", children: [
-          /* @__PURE__ */ jsx("span", { className: "text-[12px]", style: { color: BASE.ink }, children: labels[i] }),
-          /* @__PURE__ */ jsxs("span", { className: "text-[12px]", style: { color: has ? BASE.inkDim : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
-            has ? pct : 0,
+      const active = has && pct > 0;
+      return /* @__PURE__ */ jsxs("div", { className: "py-1", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-baseline justify-between mb-2", children: [
+          /* @__PURE__ */ jsx("span", { className: "text-[13px]", style: { color: active ? BASE.ink : BASE.inkDim }, children: labels[i] }),
+          /* @__PURE__ */ jsxs("span", { className: "text-[13px] tabular-nums", style: { color: active ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
+            pct,
             "%"
           ] })
         ] }),
-        /* @__PURE__ */ jsx(
-          "input",
-          {
-            type: "range",
-            min: 0,
-            max: 100,
-            step: 1,
-            value: pct,
-            onChange: (e) => setKey(key, e.target.value),
-            className: "w-full emotion-range",
-            // Заливка дорожки до бегунка рисуется градиентом с жёсткой границей на
-            // текущем проценте: нативного «прогресса» у input[type=range] нет ни в
-            // WebKit, ни в Firefox, а отдельный div поверх ломал бы попадание пальцем.
-            style: {
-              accentColor: accent,
-              color: accent,
-              backgroundImage: `linear-gradient(to right, ${accent} 0%, ${accent} ${pct}%, rgba(255,255,255,0.10) ${pct}%, rgba(255,255,255,0.10) 100%)`
+        /* @__PURE__ */ jsxs("div", { className: "relative h-6 flex items-center", children: [
+          /* @__PURE__ */ jsx("div", { className: "absolute left-0 right-0 h-[5px] rounded-full pointer-events-none", style: { background: "rgba(255,255,255,0.09)" } }),
+          /* @__PURE__ */ jsx(
+            "div",
+            {
+              className: "absolute left-0 h-[5px] rounded-full pointer-events-none",
+              style: { width: `${pct}%`, background: accent, opacity: active ? 1 : 0 }
             }
-          }
-        )
+          ),
+          /* @__PURE__ */ jsx(
+            "div",
+            {
+              className: "absolute w-[18px] h-[18px] rounded-full pointer-events-none",
+              // calc сдвигает бегунок внутрь дорожки на краях, иначе на 0% и 100%
+              // половина кружка вылезает за границу строки.
+              style: {
+                left: `calc(${pct}% - ${pct * 0.18}px)`,
+                background: active ? accent : BASE.surface2,
+                border: `1px solid ${active ? accent : BASE.line}`,
+                boxShadow: active ? `0 0 0 5px ${accent}22, 0 1px 4px rgba(0,0,0,0.5)` : "0 1px 4px rgba(0,0,0,0.5)"
+              }
+            }
+          ),
+          /* @__PURE__ */ jsx(
+            "input",
+            {
+              type: "range",
+              min: 0,
+              max: 100,
+              step: 1,
+              value: pct,
+              onChange: (e) => setKey(key, e.target.value),
+              "aria-label": labels[i],
+              className: "emotion-range absolute inset-0 w-full"
+            }
+          )
+        ] })
       ] }, key);
     }) }),
-    has && stateText && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-4", style: { color: stateColor }, children: stateText })
+    has && stateText && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-5 leading-relaxed", style: { color: stateColor }, children: stateText })
   ] });
 }
 function PickerField({ value, onChange, options, placeholder, accent, allowCustom, flat, mono, onCustomAdd }) {
@@ -10043,31 +10074,28 @@ function MindExe() {
            photo's own composition already carries the chart-flowing-into-the-hole story the full
            height of a phone screen. Rotating the whole photo is still avoided (perspective/lensing
            reasons carry over unchanged from the original photo). ---------- */
-        /* V1.2 — ползунки шкал эмоций. Дорожка рисуется на самом input (градиент задаётся
-           инлайн и показывает заполнение до текущего значения), а нативные track делаются
-           прозрачными — иначе в WebKit они перекрывают этот градиент. Бегунок описан явно:
-           дефолтный на iOS светлый и на чёрном фоне выглядит инородно. */
+        /* V1.3 — сам input полностью прозрачен и служит только зоной захвата: вид дают
+           div-ы под ним. Бегунок делается невидимым, но НЕ убирается — без него в
+           WebKit перетаскивание не работает. height на всю строку, чтобы попадать пальцем. */
         .emotion-range {
           -webkit-appearance: none; appearance: none;
-          height: 26px; touch-action: pan-y; cursor: pointer;
-          background-repeat: no-repeat; background-position: center;
-          background-size: 100% 4px; border-radius: 999px;
+          background: transparent; margin: 0; height: 100%;
+          touch-action: pan-y; cursor: pointer;
         }
-        .emotion-range::-webkit-slider-runnable-track { height: 4px; background: transparent; border: none; }
-        .emotion-range::-moz-range-track { height: 4px; background: transparent; border: none; }
+        .emotion-range::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; }
+        .emotion-range::-moz-range-track { height: 100%; background: transparent; border: none; }
+        /* Ширина невидимого бегунка ДОЛЖНА совпадать с нарисованным (18px): именно от неё
+           браузер считает ход ползунка, и при расхождении кружок отстаёт от пальца у краёв. */
         .emotion-range::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
-          width: 18px; height: 18px; margin-top: -7px; border-radius: 50%;
-          background: #fff; border: none;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.55), 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
-          transition: transform 0.12s ease-out;
+          width: 18px; height: 18px; border-radius: 50%;
+          background: transparent; border: none;
         }
         .emotion-range::-moz-range-thumb {
           width: 18px; height: 18px; border-radius: 50%;
-          background: #fff; border: none;
-          box-shadow: 0 1px 3px rgba(0,0,0,0.55), 0 0 0 4px color-mix(in srgb, currentColor 22%, transparent);
+          background: transparent; border: none;
         }
-        .emotion-range:active::-webkit-slider-thumb { transform: scale(1.12); }
+        .emotion-range:focus { outline: none; }
         .splash2-root { background: #000; overflow: hidden; }
         @keyframes splash2RiseFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes splash2RingExpand { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
