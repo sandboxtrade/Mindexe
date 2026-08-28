@@ -1,4 +1,65 @@
-// mind.exe — V1.4
+// mind.exe — V1.7
+//
+// V1.7 — подпись под шкалами эмоций. Раньше она перечисляла проценты, которые и так видны
+//        на самих ползунках, и не давала никакой оценки: «Уверенность 75% · Напряжение 66%
+//        · Страх 61% — смешанное» ничего не сообщает сверх того, что уже на экране. Теперь
+//        правила читают проценты и называют состояние словами плюс что с ним делать:
+//        «Решение ведёт страх», «Сильный внутренний конфликт», «Уверенность без сомнений»
+//        и т.д. Порядок проверок — от самого тревожного к самому спокойному, поэтому
+//        сильный страх не может быть перекрыт формулировкой про ровное состояние. Пороги
+//        те же, что в аналитике (60 — выражено, 40 — слабо), чтобы подпись и статистика не
+//        противоречили друг другу. Рекомендации говорят только про проверку решения, не
+//        про рынок: приложение психологическое, а не торговый советник. В журнале
+//        показывается один вердикт без рекомендации — она уместна в момент заполнения.
+//
+// V1.6 — ИСПРАВЛЕНА ПОТЕРЯ СКРИНШОТОВ. Регрессия V1.0: там медиа перестали блокировать
+//        старт и стали грузиться фоном, но кэш хешей при этом заполнялся раньше, чем
+//        картинки попадали в entries.
+//
+//        Как терялось. loadMedia проставляла __mediaHashes[id] сразу при чтении документа.
+//        Вызывающий код обёрнут в caWithTimeout(20s): на медленной связи обёртка отклоняет
+//        промис, .then не выполняется, мержа в entries НЕ происходит — а сама загрузка
+//        дотекает следом и всё равно заполняет __mediaHashes. Получалось расхождение:
+//        в хешах id есть, в entries скриншотов нет. Дальше любой автосейв строил mediaMap
+//        из entries (пустой по картинкам), а цикл очистки в saveMedia проходил по
+//        __mediaHashes и удалял документы из Firestore как «лишние». Тот же результат
+//        давала гонка «хеши уже проставлены — мерж ещё не выполнен».
+//
+//        Исправлено в первопричине, а не защитным условием поверх:
+//        1) loadMedia больше не трогает __mediaHashes. Она возвращает { map, raw }, и хеши
+//           проставляет тот, кто фактически положил данные в state — одной операцией
+//           вместе с setEntries. Состояние кэша больше не может опережать состояние entries.
+//        2) Введён флаг __mediaLoaded. Пока медиа не доставлены в память, saveMedia не
+//           удаляет НИ ОДНОГО документа: отсутствие картинки в entries в этот момент
+//           означает «ещё не загрузили», а не «пользователь удалил». Запись при этом
+//           работает как раньше, так что новые скриншоты сохраняются и до загрузки старых.
+//
+// V1.5 — две правки.
+//  1) РЫНОЧНЫЙ БЛОК на главной. Три равные колонки не помещались на телефоне: «Волатильный»
+//     ломался посреди слова, пилюля с настроением уезжала в две строки. Значения там разной
+//     природы — число, число с текстовой меткой и слово — и узкие равные колонки им не
+//     подходят. Стал списком строк: слева иконка и подпись, справа значение. Данные и их
+//     источник прежние.
+//  2) «РАЗБОР». Что было не так: экран обещал «вопросы по тому, что уже видно в твоём
+//     журнале», но при малом числе сделок молча подставлял общие вопросы из зашитого
+//     списка — обещание расходилось с содержанием. Вопросы строились только на паттернах
+//     (которым нужно много сделок) и вообще не знали про процентные шкалы эмоций из V1.2.
+//     Сделано:
+//     - вопросы из эмоциональных шкал: сравнение среднего результата при эмоции от 60%
+//       против до 40% и отдельно смешанные состояния; порог 3 сделки на группу, поэтому
+//       они появляются намного раньше паттернов. Вопрос ставится только там, где эмоция
+//       связана с ХУДШИМ результатом — спрашивать про то, что и так работает, значит
+//       навязывать проблему;
+//     - интро называет состав честно: сколько вопросов из журнала, сколько общих;
+//     - вопросы из паттернов и из эмоций складываются, а не заменяют друг друга (раньше
+//       при недоступном движке паттернов эмоциональная часть терялась целиком);
+//     - подключён Gemini по схеме калибровки: приложение считает факты и хранит
+//       рекомендации, модель только переформулирует вопрос под конкретные числа и пишет
+//       финальный вывод по ответам. Числа ей не отдаются на генерацию — evidence всегда
+//       наш, а id, которых мы не отдавали, отбрасываются. Оба вызова необязательные:
+//       запрос на вопросы уходит фоном, пока читается интро, и не блокирует «Начать»;
+//       на экране результата сразу показывается локальный вывод, а версия от ИИ
+//       подменяет его по приходе. При таймауте или ошибке разбор работает как раньше.
 //
 // V1.4 — вкладка «Эмоции» в аналитике. Вместо скаттера (каждая сделка точкой в
 //        координатах страх→уверенность / нервы→спокойствие) теперь прямое сравнение
@@ -352,6 +413,19 @@ var STRINGS = {
         // [0] и [1] — полюса оси X (страх↔уверенность), [2] и [3] — полюса оси Y
         // (нервы↔спокойствие). Порядок менять нельзя: по нему считаются x/y.
         scales: ["Уверенность", "Страх", "Спокойствие", "Напряжение"],
+        // V1.7 — подпись под шкалами. Раньше она просто перечисляла проценты, которые и так
+        // видны на самих ползунках. Теперь это вывод о состоянии и что с ним делать.
+        // advice говорит только про решение и его проверку, не про рынок и не про сделку
+        // как финансовый инструмент — приложение психологическое, а не торговый советник.
+        verdicts: {
+          flat: { label: "Состояние не отмечено", advice: "Передвинь ползунки — без этого запись не сможет ничего показать позже." },
+          fearLed: { label: "Решение ведёт страх", advice: "Страх выше уверенности. Прежде чем входить, проверь сетап по своему чек-листу, а не по ощущению." },
+          mixed: { label: "Сильный внутренний конфликт", advice: "Ты одновременно уверен и напряжён. Это состояние, в котором решение обычно ещё не созрело — пауза дешевле входа." },
+          tense: { label: "Высокое напряжение", advice: "Напряжение сокращает паузу перед входом. Дай себе минуту между сетапом и кнопкой." },
+          overconfident: { label: "Уверенность без сомнений", advice: "Сомнений нет совсем — именно тогда проверка сетапа обычно и пропускается. Прогони чек-лист целиком." },
+          steady: { label: "Ровное рабочее состояние", advice: "Состояние спокойное. Это не отменяет стоп — проговори размер риска до входа." },
+          neutral: { label: "Состояние смешанное, без явного перевеса", advice: "Ничего не выражено сильно. Ориентируйся на план, а не на ощущение момента." }
+        },
         states: [
           "\u0421\u0442\u0440\u0430\u0448\u043D\u043E \u0438 \u043D\u0430 \u043D\u0435\u0440\u0432\u0430\u0445",
           "\u0422\u0440\u0435\u0432\u043E\u0436\u043D\u043E, \u0431\u0435\u0437 \u0447\u0451\u0442\u043A\u043E\u0439 \u043F\u043E\u0437\u0438\u0446\u0438\u0438",
@@ -376,6 +450,15 @@ var STRINGS = {
         axisRight: "\u0414\u043E\u0432\u043E\u043B\u0435\u043D",
         hint: "\u041E\u0442\u043C\u0435\u0442\u044C, \u0447\u0442\u043E \u0442\u044B \u0447\u0443\u0432\u0441\u0442\u0432\u0443\u0435\u0448\u044C \u043F\u043E \u0438\u0442\u043E\u0433\u0443 \u0441\u0434\u0435\u043B\u043A\u0438, \u0430 \u043D\u0435 \u0442\u043E, \u0447\u0442\u043E \u00AB\u043D\u0443\u0436\u043D\u043E\u00BB \u0447\u0443\u0432\u0441\u0442\u0432\u043E\u0432\u0430\u0442\u044C",
         scales: ["Доволен", "Разочарован", "Принял", "Задело"],
+        verdicts: {
+          flat: { label: "Состояние не отмечено", advice: "Отметь, как ты воспринял результат — это самая полезная часть записи." },
+          stung: { label: "Результат задел", advice: "Задетость сильнее принятия. Следующая сделка чаще всего страдает именно от этого — сделай паузу перед новым входом." },
+          mixed: { label: "Противоречивая реакция", advice: "Ты одновременно доволен и разочарован. Стоит отделить оценку результата от оценки собственных действий." },
+          disappointed: { label: "Разочарование в результате", advice: "Разочарование выше довольства. Проверь: сделка была ошибкой или просто не сработала по плану — это разные вещи." },
+          elated: { label: "Сильное довольство результатом", advice: "После удачного результата риск обычно растёт незаметно. Размер следующей позиции считай по плану, а не по настроению." },
+          atPeace: { label: "Результат принят спокойно", advice: "Реакция ровная. Такое состояние проще всего переносить на следующую сделку без искажений." },
+          neutral: { label: "Реакция смешанная, без явного перевеса", advice: "Ничего не выражено сильно. Запиши вывод словами, пока впечатление свежее." }
+        },
         states: [
           "\u041E\u0431\u0438\u0434\u0430 \u0438 \u0437\u043B\u043E\u0441\u0442\u044C",
           "\u0417\u0430\u0434\u0435\u043B\u043E, \u0441\u0430\u043C \u043D\u0435 \u043F\u043E\u043D\u0438\u043C\u0430\u044E \u043F\u043E\u0447\u0435\u043C\u0443",
@@ -506,12 +589,21 @@ var STRINGS = {
       heading: "\u0420\u0410\u0417\u0411\u041E\u0420",
       notEnough: "\u041F\u043E\u043A\u0430 \u043C\u0430\u043B\u043E\u0432\u0430\u0442\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439, \u0447\u0442\u043E\u0431\u044B \u0432\u044B\u0434\u0435\u043B\u0438\u0442\u044C \u0432 \u043D\u0438\u0445 \u0437\u0430\u043A\u043E\u043D\u043E\u043C\u0435\u0440\u043D\u043E\u0441\u0442\u0438. \u0414\u043E\u0431\u0430\u0432\u044C \u0435\u0449\u0451 \u043D\u0435\u043C\u043D\u043E\u0433\u043E \u0441\u0434\u0435\u043B\u043E\u043A \u2014 \u043F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0445 \u0438 \u0443\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0445 \u2014 \u0438 \u0440\u0430\u0437\u0431\u043E\u0440 \u0441\u0442\u0430\u043D\u0435\u0442 \u0434\u043E\u0441\u0442\u0443\u043F\u0435\u043D.",
       back: "\u041D\u0430\u0437\u0430\u0434",
-      questionsCount: (n) => `${n} ${pluralRu(n, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432")} \u043F\u043E \u0442\u043E\u043C\u0443, \u0447\u0442\u043E \u0443\u0436\u0435 \u0432\u0438\u0434\u043D\u043E \u0432 \u0442\u0432\u043E\u0451\u043C \u0436\u0443\u0440\u043D\u0430\u043B\u0435.`,
+      // V1.5 — раньше здесь всегда стояло «по тому, что уже видно в твоём журнале», хотя при
+      // малом числе сделок все вопросы были общими из зашитого списка. Теперь состав честный.
+      questionsCount: (n, dataDriven) => {
+        const head = `${n} ${pluralRu(n, "вопрос", "вопроса", "вопросов")}`;
+        if (!dataDriven) return `${head}. Данных в журнале пока мало, поэтому вопросы общие, а не по твоим сделкам.`;
+        if (dataDriven === n) return `${head} по тому, что уже видно в твоём журнале.`;
+        return `${head}: ${dataDriven} по твоим сделкам, остальные общие — на них в журнале пока не хватает данных.`;
+      },
       intro: "\u042D\u0442\u043E \u043D\u0435 \u043F\u0440\u043E \u0440\u044B\u043D\u043E\u043A \u0438 \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0439 \u0441\u043E\u0432\u0435\u0442 \u2014 \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u0440\u043E \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435, \u0432 \u043A\u043E\u0442\u043E\u0440\u043E\u043C \u0442\u044B \u043F\u0440\u0438\u043D\u0438\u043C\u0430\u0435\u0448\u044C \u0440\u0435\u0448\u0435\u043D\u0438\u044F. \u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u0447\u0435\u0441\u0442\u043D\u043E, \u0437\u0434\u0435\u0441\u044C \u043D\u0435\u043A\u043E\u043C\u0443 \u043F\u043E\u043D\u0440\u0430\u0432\u0438\u0442\u044C\u0441\u044F.",
       questionsAnswered: (total, dataDriven) => `${total} ${pluralRu(total, "\u0432\u043E\u043F\u0440\u043E\u0441", "\u0432\u043E\u043F\u0440\u043E\u0441\u0430", "\u0432\u043E\u043F\u0440\u043E\u0441\u043E\u0432")}${dataDriven > 0 ? `, \u0438\u0437 \u043D\u0438\u0445 ${dataDriven} \u2014 \u043F\u043E \u0440\u0435\u0430\u043B\u044C\u043D\u044B\u043C \u043F\u0430\u0442\u0442\u0435\u0440\u043D\u0430\u043C \u0438\u0437 \u0436\u0443\u0440\u043D\u0430\u043B\u0430` : ""}`,
       startHere: "\u041D\u0430\u0447\u043D\u0438 \u0441 \u044D\u0442\u043E\u0433\u043E",
       alsoWorthNoting: "\u0415\u0449\u0451 \u0441\u0442\u043E\u0438\u0442 \u043E\u0431\u0440\u0430\u0442\u0438\u0442\u044C \u0432\u043D\u0438\u043C\u0430\u043D\u0438\u0435",
       looksFine: "\u0422\u0443\u0442 \u0432\u0440\u043E\u0434\u0435 \u043F\u043E\u0440\u044F\u0434\u043E\u043A",
+      summaryLoading: "Собираю персональный вывод по твоим ответам…",
+      summaryByAi: "Вывод собран ИИ по фактам из твоего журнала и твоим ответам",
       disclaimer: "\u0420\u0435\u043A\u043E\u043C\u0435\u043D\u0434\u0430\u0446\u0438\u0438 \u043F\u0441\u0438\u0445\u043E\u043B\u043E\u0433\u0438\u0447\u0435\u0441\u043A\u0438\u0435, \u043D\u0435 \u0444\u0438\u043D\u0430\u043D\u0441\u043E\u0432\u044B\u0435 \u2014 \u043E\u043D\u0438 \u043D\u0435 \u043F\u0440\u043E \u0442\u043E, \u0447\u0442\u043E \u0442\u043E\u0440\u0433\u043E\u0432\u0430\u0442\u044C, \u0430 \u043F\u0440\u043E \u0442\u043E, \u043A\u0430\u043A \u0442\u044B \u044D\u0442\u043E \u0434\u0435\u043B\u0430\u0435\u0448\u044C.",
       done: "\u0413\u043E\u0442\u043E\u0432\u043E"
     },
@@ -652,6 +744,15 @@ var STRINGS = {
         axisRight: "Confidence",
         hint: "Mark where you actually were, not where you should've been",
         scales: ["Confidence", "Fear", "Calm", "Tension"],
+        verdicts: {
+          flat: { label: "State not marked", advice: "Move the sliders — without this the entry can't show you anything later." },
+          fearLed: { label: "Fear is driving the decision", advice: "Fear is above confidence. Before entering, check the setup against your checklist, not against the feeling." },
+          mixed: { label: "Strong inner conflict", advice: "You're confident and tense at the same time. In this state the decision usually isn't ready — a pause costs less than an entry." },
+          tense: { label: "High tension", advice: "Tension shortens the pause before entry. Give yourself a minute between setup and button." },
+          overconfident: { label: "Confidence with no doubt", advice: "No doubt at all — that's exactly when the setup check gets skipped. Run the full checklist." },
+          steady: { label: "Steady working state", advice: "The state is calm. That doesn't cancel the stop — say your risk size out loud before entering." },
+          neutral: { label: "Mixed state, nothing dominant", advice: "Nothing stands out strongly. Follow the plan rather than the feeling of the moment." }
+        },
         states: [
           "Scared and on edge",
           "Uneasy, no clear footing",
@@ -671,6 +772,15 @@ var STRINGS = {
         axisRight: "Pleased",
         hint: "Mark how you feel about the result, not how you think you should feel",
         scales: ["Pleased", "Disappointed", "At peace", "Stung"],
+        verdicts: {
+          flat: { label: "State not marked", advice: "Mark how you took the result — it's the most useful part of the entry." },
+          stung: { label: "The result stung", advice: "Being stung outweighs acceptance. The next trade usually suffers from exactly this — pause before entering again." },
+          mixed: { label: "Contradictory reaction", advice: "You're pleased and disappointed at once. Separate judging the result from judging your own actions." },
+          disappointed: { label: "Disappointed with the result", advice: "Disappointment outweighs satisfaction. Check whether the trade was a mistake or simply didn't work out — those are different things." },
+          elated: { label: "Strongly pleased with the result", advice: "After a good result, risk tends to creep up unnoticed. Size the next position by the plan, not by the mood." },
+          atPeace: { label: "Result taken calmly", advice: "The reaction is even. This is the easiest state to carry into the next trade without distortion." },
+          neutral: { label: "Mixed reaction, nothing dominant", advice: "Nothing stands out strongly. Write the takeaway down while the impression is fresh." }
+        },
         states: [
           "Resentful and angry",
           "Stung, not sure why",
@@ -801,12 +911,19 @@ var STRINGS = {
       heading: "REVIEW",
       notEnough: "There aren't quite enough entries yet to spot patterns in them. Add a few more trades \u2014 winning and losing \u2014 and the review will become available.",
       back: "Back",
-      questionsCount: (n) => `${n} ${n === 1 ? "question" : "questions"} based on what's already visible in your journal.`,
+      questionsCount: (n, dataDriven) => {
+        const head = `${n} ${n === 1 ? "question" : "questions"}`;
+        if (!dataDriven) return `${head}. There isn't much in the journal yet, so these are general questions rather than ones about your trades.`;
+        if (dataDriven === n) return `${head} based on what's already visible in your journal.`;
+        return `${head}: ${dataDriven} from your own trades, the rest general — the journal doesn't have enough data for those yet.`;
+      },
       intro: "This isn't about the market or financial advice \u2014 only about the state you're making decisions in. Answer honestly, there's no one to impress here.",
       questionsAnswered: (total, dataDriven) => `${total} ${total === 1 ? "question" : "questions"}${dataDriven > 0 ? `, ${dataDriven} of them based on real patterns from your journal` : ""}`,
       startHere: "Start with this",
       alsoWorthNoting: "Also worth noting",
       looksFine: "This looks fine",
+      summaryLoading: "Putting together a personal summary from your answers…",
+      summaryByAi: "Summary written by AI from your journal's facts and your answers",
       disclaimer: "The recommendations are psychological, not financial \u2014 they're not about what to trade, but about how you do it.",
       done: "Done"
     },
@@ -1954,17 +2071,96 @@ function buildReviewIssuesFromPatterns(patternsResult, lang = "ru") {
     return { id: p.id, dataDriven: true, title: p.title, evidence: p.description, question: meta.question, recommendation: p.recommendation };
   }).filter(Boolean);
 }
+// V1.5 — вопросы, построенные на процентных шкалах эмоций. До этого «Разбор» не знал
+// про них вообще: вопросы брались из паттернов (которым нужно 8 сделок на группу) и из
+// зашитого общего списка. Здесь порог мягче — 3 сделки на группу, — поэтому уже на
+// небольшом журнале появляются вопросы с настоящими числами, а не общие.
+var REVIEW_EMOTION_SCALE_LABELS = {
+  ru: ["Уверенность", "Страх", "Спокойствие", "Напряжение"],
+  en: ["Confidence", "Fear", "Calm", "Tension"]
+};
+var REVIEW_EMOTION_META = {
+  ru: {
+    confidence: { title: "Уверенность подводит", question: "Замечаешь, что при высокой уверенности ты хуже проверяешь сетап, потому что он и так «очевидный»?", recommendation: "Уверенность — не подтверждение сетапа. Когда она высокая, прогоняй тот же чек-лист, что и при сомнениях." },
+    fear: { title: "Вход на страхе", question: "Бывает, что при сильном страхе ты всё равно входишь, лишь бы не упустить движение?", recommendation: "Страх упустить — не сигнал. Если состояние отмечено как страх, отложи вход до следующего сетапа по плану." },
+    calm: { title: "Спокойствие притупляет", question: "Бывает, что в спокойном состоянии ты меньше следишь за риском, чем обычно?", recommendation: "Спокойствие не отменяет стоп. Проговаривай размер риска вслух даже тогда, когда всё выглядит понятно." },
+    tension: { title: "Вход на напряжении", question: "Замечаешь, что при внутреннем напряжении решения принимаются быстрее, чем обычно?", recommendation: "Напряжение сокращает паузу перед входом. Заведи правило: при высоком напряжении между сетапом и входом проходит минута." },
+    mixed: { title: "Смешанное состояние", question: "Бывает, что ты одновременно уверен в сделке и боишься её — и всё равно входишь?", recommendation: "Смешанное состояние — сигнал, что решение ещё не созрело. Это тот случай, когда пропустить сетап дешевле, чем войти." }
+  },
+  en: {
+    confidence: { title: "Confidence backfires", question: "Do you notice yourself checking a setup less carefully when you feel very confident, because it already looks obvious?", recommendation: "Confidence isn't setup confirmation. When it's high, run the same checklist you use when in doubt." },
+    fear: { title: "Entering on fear", question: "Do you sometimes enter anyway while strongly afraid, just to not miss the move?", recommendation: "Fear of missing out isn't a signal. If your state is fear, wait for the next setup that matches your plan." },
+    calm: { title: "Calm dulls attention", question: "Does being calm sometimes mean you watch risk less closely than usual?", recommendation: "Calm doesn't cancel the stop. Say your risk size out loud even when everything looks clear." },
+    tension: { title: "Entering on tension", question: "Do you notice decisions being made faster than usual when you feel inner tension?", recommendation: "Tension shortens the pause before entry. Make it a rule: when tension is high, a full minute passes between setup and entry." },
+    mixed: { title: "Mixed state", question: "Do you sometimes feel confident and afraid at the same time — and enter anyway?", recommendation: "A mixed state means the decision isn't ready. This is the case where skipping the setup is cheaper than taking it." }
+  }
+};
+var REVIEW_EMOTION_MIN_DIFF = 0.4;
+function reviewEmotionIssues(entries, lang = "ru") {
+  const meta = REVIEW_EMOTION_META[lang === "en" ? "en" : "ru"];
+  const stats = emotionImpactStats(entries, REVIEW_EMOTION_SCALE_LABELS[lang === "en" ? "en" : "ru"]);
+  if (!stats.available) return [];
+  const fmt = (v) => `${v >= 0 ? "+" : "\u2212"}${Math.abs(v).toFixed(2)}R`;
+  const out = [];
+  for (const sc of stats.scales) {
+    // Берём только шкалы, где высокая эмоция СВЯЗАНА С ХУДШИМ результатом. Обратный случай
+    // (эмоция помогает) вопросом не оформляется: спрашивать о том, что и так работает,
+    // значит навязывать проблему там, где её нет.
+    if (!(sc.diff <= -REVIEW_EMOTION_MIN_DIFF)) continue;
+    const m = meta[sc.key];
+    if (!m) continue;
+    out.push({
+      id: `emo_${sc.key}`,
+      dataDriven: true,
+      title: m.title,
+      evidence: lang === "en" ? `Trades where you marked ${sc.label.toLowerCase()} at ${EMOTION_IMPACT_HIGH}% or more average ${fmt(sc.highAvg)} (${sc.highN} trades), versus ${fmt(sc.lowAvg)} where it was ${EMOTION_IMPACT_LOW}% or less (${sc.lowN} trades).` : `Сделки, где ты отметил «${sc.label.toLowerCase()}» на ${EMOTION_IMPACT_HIGH}% и выше, в среднем дают ${fmt(sc.highAvg)} (${sc.highN} шт.), против ${fmt(sc.lowAvg)} там, где эта шкала была до ${EMOTION_IMPACT_LOW}% (${sc.lowN} шт.).`,
+      question: m.question,
+      recommendation: m.recommendation,
+      weight: Math.abs(sc.diff)
+    });
+  }
+  if (stats.conflict) {
+    const diff = stats.conflict.mixedAvg - stats.conflict.clearAvg;
+    if (diff <= -REVIEW_EMOTION_MIN_DIFF) {
+      const m = meta.mixed;
+      out.push({
+        id: "emo_mixed",
+        dataDriven: true,
+        title: m.title,
+        evidence: lang === "en" ? `Trades entered in a mixed state \u2014 opposite emotions marked high at once \u2014 average ${fmt(stats.conflict.mixedAvg)} (${stats.conflict.mixedN} trades), versus ${fmt(stats.conflict.clearAvg)} for the rest (${stats.conflict.clearN} trades).` : `Сделки, открытые в смешанном состоянии \u2014 когда противоположные эмоции отмечены высоко одновременно, \u2014 в среднем дают ${fmt(stats.conflict.mixedAvg)} (${stats.conflict.mixedN} шт.), против ${fmt(stats.conflict.clearAvg)} у остальных (${stats.conflict.clearN} шт.).`,
+        question: m.question,
+        recommendation: m.recommendation,
+        weight: Math.abs(diff)
+      });
+    }
+  }
+  return out.sort((a, b) => b.weight - a.weight);
+}
 function buildReviewQuiz(entries, lang = "ru") {
   if (entries.length < 3) return [];
-  const patternsResult = patternEngineV2(entries, lang);
-  if (!patternsResult.available) return analyzeJournalForQuiz(entries, lang);
   const questions = lang === "en" ? GENERIC_REVIEW_QUESTIONS_EN : GENERIC_REVIEW_QUESTIONS;
-  let selected = buildReviewIssuesFromPatterns(patternsResult, lang).slice(0, REVIEW_MAX_QUESTIONS);
+  const patternsResult = patternEngineV2(entries, lang);
+  // V1.5 — вопросы из паттернов и из эмоциональных шкал складываются, а не заменяют друг
+  // друга. Раньше при недоступном движке паттернов эмоциональная часть терялась целиком.
+  const fromPatterns = patternsResult.available ? buildReviewIssuesFromPatterns(patternsResult, lang) : analyzeJournalForQuiz(entries, lang).filter((i) => i.dataDriven);
+  const fromEmotions = reviewEmotionIssues(entries, lang);
+  const seen = /* @__PURE__ */ new Set();
+  let selected = [];
+  for (const issue of [...fromEmotions, ...fromPatterns]) {
+    if (seen.has(issue.id)) continue;
+    seen.add(issue.id);
+    selected.push(issue);
+    if (selected.length >= REVIEW_MAX_QUESTIONS) break;
+  }
+  // Общие вопросы — только добивка до минимума, и они честно помечены dataDriven: false,
+  // из-за чего интро сообщает, сколько вопросов на самом деле построено на журнале.
   if (selected.length < REVIEW_MIN_QUESTIONS) {
-    const usedIds = new Set(selected.map((i) => i.id));
     for (const g of questions) {
       if (selected.length >= REVIEW_MIN_QUESTIONS) break;
-      if (!usedIds.has(g.id)) selected.push(g);
+      if (!seen.has(g.id)) {
+        seen.add(g.id);
+        selected.push(g);
+      }
     }
   }
   return selected;
@@ -4196,28 +4392,32 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       tile.id
     )) })
     ] }),
-    /* V1.0 — рыночная строка перерисована в карточку: круглая иконка + подпись + крупное
-       значение, колонки разделены вертикальными линиями (см. макет). Значения те же самые
-       и из того же источника (marketSnapshot с фолбэком на константы) — изменилась только
-       подача. Полоса под BTC.D показывает саму доминацию в процентах, пилюля под F&G —
-       текстовую метку настроения. Ничего, чего нет в данных, здесь не рисуется. */
-    /* @__PURE__ */ jsx("div", { className: "pt-3.5", children: /* @__PURE__ */ jsx("div", { className: "rounded-[22px] px-3 py-4", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: /* @__PURE__ */ jsx("div", { className: "grid", style: { gridTemplateColumns: `repeat(${showBtcD ? 3 : 2}, minmax(0, 1fr))` }, children: marketCells.map((m, i) => /* @__PURE__ */ jsxs(
+    /* V1.5 — три колонки в ряд не помещались на телефоне: «Волатильный» ломался посреди
+       слова, а пилюля с настроением уезжала в две строки. Значения тут разной природы —
+       число, число с текстовой меткой и просто слово — и равные узкие колонки для них не
+       подходят. Теперь это список строк: слева иконка и подпись, справа значение, которому
+       больше не приходится втискиваться в треть ширины. Данные и их источник прежние. */
+    /* @__PURE__ */ jsx("div", { className: "pt-3.5", children: /* @__PURE__ */ jsx("div", { className: "rounded-[22px] px-4 py-1", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: marketCells.map((m, i) => /* @__PURE__ */ jsxs(
       "div",
       {
-        className: "min-w-0 px-2.5",
-        style: i === 0 ? void 0 : { borderLeft: `1px solid ${BASE.line}` },
+        className: "py-3",
+        style: i === 0 ? void 0 : { borderTop: `1px solid ${BASE.line}` },
         children: [
-          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1.5", children: [
-            /* @__PURE__ */ jsx("span", { className: "shrink-0 flex items-center justify-center rounded-full", style: { width: 26, height: 26, border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx(m.icon, { size: 13, style: { color: BASE.inkDim } }) }),
-            /* @__PURE__ */ jsx("span", { className: "text-[9px] uppercase tracking-[0.12em] truncate", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label })
+          /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-3", children: [
+            /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 shrink-0", children: [
+              /* @__PURE__ */ jsx("span", { className: "shrink-0 flex items-center justify-center rounded-full", style: { width: 26, height: 26, border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx(m.icon, { size: 13, style: { color: BASE.inkDim } }) }),
+              /* @__PURE__ */ jsx("span", { className: "text-[9.5px] uppercase tracking-[0.12em]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label })
+            ] }),
+            /* @__PURE__ */ jsxs("span", { className: "min-w-0 text-right", children: [
+              /* @__PURE__ */ jsx("span", { className: "block text-[17px] leading-tight", style: { color: BASE.ink, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)", fontWeight: 600 }, children: m.value }),
+              m.pill && /* @__PURE__ */ jsx("span", { className: "block text-[10.5px] leading-snug mt-0.5", style: { color: BASE.inkDim }, children: m.pill })
+            ] })
           ] }),
-          /* @__PURE__ */ jsx("div", { className: "text-[19px] leading-tight break-words", style: { color: BASE.ink, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)", fontWeight: 600 }, children: m.value }),
-          m.bar !== void 0 && /* @__PURE__ */ jsx("div", { className: "w-full h-[3px] rounded-full mt-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[3px] rounded-full transition-all duration-700 ease-out", style: { width: `${Math.max(0, Math.min(100, m.bar))}%`, background: accent } }) }),
-          m.pill && /* @__PURE__ */ jsx("div", { className: "inline-block mt-2 px-2 py-[3px] rounded-full max-w-full", style: { border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx("span", { className: "text-[9.5px] leading-tight", style: { color: BASE.inkDim }, children: m.pill }) })
+          m.bar !== void 0 && /* @__PURE__ */ jsx("div", { className: "w-full h-[3px] rounded-full mt-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[3px] rounded-full transition-all duration-700 ease-out", style: { width: `${Math.max(0, Math.min(100, m.bar))}%`, background: accent } }) })
         ]
       },
       m.key
-    )) }) }) })
+    )) }) })
   ] });
 }
 function TraderPatternDetail({ pattern, accent, currency, onClose, t, lang }) {
@@ -4409,30 +4609,78 @@ function emotionIntensity(values, variant = "entry") {
   const k = emotionScaleKeys(variant);
   return Math.max(...k.map((n) => emotionClampPct(values[n])));
 }
-// Подпись состояния: перечисление того, что реально отмечено, от сильного к слабому.
+// V1.7 — вердикт по состоянию. Раньше подпись просто перечисляла проценты, которые и так
+// видны на ползунках, и не давала никакой оценки. Теперь правила читают сами проценты и
+// называют состояние словами плюс что с ним делать. Порядок проверок — от самого
+// тревожного к самому спокойному: первое совпавшее правило и есть вердикт, поэтому
+// сильный страх никогда не будет перекрыт формулировкой про ровное состояние.
+//
+// Пороги: 60 — «выражено», 40 — «слабо», 20 — «практически нет». Те же числа, что и в
+// аналитике (EMOTION_IMPACT_HIGH/LOW), чтобы подпись и статистика не противоречили друг другу.
+function emotionVerdictKey(values, variant = "entry") {
+  const k = emotionScaleKeys(variant);
+  const g = (n) => emotionClampPct(values[n]);
+  const pos = g(k[0]);
+  const neg = g(k[1]);
+  const settled = g(k[2]);
+  const agitated = g(k[3]);
+  if (Math.max(pos, neg, settled, agitated) < 15) return "flat";
+  const conflict = emotionConflict(values, variant).max;
+  if (variant === "exit") {
+    if (neg >= 60 && pos <= 40) return "disappointed";
+    if (agitated >= 60 && settled <= 40) return "stung";
+    if (conflict >= 50) return "mixed";
+    if (pos >= 70 && neg <= 25 && agitated <= 30) return "elated";
+    if (settled >= 55 && agitated <= 30 && neg <= 40) return "atPeace";
+    return "neutral";
+  }
+  // Страх проверяется раньше конфликта: «боюсь сильнее, чем уверен» — это уже не
+  // смешанное состояние, а решение, которое ведёт страх, и говорить надо именно об этом.
+  if (neg >= 60 && neg > pos) return "fearLed";
+  if (conflict >= 50) return "mixed";
+  if (agitated >= 60 && settled <= 40) return "tense";
+  if (pos >= 75 && neg <= 20 && agitated <= 25) return "overconfident";
+  if (settled >= 55 && agitated <= 30 && neg <= 40) return "steady";
+  return "neutral";
+}
+function emotionVerdict(values, t, variant = "entry") {
+  if (!values) return null;
+  const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
+  const key = emotionVerdictKey(values, variant);
+  const v = eg.verdicts?.[key];
+  if (!v) return null;
+  return { key, label: v.label, advice: v.advice };
+}
+// Цвет вердикта. Привязан к самому вердикту, а не к балансу осей: состояние, которое
+// названо тревожным, не должно подсвечиваться спокойным цветом.
+var EMOTION_VERDICT_TONE = {
+  flat: "faint",
+  neutral: "faint",
+  fearLed: "bad",
+  mixed: "bad",
+  stung: "bad",
+  disappointed: "bad",
+  tense: "warn",
+  overconfident: "warn",
+  elated: "warn",
+  steady: "good",
+  atPeace: "good"
+};
+// Прежнее перечисление процентов от сильного к слабому.
 // Именно эта строка теперь показывается трейдеру и в журнале, вместо формулировки из
 // 3x3-сетки, которая при смешанных состояниях врала.
+// Используется в журнале, где нужна одна короткая строка: там показывается только
+// название состояния, без рекомендации — она уместна в момент заполнения, а не в списке.
 function emotionValuesText(values, t, variant = "entry") {
-  if (!values) return null;
-  const k = emotionScaleKeys(variant);
-  const eg = variant === "exit" ? t.newEntry.exitEmotionGrid : t.newEntry.emotionGrid;
-  const labels = Array.isArray(eg.scales) ? eg.scales : k;
-  const parts = k.map((key, i) => ({ label: labels[i], pct: emotionClampPct(values[key]) })).filter((p) => p.pct > 0).sort((a, b) => b.pct - a.pct);
-  if (parts.length === 0) return t.newEntry.emotionFlat;
-  const body = parts.slice(0, 3).map((p) => `${p.label} ${p.pct}%`).join(" \u00B7 ");
-  return emotionConflict(values, variant).has ? `${body} \u2014 ${t.newEntry.emotionMixed}` : body;
+  const v = emotionVerdict(values, t, variant);
+  return v ? v.label : null;
 }
 // Цвет подписи. Сильный конфликт всегда тянет в предупреждающий, даже если по балансу
 // осей состояние выглядит благополучным — иначе «страх 100%» подсвечивался бы зелёным.
 function emotionValuesColor(values, variant = "entry") {
   if (!values) return BASE.inkFaint;
-  if (emotionIntensity(values, variant) === 0) return BASE.inkFaint;
-  const c = emotionConflict(values, variant);
-  const p = emotionsToPoint(values, variant);
-  const base = emotionPositionColor(p.x, p.y);
-  if (c.max >= 60) return LOSS;
-  if (c.max >= 40) return WARN;
-  return base;
+  const tone = EMOTION_VERDICT_TONE[emotionVerdictKey(values, variant)] || "faint";
+  return tone === "bad" ? LOSS : tone === "warn" ? WARN : tone === "good" ? WIN : BASE.inkFaint;
 }
 // Единая точка входа для журнала: у записей с процентами читаем проценты, у старых
 // (до V1.1) процентов нет — для них остаётся прежняя формулировка по сетке.
@@ -4463,7 +4711,7 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
   const labels = Array.isArray(eg.scales) ? eg.scales : keys;
   const has = !!values;
   const current = values || {};
-  const stateText = has ? emotionValuesText(values, t, variant) : null;
+  const verdict = has ? emotionVerdict(values, t, variant) : null;
   const stateColor = has ? emotionValuesColor(values, variant) : BASE.inkFaint;
   const setKey = (key, raw) => {
     const next = {};
@@ -4523,7 +4771,10 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
         ] })
       ] }, key);
     }) }),
-    has && stateText && /* @__PURE__ */ jsx("div", { className: "text-center text-xs mt-5 leading-relaxed", style: { color: stateColor }, children: stateText })
+    has && verdict && /* @__PURE__ */ jsxs("div", { className: "mt-5 rounded-xl px-3.5 py-3", style: { border: `1px solid ${stateColor}33`, background: `${stateColor}0D` }, children: [
+      /* @__PURE__ */ jsx("p", { className: "text-[13px] leading-snug mb-1", style: { color: stateColor, fontFamily: "var(--font-display)", fontWeight: 600 }, children: verdict.label }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11.5px] leading-relaxed", style: { color: BASE.inkDim }, children: verdict.advice })
+    ] })
   ] });
 }
 function PickerField({ value, onChange, options, placeholder, accent, allowCustom, flat, mono, onCustomAdd }) {
@@ -5534,10 +5785,11 @@ var EMOTION_IMPACT_MIN = 3;
 function ei_avg(rows) {
   return rows.length ? rows.reduce((sum, x) => sum + x.r, 0) / rows.length : null;
 }
-function emotionImpactStats(entries, t) {
+// labels передаются явно, а не берутся из t: этой же статистикой пользуется «Разбор»,
+// который знает только lang и не имеет доступа к объекту переводов экрана записи.
+function emotionImpactStats(entries, labelList) {
   const keys = emotionScaleKeys("entry");
-  const eg = t.newEntry.emotionGrid;
-  const labels = Array.isArray(eg.scales) ? eg.scales : keys;
+  const labels = Array.isArray(labelList) && labelList.length === keys.length ? labelList : keys;
   // У записей до V1.1 процентов нет — для них проценты восстанавливаются из осей, иначе
   // блок был бы пустым у всех, кто вёл журнал раньше. Восстановление приблизительное
   // (см. pointToEmotions), поэтому доля таких сделок показывается отдельно.
@@ -5827,7 +6079,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     });
     return Object.entries(stats).map(([tag, s]) => ({ tag, avgR: s.sumR / s.count, count: s.count })).sort((a, b) => b.avgR - a.avgR);
   }, [withR]);
-  const emotionImpact = useMemo(() => emotionImpactStats(closedEntries, t), [closedEntries, t]);
+  const emotionImpact = useMemo(() => emotionImpactStats(closedEntries, t.newEntry.emotionGrid.scales), [closedEntries, t]);
   const planVsFact = useMemo(() => {
     const withPlan = closedEntries.filter((e) => typeof e.plannedRR === "number" && typeof e.realizedRR === "number");
     if (withPlan.length < 3) return null;
@@ -6245,13 +6497,45 @@ function Calibration({ accent, onComplete, lang, t, entries, analytics, userId, 
   ] });
 }
 function JournalReview({ entries, accent, onClose, t, lang }) {
-  const issues = useMemo(() => buildReviewQuiz(entries, lang), [entries, lang]);
+  const baseIssues = useMemo(() => buildReviewQuiz(entries, lang), [entries, lang]);
   const likert = lang === "en" ? REVIEW_LIKERT_EN : REVIEW_LIKERT;
   const [stage, setStage] = useState("intro");
   const [qIndex, setQIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [result, setResult] = useState(null);
+  // V1.5 — Gemini переформулирует вопросы под конкретные числа из журнала. Запрос уходит
+  // один раз, пока трейдер читает интро, и НЕ блокирует кнопку «Начать»: если ответ не
+  // успел прийти или упал, показываются зашитые формулировки. Факты, evidence и
+  // рекомендации в любом случае свои — от модели берётся только текст вопроса.
+  const [aiQuestions, setAiQuestions] = useState(null);
+  useEffect(() => {
+    if (baseIssues.length === 0) return;
+    let cancelled = false;
+    aiReviewQuestions(baseIssues, lang).then((map) => {
+      if (!cancelled && map && Object.keys(map).length > 0) setAiQuestions(map);
+    }).catch((err) => console.warn("mind.exe: review questions unavailable", err));
+    return () => {
+      cancelled = true;
+    };
+  }, [baseIssues, lang]);
+  const issues = useMemo(
+    () => aiQuestions ? baseIssues.map((i) => aiQuestions[i.id] ? { ...i, question: aiQuestions[i.id] } : i) : baseIssues,
+    [baseIssues, aiQuestions]
+  );
+  const dataDrivenCount = useMemo(() => baseIssues.filter((i) => i.dataDriven).length, [baseIssues]);
+  // Персональный вывод. Локальный narrative из scoreJournalReview показывается сразу,
+  // ИИ-версия подменяет его, когда придёт. Так экран результата никогда не ждёт сеть.
+  const [aiSummary, setAiSummary] = useState(null);
+  const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const q = issues[qIndex];
+  const finish = (next) => {
+    setResult(scoreJournalReview(issues, next, lang));
+    setStage("result");
+    setAiSummaryLoading(true);
+    aiReviewSummary(issues, next, lang).then((text) => {
+      if (text && text.trim()) setAiSummary(text.trim());
+    }).catch((err) => console.warn("mind.exe: review summary unavailable", err)).finally(() => setAiSummaryLoading(false));
+  };
   const selectAnswer = (opt) => {
     const next = { ...answers, [q.id]: opt };
     setAnswers(next);
@@ -6259,8 +6543,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
       if (qIndex + 1 < issues.length) {
         setQIndex(qIndex + 1);
       } else {
-        setResult(scoreJournalReview(issues, next, lang));
-        setStage("result");
+        finish(next);
       }
     }, 200);
   };
@@ -6269,8 +6552,10 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
     setQIndex(0);
     setAnswers({});
     setResult(null);
+    setAiSummary(null);
+    setAiSummaryLoading(false);
   };
-  if (issues.length === 0) {
+  if (baseIssues.length === 0) {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
       /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
@@ -6290,7 +6575,7 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
     return /* @__PURE__ */ jsxs("div", { className: "text-center py-4 stagger", children: [
       /* @__PURE__ */ jsx(Sparkles, { size: 38, style: { color: accent }, className: "mx-auto mb-4" }),
       /* @__PURE__ */ jsx("h2", { className: "text-xl mb-2 tracking-wide", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 600 }, children: t.review.heading }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.review.questionsCount(issues.length) }),
+      /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkDim }, children: t.review.questionsCount(issues.length, dataDrivenCount) }),
       /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed mb-8 px-2", style: { color: BASE.inkFaint }, children: t.review.intro }),
       /* @__PURE__ */ jsx(
         "button",
@@ -6332,7 +6617,14 @@ function JournalReview({ entries, accent, onClose, t, lang }) {
     /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-4", children: /* @__PURE__ */ jsx(CalibrationRing, { pct: result.pct, color: result.tier.color }) }),
     /* @__PURE__ */ jsx("p", { className: "text-base mb-1 px-2 leading-relaxed", style: { color: result.tier.color, fontFamily: "var(--font-display)", fontWeight: 500 }, children: result.tier.label }),
     /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: t.review.questionsAnswered(totalAnswered, dataDrivenAnswered) }),
-    /* @__PURE__ */ jsx(Card, { className: "text-left mb-4", children: /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: result.narrative }) }),
+    /* @__PURE__ */ jsxs(Card, { className: "text-left mb-4", children: [
+      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: aiSummary || result.narrative }),
+      aiSummaryLoading && !aiSummary && /* @__PURE__ */ jsx("p", { className: "text-[11px] mt-2", style: { color: BASE.inkFaint }, children: t.review.summaryLoading }),
+      aiSummary && /* @__PURE__ */ jsxs("p", { className: "text-[11px] mt-2 flex items-center gap-1.5", style: { color: BASE.inkFaint }, children: [
+        /* @__PURE__ */ jsx(Sparkles, { size: 11, style: { color: accent } }),
+        t.review.summaryByAi
+      ] })
+    ] }),
     result.priority && /* @__PURE__ */ jsxs(Card, { className: "mb-4 text-left", style: { border: `1px solid ${LOSS}50`, background: `${LOSS}0D` }, children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
         /* @__PURE__ */ jsx(AlertTriangle, { size: 14, style: { color: LOSS } }),
@@ -7148,6 +7440,89 @@ ${historyText || "(none yet)"}
 
 USER_QUESTION:
 ${question}`;
+  return aiCallGemini(prompt);
+}
+// ---- aiService.js: Journal review --------------------------------------------
+// V1.5 — Gemini подключён к «Разбору» по той же схеме, что и к калибровке: приложение
+// само считает ФАКТЫ (числа, выборки, средние) и само хранит рекомендации, а модель
+// только переформулирует вопрос под конкретный факт и пишет финальный вывод. Числа
+// модели не отдаются на генерацию — она физически не может их выдумать, потому что
+// evidence подставляется наш. Оба вызова необязательные: при отказе сети, таймауте или
+// неожиданном ответе остаются зашитые формулировки, и разбор работает как раньше.
+var AI_REVIEW_QUESTIONS_TASK = `You are writing the question wording for a self-review inside mind.exe, a
+trading journal. You receive REVIEW_FACTS: a JSON array of findings the app already computed from this
+trader's own journal. Each has an id, a title, and an evidence string containing real numbers.
+
+For each finding, rewrite its "question" so it refers to that finding's own evidence and sounds like it
+was written for this specific person. Keep it to one or two plain sentences.
+
+Rules:
+- Never invent, change, or restate a number that is not in that finding's evidence.
+- Never diagnose or label the person ("you are impulsive", "you have a problem with..."). Ask about what
+  they notice in themselves.
+- Do not phrase a question so there is an obviously correct answer to give. It must honestly probe.
+- Do not give advice here \u2014 only the question. The app supplies recommendations itself.
+- Every question is answered on the same fixed agree/disagree scale, which the app owns. Do not
+  propose answers, scores, or scales.
+- Write in the language given by LANG ("ru" \u2192 Russian, "en" \u2192 English).
+- Return ONLY a JSON array, no markdown fences, no commentary:
+  [{"id": "<the same id you were given>", "question": "..."}]
+  Use every id exactly once. If you cannot improve a question, return its id with your best rewording
+  anyway \u2014 do not omit it and do not add ids that were not given to you.`;
+async function aiReviewQuestions(issues, lang) {
+  const facts = (issues || []).map((i) => ({ id: i.id, title: i.title, evidence: i.evidence, currentQuestion: i.question }));
+  if (!facts.length) return {};
+  const prompt = `${AI_REVIEW_QUESTIONS_TASK}
+
+LANG: ${lang === "en" ? "en" : "ru"}
+
+REVIEW_FACTS:
+${JSON.stringify(facts)}`;
+  const raw = await aiCallGemini(prompt);
+  const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+  if (!Array.isArray(parsed)) throw new Error("ai_review_bad_shape");
+  const allowed = new Set(facts.map((f) => f.id));
+  const out = {};
+  for (const item of parsed) {
+    // Принимаются только id, которые мы сами отдали: любой придуманный моделью
+    // идентификатор игнорируется, иначе в разбор попал бы вопрос без факта под ним.
+    if (item && allowed.has(item.id) && typeof item.question === "string" && item.question.trim().length > 8) {
+      out[item.id] = item.question.trim();
+    }
+  }
+  return out;
+}
+var AI_REVIEW_SUMMARY_TASK = `You are writing the closing summary of a self-review inside mind.exe, a trading
+journal. You receive REVIEW_RESULT: the findings the app computed from the trader's own journal, and, for
+each one, how strongly the trader agreed it applies to them (agreement 0-3, where 3 is full agreement).
+
+Write 3-5 sentences addressed to the trader, in the language given by LANG.
+
+Rules:
+- Use only numbers that appear in the evidence strings you were given. Never invent statistics.
+- The most useful thing you can point out is a MISMATCH: a finding the numbers show clearly but the
+  trader disagreed with, or one they strongly agreed with that the numbers do not yet support. Name it
+  plainly if it exists.
+- Separate fact from reading: say "the journal shows X" for numbers and "this may mean" for your
+  interpretation.
+- Never diagnose, never label the person, never give trading instructions (what to buy, sell, or when
+  to enter). Guidance is only about how they make decisions.
+- If the findings are few or the samples are small, say so honestly instead of overreaching.
+- Return ONLY the text. No markdown, no headings, no bullet points, no quotes.`;
+async function aiReviewSummary(issues, answers, lang) {
+  const facts = (issues || []).map((i) => ({
+    title: i.title,
+    evidence: i.evidence,
+    fromJournal: !!i.dataDriven,
+    agreement: answers?.[i.id]?.score ?? null
+  })).filter((f) => f.agreement != null);
+  if (!facts.length) throw new Error("ai_review_no_answers");
+  const prompt = `${AI_REVIEW_SUMMARY_TASK}
+
+LANG: ${lang === "en" ? "en" : "ru"}
+
+REVIEW_RESULT:
+${JSON.stringify(facts)}`;
   return aiCallGemini(prompt);
 }
 // ---- aiService.js: Vision (trade screenshot recognition) ----------------------
@@ -8980,11 +9355,18 @@ function mediaEntryKey(userId, entryId) {
   return `${MEDIA_KEY}:${userId}:${entryId}`;
 }
 var __mediaHashes = {};
+// V1.6 — флаг «медиа этого пользователя реально доставлены в память». Пока он false,
+// saveMedia НЕ удаляет ни одного документа со скриншотами: отсутствие картинки в
+// entries в этот момент означает «ещё не загрузили», а не «пользователь её удалил».
+var __mediaLoaded = false;
 function resetMediaCache() {
   __mediaHashes = {};
+  __mediaLoaded = false;
 }
 async function loadMedia(userId, entryIds = []) {
-  if (!fbAuth.currentUser || !userId) return {};
+  // Ранний выход возвращает ту же форму { map, raw }, что и успешный путь: вызывающий
+  // проверяет res.map, и голый {} молча означал бы «медиа нет», а не «не смогли прочитать».
+  if (!fbAuth.currentUser || !userId) return { map: null, raw: {} };
   const map = {};
   try {
     const legacy = await storageGet(mediaKey(userId), false);
@@ -8994,15 +9376,22 @@ async function loadMedia(userId, entryIds = []) {
   const results = await Promise.all((entryIds || []).map(
     (id) => storageGet(mediaEntryKey(userId, id), false).then((r) => [id, r?.value || null]).catch(() => [id, null])
   ));
-  for (const [id, raw] of results) {
-    if (!raw) continue;
+  // V1.6 — хеши здесь БОЛЬШЕ НЕ ПРОСТАВЛЯЮТСЯ. Раньше они писались прямо тут, и если
+  // вызывающий не успевал/не мог применить результат (обёртка caWithTimeout уже отклонила
+  // промис по таймауту, а сама загрузка дотекала следом), то __mediaHashes оказывался
+  // полным, а entries — пустым по скриншотам. Первый же автосейв видел «в памяти картинок
+  // нет, а в хешах есть» и удалял документы из Firestore. Теперь сырые строки просто
+  // возвращаются, а хеши проставляет тот, кто действительно положил данные в state.
+  const raw = {};
+  for (const [id, value] of results) {
+    if (!value) continue;
     try {
-      map[id] = JSON.parse(raw);
-      __mediaHashes[id] = raw;
+      map[id] = JSON.parse(value);
+      raw[id] = value;
     } catch (_) {
     }
   }
-  return map;
+  return { map, raw };
 }
 async function saveMedia(userId, mediaMap) {
   if (!fbAuth.currentUser || !userId) return;
@@ -9017,6 +9406,9 @@ async function saveMedia(userId, mediaMap) {
       console.warn("mind.exe: could not save screenshots for entry", id, e);
     }
   }
+  // Удаление разрешено только после подтверждённой загрузки медиа. Иначе сохранение,
+  // случившееся до неё, стирает скриншоты, которых просто ещё нет в памяти.
+  if (!__mediaLoaded) return;
   for (const id of Object.keys(__mediaHashes)) {
     if (ids.includes(id)) continue;
     try {
@@ -9754,8 +10146,13 @@ function MindExe() {
         // месте, не хватает только картинок — поэтому она не трогает canPersistRef и не
         // показывает тост о потере данных.
         if (mediaIds.length > 0) {
-          caWithTimeout(loadMedia(userId, mediaIds), 2e4, "media_load_timeout").then((media) => {
-            if (cancelled || !media) return;
+          caWithTimeout(loadMedia(userId, mediaIds), 2e4, "media_load_timeout").then((res) => {
+            if (cancelled || !res || !res.map) return;
+            const media = res.map;
+            // Хеши и флаг выставляются ТОЛЬКО здесь, вместе с попаданием данных в state,
+            // — чтобы состояние кэша никогда не опережало состояние entries.
+            Object.assign(__mediaHashes, res.raw || {});
+            __mediaLoaded = true;
             setEntries((prev) => prev.map((e) => {
               const m = media[e.id];
               if (!m) return e;
