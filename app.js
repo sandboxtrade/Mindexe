@@ -1,4 +1,98 @@
-// mind.exe — V1.7
+// mind.exe — V2.1
+//
+// V2.1 — дизайн-проход, этап 3 из 3: скелетоны и плавная загрузка.
+//
+//        Добавлены Skeleton и SkeletonLines: полосы с медленным бликом (1.6s — быстрый
+//        мигающий скелетон читается как ошибка, а не как ожидание). Блик идёт по градиенту
+//        фона, а не отдельным слоем, поэтому не добавляет элементов в разметку и не
+//        перехватывает нажатия. При prefers-reduced-motion анимации отключаются.
+//
+//        ГДЕ ПРИМЕНЕНО:
+//        - Блок совета на главной. Скелетон показывается ТОЛЬКО когда показать нечего:
+//          нет ни ответа Gemini, ни локального инсайта, ни записей. Если локальный инсайт
+//          посчитан, он выводится сразу — прятать готовую информацию ради анимации
+//          означало бы сделать приложение медленнее ради вида, что оно быстрое. Подмена
+//          локального текста ответом модели идёт через fade, а не скачком: смена ключа
+//          элемента перемонтирует его и запускает .content-in.
+//        - Список журнала. Карточки проявляются с шагом 60ms вместо одновременного
+//          возникновения. Класс .stagger уже был в бандле, но к журналу применён не был.
+//
+//        ГДЕ СОЗНАТЕЛЬНО НЕ ПРИМЕНЕНО:
+//        - Скриншоты в карточках сделок (догружаются фоном с V1.0). Скелетон там был бы
+//          враньём: приложение не знает заранее, есть ли у записи скриншот вообще, и
+//          показывало бы заглушку под картинку, которой нет.
+//        - BootLoading. Скелетон главной там неуместен: этот же экран показывается при
+//          проверке авторизации, когда следующим может быть логин, а не главная.
+//
+//        Логика и расчёты не тронуты.
+//
+// V2.0 — дизайн-проход, этап 2 из 3: пустые состояния.
+//
+//        Их не существовало как сущности. Там, где данных нет, стояла одинокая серая
+//        строка или не было ничего — а это ровно то, что видит новый пользователь в
+//        первую минуту. Хуже всего вела себя аналитика: без закрытых сделок она рисовала
+//        вкладки, нулевые метрики и пустые графики, то есть выглядела как сломанная,
+//        хотя данных просто ещё не было.
+//
+//        Добавлен компонент EmptyState: иконка в круге, заголовок, одно поясняющее
+//        предложение и опциональная кнопка. Тексты передаются вызывающим — компонент
+//        ничего не придумывает сам. Применён в трёх местах:
+//        - Журнал. Раньше на ДВА разных случая показывался один текст «Ничего не найдено,
+//          попробуй другой фильтр». Новому пользователю с пустым журналом он сообщал
+//          ерунду: фильтровать нечего. Теперь случаи разделены.
+//        - Аналитика. Ранний выход при отсутствии закрытых сделок, с разными текстами для
+//          «журнал пуст» и «сделки есть, но ни одна не закрыта» — второе неочевидно, все
+//          расчёты идут только по закрытым.
+//        - Кошелёк. Строка про начисления переехала в общую форму.
+//
+//        Логика и расчёты не тронуты: добавлены только ветки рендера при отсутствии
+//        данных и новые строки переводов.
+//
+// V1.9 — дизайн-проход, этап 1 из 3: типографика и скругления.
+//
+//        Было 18 разных размеров шрифта, включая дробные (8.5, 9.5, 10.5, 11.5, 12.5px) —
+//        размеры подбирались по месту, шкалы не существовало. Несогласованность такого
+//        рода читается глазом как самоделка даже тогда, когда её не могут назвать.
+//
+//        ШКАЛА ТИПОГРАФИКИ (девять ступеней, других быть не должно):
+//          9px   — микроподписи над значениями, uppercase + tracking
+//          10px  — подписи осей, счётчики, служебные пометки
+//          11px  — вторичный текст, пояснения под блоками
+//          12px  — подписи полей, элементы списков
+//          13px  — основной текст в карточках
+//          17px  — значения в карточках, подзаголовки
+//          24px  — заголовки экранов
+//          28px  — крупные числа на главной
+//          40px  — единственное главное число
+//        Дробные ступени сведены к ближайшей целой, 18->17, 22 и 26->24, 30->28.
+//
+//        СКРУГЛЕНИЯ: было 7 радиусов, включая два одноразовых (rounded-[22px] и
+//        rounded-[20px] из V1.0/V1.5 — мои же). Осталось четыре уровня:
+//          rounded-full — пилюли, кружки, полосы прогресса
+//          rounded-lg   — мелкие элементы: чипы, поля ввода
+//          rounded-xl   — кнопки, вложенные блоки
+//          rounded-2xl  — карточки и крупные контейнеры
+//        rounded-md убран, одноразовые пиксельные радиусы убраны.
+//
+//        Правка чисто визуальная: ни одна строка логики, расчётов или работы с данными
+//        не тронута. Следующие этапы — пустые состояния, затем скелетоны загрузки.
+//
+// V1.8 — блок «Как состояние влияет на результат» показывал «Нужно минимум 6 закрытых
+//        сделок... Сейчас 6» — сообщение противоречило само себе.
+//
+//        Причина: у emotionImpactStats ДВА разных условия недоступности, а текст был один.
+//        Первое — сделок меньше 6. Второе — сделок хватает, но ни по одной шкале не
+//        набралось по 3 сделки с высокой И с низкой эмоцией одновременно, и группы
+//        «смешанное/однозначное» тоже не разделились. Второй случай возвращал объект без
+//        поля needed, UI подставлял значение по умолчанию и печатал текст про нехватку
+//        сделок, хотя сделок хватало. Это и наблюдалось: все записи сделаны примерно в
+//        одном состоянии, разброса для сравнения нет.
+//
+//        Исправлено: stats несёт reason ("few_trades" / "no_groups"), и второй случай
+//        объясняется по-настоящему — сколько сделок попало в каждую группу по каждой
+//        шкале, почему середина 41-59% не считается и при каких данных блок заработает.
+//        Пороги не тронуты: занижать их — значит строить сравнение на двух сделках и
+//        выдавать шум за вывод.
 //
 // V1.7 — подпись под шкалами эмоций. Раньше она перечисляла проценты, которые и так видны
 //        на самих ползунках, и не давала никакой оценки: «Уверенность 75% · Напряжение 66%
@@ -479,6 +573,13 @@ var STRINGS = {
       searchPlaceholder: "\u041F\u043E\u0438\u0441\u043A \u043F\u043E \u0441\u0434\u0435\u043B\u043A\u0430\u043C\u2026",
       filters: { All: "\u0412\u0441\u0435", Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C\u043D\u044B\u0435", Loss: "\u0423\u0431\u044B\u0442\u043E\u0447\u043D\u044B\u0435", Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" },
       empty: "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E. \u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439 \u0434\u0440\u0443\u0433\u043E\u0439 \u0444\u0438\u043B\u044C\u0442\u0440.",
+      // V2.0 — раньше на оба случая (журнал пуст / фильтр ничего не нашёл) показывался один
+      // текст про фильтр. Новому пользователю он сообщал ерунду: фильтровать нечего.
+      emptyTitle: "Пока ничего не найдено",
+      emptyHint: "Попробуй другой фильтр или очисти поиск.",
+      noTradesTitle: "Журнал пуст",
+      noTradesHint: "Записанная сделка — это не отчёт, а материал для разбора. Чем честнее отметишь состояние, тем раньше приложение покажет закономерность.",
+      noTradesAction: "Записать первую сделку",
       colEntry: "\u0412\u0445\u043E\u0434",
       colExit: "\u0412\u044B\u0445\u043E\u0434",
       colRR: "R/R",
@@ -801,6 +902,11 @@ var STRINGS = {
       searchPlaceholder: "Search trades\u2026",
       filters: { All: "All", Win: "Profitable", Loss: "Losing", Long: "Long", Short: "Short" },
       empty: "Nothing found. Try a different filter.",
+      emptyTitle: "Nothing found",
+      emptyHint: "Try a different filter or clear the search.",
+      noTradesTitle: "The journal is empty",
+      noTradesHint: "A logged trade isn't a report, it's material for review. The more honestly you mark your state, the sooner patterns show up.",
+      noTradesAction: "Log your first trade",
       colEntry: "Entry",
       colExit: "Exit",
       colRR: "R/R",
@@ -3885,7 +3991,7 @@ function Pill({ active, children, onClick, accent }) {
     "button",
     {
       onClick,
-      className: "px-3.5 py-1.5 rounded-full text-[12.5px] transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0",
+      className: "px-3.5 py-1.5 rounded-full text-[13px] transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0",
       style: { background: active ? `${accent}12` : "transparent", color: active ? accent : BASE.inkDim, border: `1px solid ${active ? accent + "40" : BASE.line}` },
       children
     }
@@ -3954,11 +4060,11 @@ function WalletSheet({ open, onClose, balance, ledger, accent }) {
             ] }),
             /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2.5 mb-1", children: [
               /* @__PURE__ */ jsx(Coins, { size: 24, style: { color: accent } }),
-              /* @__PURE__ */ jsx("span", { className: "text-[30px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 600 }, children: groupThousands(balance) })
+              /* @__PURE__ */ jsx("span", { className: "text-[28px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 600 }, children: groupThousands(balance) })
             ] }),
             /* @__PURE__ */ jsx("p", { className: "text-[11px] mb-6", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043A\u0430 \u043D\u0435 \u043F\u0440\u0438\u0432\u044F\u0437\u0430\u043D\u044B \u043A \u043F\u043E\u043A\u0443\u043F\u043A\u0430\u043C \u2014 \u043E\u0431\u043C\u0435\u043D \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0437\u0436\u0435, \u0432 App Store-\u0432\u0435\u0440\u0441\u0438\u0438." }),
             /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-wide block mb-2", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043F\u043E\u043B\u043D\u0435\u043D\u0438\u044F" }),
-            rows.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm py-2", style: { color: BASE.inkFaint }, children: "\u041F\u043E\u043A\u0430 \u043F\u0443\u0441\u0442\u043E. +10 \u043D\u0430\u0447\u0438\u0441\u043B\u044F\u0435\u0442\u0441\u044F \u0437\u0430 \u0432\u0445\u043E\u0434 \u043A\u0430\u0436\u0434\u044B\u0439 \u0434\u0435\u043D\u044C, +5 \u2014 \u0437\u0430 \u043F\u043E\u0431\u0435\u0434\u0443 \u043D\u0430\u0434 \u0440\u044B\u043D\u043A\u043E\u043C \u0432 \u0438\u0433\u0440\u0435." }) : /* @__PURE__ */ jsx("div", { className: "flex flex-col", children: rows.map((tx) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-2.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
+            rows.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Coins, title: "\u041E\u043F\u0435\u0440\u0430\u0446\u0438\u0439 \u043F\u043E\u043A\u0430 \u043D\u0435\u0442", hint: "+10 \u043D\u0430\u0447\u0438\u0441\u043B\u044F\u0435\u0442\u0441\u044F \u0437\u0430 \u0432\u0445\u043E\u0434 \u043A\u0430\u0436\u0434\u044B\u0439 \u0434\u0435\u043D\u044C, +5 \u2014 \u0437\u0430 \u043F\u043E\u0431\u0435\u0434\u0443 \u043D\u0430\u0434 \u0440\u044B\u043D\u043A\u043E\u043C \u0432 \u0438\u0433\u0440\u0435.", compact: true }) : /* @__PURE__ */ jsx("div", { className: "flex flex-col", children: rows.map((tx) => /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between py-2.5", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
               /* @__PURE__ */ jsxs("div", { children: [
                 /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color: BASE.ink }, children: tx.reason }),
                 /* @__PURE__ */ jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: relTime(new Date(tx.date)) })
@@ -4267,17 +4373,21 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       /* V0.4 — текст карточки: совет по собственному журналу. Пока Gemini отвечает (или если он
          недоступен) показывается локальный инсайт из аналитики — он всегда посчитан по реальным
          данным, поэтому подмены фактов не происходит. */
-      /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed", style: { color: BASE.ink }, children: homeAdvice || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus) })
+      /* V2.1 — скелетон показывается ТОЛЬКО когда показать действительно нечего: нет ни
+         ответа Gemini, ни локального инсайта, ни записей. Если локальный инсайт есть, он
+         выводится сразу — он посчитан по реальным данным, и подменять его серыми полосами
+         значило бы прятать готовую информацию ради анимации. */
+      adviceLoading && !homeAdvice && !localInsight && total === 0 ? /* @__PURE__ */ jsx("div", { className: "py-1", children: /* @__PURE__ */ jsx(SkeletonLines, { lines: 3 }) }) : /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed content-in", style: { color: BASE.ink }, children: homeAdvice || localInsight || (total >= 4 ? t.home.insightConfident : t.home.insightFocus) }, homeAdvice ? "ai" : "local")
     ] }),
     /* @__PURE__ */ jsxs(Card, { className: "mb-3", children: [
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 divide-x", style: { borderColor: BASE.line }, children: [
         /* @__PURE__ */ jsxs("div", { className: "pr-4", children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.traderLevel }),
-          /* @__PURE__ */ jsx("div", { className: "text-[26px] leading-none", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: level })
+          /* @__PURE__ */ jsx("div", { className: "text-[24px] leading-none", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: level })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "pl-4", style: { borderLeft: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: t.home.awareness }),
-          /* @__PURE__ */ jsxs("div", { className: "text-[26px] leading-none", style: { fontFamily: "var(--font-display)", color: accent, fontWeight: 500 }, children: [
+          /* @__PURE__ */ jsxs("div", { className: "text-[24px] leading-none", style: { fontFamily: "var(--font-display)", color: accent, fontWeight: 500 }, children: [
             consciousScore,
             "%"
           ] })
@@ -4397,7 +4507,7 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
        число, число с текстовой меткой и просто слово — и равные узкие колонки для них не
        подходят. Теперь это список строк: слева иконка и подпись, справа значение, которому
        больше не приходится втискиваться в треть ширины. Данные и их источник прежние. */
-    /* @__PURE__ */ jsx("div", { className: "pt-3.5", children: /* @__PURE__ */ jsx("div", { className: "rounded-[22px] px-4 py-1", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: marketCells.map((m, i) => /* @__PURE__ */ jsxs(
+    /* @__PURE__ */ jsx("div", { className: "pt-3.5", children: /* @__PURE__ */ jsx("div", { className: "rounded-2xl px-4 py-1", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: marketCells.map((m, i) => /* @__PURE__ */ jsxs(
       "div",
       {
         className: "py-3",
@@ -4406,11 +4516,11 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
           /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between gap-3", children: [
             /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 shrink-0", children: [
               /* @__PURE__ */ jsx("span", { className: "shrink-0 flex items-center justify-center rounded-full", style: { width: 26, height: 26, border: `1px solid ${BASE.line}`, background: BASE.surface2 }, children: /* @__PURE__ */ jsx(m.icon, { size: 13, style: { color: BASE.inkDim } }) }),
-              /* @__PURE__ */ jsx("span", { className: "text-[9.5px] uppercase tracking-[0.12em]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label })
+              /* @__PURE__ */ jsx("span", { className: "text-[10px] uppercase tracking-[0.12em]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: m.label })
             ] }),
             /* @__PURE__ */ jsxs("span", { className: "min-w-0 text-right", children: [
               /* @__PURE__ */ jsx("span", { className: "block text-[17px] leading-tight", style: { color: BASE.ink, fontFamily: m.mono ? "var(--font-mono)" : "var(--font-display)", fontWeight: 600 }, children: m.value }),
-              m.pill && /* @__PURE__ */ jsx("span", { className: "block text-[10.5px] leading-snug mt-0.5", style: { color: BASE.inkDim }, children: m.pill })
+              m.pill && /* @__PURE__ */ jsx("span", { className: "block text-[11px] leading-snug mt-0.5", style: { color: BASE.inkDim }, children: m.pill })
             ] })
           ] }),
           m.bar !== void 0 && /* @__PURE__ */ jsx("div", { className: "w-full h-[3px] rounded-full mt-2.5", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[3px] rounded-full transition-all duration-700 ease-out", style: { width: `${Math.max(0, Math.min(100, m.bar))}%`, background: accent } }) })
@@ -4773,7 +4883,7 @@ function EmotionScales({ values, onChange, accent, t, variant = "entry" }) {
     }) }),
     has && verdict && /* @__PURE__ */ jsxs("div", { className: "mt-5 rounded-xl px-3.5 py-3", style: { border: `1px solid ${stateColor}33`, background: `${stateColor}0D` }, children: [
       /* @__PURE__ */ jsx("p", { className: "text-[13px] leading-snug mb-1", style: { color: stateColor, fontFamily: "var(--font-display)", fontWeight: 600 }, children: verdict.label }),
-      /* @__PURE__ */ jsx("p", { className: "text-[11.5px] leading-relaxed", style: { color: BASE.inkDim }, children: verdict.advice })
+      /* @__PURE__ */ jsx("p", { className: "text-[12px] leading-relaxed", style: { color: BASE.inkDim }, children: verdict.advice })
     ] })
   ] });
 }
@@ -5681,7 +5791,14 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
       /* @__PURE__ */ jsx("input", { value: query, onChange: (e) => setQuery(e.target.value), placeholder: t.log.searchPlaceholder, className: "bg-transparent outline-none text-sm flex-1", style: { color: BASE.ink } })
     ] }) }),
     /* @__PURE__ */ jsx("div", { className: "flex gap-2 mb-4 hscroll", children: logFilters.map((f) => /* @__PURE__ */ jsx(Pill, { active: filter === f.id, onClick: () => setFilter(f.id), accent, children: f.label }, f.id)) }),
-    filtered.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.log.empty }) : /* @__PURE__ */ jsx("div", { className: "space-y-2 md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start xl:grid-cols-3", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+    filtered.length === 0 ? /* @__PURE__ */ jsx(
+      EmptyState,
+      entries.length === 0 ? { icon: NotebookText, title: t.log.noTradesTitle, hint: t.log.noTradesHint, accent } : { icon: Search, title: t.log.emptyTitle, hint: t.log.emptyHint, accent, compact: true }
+    ) : /* V2.1 — stagger: карточки проявляются с шагом 60ms вместо одновременного возникновения
+       всего списка. Класс уже существовал в бандле, но к журналу применён не был. Ключ
+       контейнера привязан к фильтру и запросу, чтобы анимация повторялась при смене
+       выборки, а не проигрывалась один раз за всю сессию. */
+    /* @__PURE__ */ jsx("div", { className: "space-y-2 stagger md:space-y-0 md:grid md:grid-cols-2 md:gap-3 md:items-start xl:grid-cols-3", children: filtered.slice().reverse().map((e) => /* @__PURE__ */ jsxs("div", { className: "rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
       /* @__PURE__ */ jsxs("button", { onClick: () => setOpenId(openId === e.id ? null : e.id), className: "w-full text-left transition-colors duration-150", style: { background: BASE.surface }, children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 px-4 pt-3 pb-2.5", children: [
           /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: outcomeColor(e.outcome) } }),
@@ -5798,18 +5915,32 @@ function emotionImpactStats(entries, labelList) {
     return { r: e.r, v: exact || pointToEmotions(e.x, e.y, "entry"), exact: !!exact };
   }).filter((x) => x.v);
   if (rows.length < EMOTION_IMPACT_MIN * 2) {
-    return { available: false, sample: rows.length, needed: EMOTION_IMPACT_MIN * 2 };
+    return { available: false, reason: "few_trades", sample: rows.length, needed: EMOTION_IMPACT_MIN * 2 };
   }
-  const scales = keys.map((key, i) => {
+  // V1.8 — allScales считается ДО фильтра по размеру групп. Раньше отфильтрованные шкалы
+  // просто исчезали, и блок показывал сообщение про нехватку сделок даже когда сделок
+  // хватало: причина была другой — ни в одной шкале не набиралось по 3 сделки в обеих
+  // группах сразу. Теперь эти числа доступны UI, и он может объяснить, чего не хватает.
+  const allScales = keys.map((key, i) => {
     const high = rows.filter((x) => emotionClampPct(x.v[key]) >= EMOTION_IMPACT_HIGH);
     const low = rows.filter((x) => emotionClampPct(x.v[key]) <= EMOTION_IMPACT_LOW);
     return { key, label: labels[i], highN: high.length, lowN: low.length, highAvg: ei_avg(high), lowAvg: ei_avg(low) };
-  }).filter((s2) => s2.highN >= EMOTION_IMPACT_MIN && s2.lowN >= EMOTION_IMPACT_MIN).map((s2) => ({ ...s2, diff: s2.highAvg - s2.lowAvg })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  });
+  const scales = allScales.filter((s2) => s2.highN >= EMOTION_IMPACT_MIN && s2.lowN >= EMOTION_IMPACT_MIN).map((s2) => ({ ...s2, diff: s2.highAvg - s2.lowAvg })).sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
   const withConflict = rows.map((x) => ({ ...x, c: emotionConflict(x.v, "entry").max }));
   const mixed = withConflict.filter((x) => x.c >= 40);
   const clear = withConflict.filter((x) => x.c < 40);
   const conflict = mixed.length >= EMOTION_IMPACT_MIN && clear.length >= EMOTION_IMPACT_MIN ? { mixedN: mixed.length, clearN: clear.length, mixedAvg: ei_avg(mixed), clearAvg: ei_avg(clear) } : null;
-  return { available: scales.length > 0 || !!conflict, sample: rows.length, approxCount: rows.filter((x) => !x.exact).length, scales, conflict };
+  const available = scales.length > 0 || !!conflict;
+  return {
+    available,
+    reason: available ? null : "no_groups",
+    sample: rows.length,
+    approxCount: rows.filter((x) => !x.exact).length,
+    allScales,
+    scales,
+    conflict
+  };
 }
 // Одна строка сравнения: подпись, число сделок и средний результат столбиком в обе
 // стороны от общей базовой линии. Ширина считается от максимума по всему блоку, чтобы
@@ -5839,12 +5970,35 @@ function EmotionImpactRow({ label, count, avg, scale, measureMode, currency }) {
 }
 function EmotionImpact({ stats, measureMode, currency }) {
   if (!stats.available) {
-    return /* @__PURE__ */ jsxs("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: [
-      "\u041D\u0443\u0436\u043D\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C ",
-      stats.needed || EMOTION_IMPACT_MIN * 2,
-      " \u0437\u0430\u043A\u0440\u044B\u0442\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u0441 \u043E\u0442\u043C\u0435\u0447\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C, \u0447\u0442\u043E\u0431\u044B \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0447\u0442\u043E-\u0442\u043E \u0437\u043D\u0430\u0447\u0438\u043B\u043E. \u0421\u0435\u0439\u0447\u0430\u0441 ",
-      stats.sample || 0,
-      "."
+    // V1.8 — два РАЗНЫХ случая, которые раньше показывали один и тот же текст. Отсюда и
+    // брался абсурд «нужно минимум 6, сейчас 6»: сделок хватало, не хватало разброса.
+    if (stats.reason === "few_trades") {
+      return /* @__PURE__ */ jsxs("p", { className: "text-sm leading-relaxed", style: { color: BASE.inkFaint }, children: [
+        "\u041D\u0443\u0436\u043D\u043E \u043C\u0438\u043D\u0438\u043C\u0443\u043C ",
+        stats.needed || EMOTION_IMPACT_MIN * 2,
+        " \u0437\u0430\u043A\u0440\u044B\u0442\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u0441 \u043E\u0442\u043C\u0435\u0447\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C. \u0421\u0435\u0439\u0447\u0430\u0441 ",
+        stats.sample || 0,
+        "."
+      ] });
+    }
+    return /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("p", { className: "text-[13px] leading-relaxed mb-3", style: { color: BASE.inkDim }, children: [
+        "\u0421\u0434\u0435\u043B\u043E\u043A \u0445\u0432\u0430\u0442\u0430\u0435\u0442 (",
+        stats.sample,
+        "), \u043D\u043E \u0441\u0440\u0430\u0432\u043D\u0438\u0432\u0430\u0442\u044C \u043F\u043E\u043A\u0430 \u043D\u0435 \u0441 \u0447\u0435\u043C: \u043D\u0438 \u043F\u043E \u043E\u0434\u043D\u043E\u0439 \u0448\u043A\u0430\u043B\u0435 \u043D\u0435 \u043D\u0430\u0431\u0440\u0430\u043B\u043E\u0441\u044C \u043F\u043E ",
+        EMOTION_IMPACT_MIN,
+        " \u0441\u0434\u0435\u043B\u043A\u0438 \u0441 \u0432\u044B\u0441\u043E\u043A\u043E\u0439 \u0438 \u0441 \u043D\u0438\u0437\u043A\u043E\u0439 \u044D\u043C\u043E\u0446\u0438\u0435\u0439 \u043E\u0434\u043D\u043E\u0432\u0440\u0435\u043C\u0435\u043D\u043D\u043E."
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "flex flex-col gap-1.5 mb-3", children: (stats.allScales || []).map((sc) => /* @__PURE__ */ jsxs("div", { className: "flex items-baseline justify-between gap-2", children: [
+        /* @__PURE__ */ jsx("span", { className: "text-[12px] truncate", style: { color: BASE.inkDim }, children: sc.label }),
+        /* @__PURE__ */ jsxs("span", { className: "text-[11px] shrink-0", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
+          `\u043E\u0442 ${EMOTION_IMPACT_HIGH}%: `,
+          sc.highN,
+          `  \u00B7  \u0434\u043E ${EMOTION_IMPACT_LOW}%: `,
+          sc.lowN
+        ] })
+      ] }, sc.key)) }),
+      /* @__PURE__ */ jsx("p", { className: "text-[11px] leading-relaxed", style: { color: BASE.inkFaint }, children: "\u0421\u0435\u0440\u0435\u0434\u0438\u043D\u0430 \u0448\u043A\u0430\u043B\u044B (41\u201359%) \u043D\u0430\u043C\u0435\u0440\u0435\u043D\u043D\u043E \u043D\u0435 \u043F\u043E\u043F\u0430\u0434\u0430\u0435\u0442 \u043D\u0438 \u0432 \u043E\u0434\u043D\u0443 \u0433\u0440\u0443\u043F\u043F\u0443 \u2014 \u0438\u043D\u0430\u0447\u0435 \u0441\u0440\u0430\u0432\u043D\u0435\u043D\u0438\u0435 \u0440\u0430\u0437\u043C\u044B\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u043E\u0433\u0440\u0430\u043D\u0438\u0447\u043D\u044B\u043C\u0438 \u0441\u043B\u0443\u0447\u0430\u044F\u043C\u0438. \u0411\u043B\u043E\u043A \u0437\u0430\u0440\u0430\u0431\u043E\u0442\u0430\u0435\u0442, \u043A\u043E\u0433\u0434\u0430 \u043D\u0430\u043A\u043E\u043F\u044F\u0442\u0441\u044F \u0441\u0434\u0435\u043B\u043A\u0438 \u0441 \u0440\u0430\u0437\u043D\u044B\u043C\u0438 \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u044F\u043C\u0438." })
     ] });
   }
   const all = [];
@@ -5870,13 +6024,60 @@ function EmotionImpact({ stats, measureMode, currency }) {
       /* @__PURE__ */ jsx(EmotionImpactRow, { label: "\u0441\u043C\u0435\u0448\u0430\u043D\u043D\u043E", count: stats.conflict.mixedN, avg: stats.conflict.mixedAvg, scale, measureMode, currency }),
       /* @__PURE__ */ jsx(EmotionImpactRow, { label: "\u043E\u0434\u043D\u043E\u0437\u043D\u0430\u0447\u043D\u043E", count: stats.conflict.clearN, avg: stats.conflict.clearAvg, scale, measureMode, currency })
     ] }),
-    /* @__PURE__ */ jsxs("p", { className: "text-[10.5px] mt-3 leading-relaxed", style: { color: BASE.inkFaint }, children: [
+    /* @__PURE__ */ jsxs("p", { className: "text-[11px] mt-3 leading-relaxed", style: { color: BASE.inkFaint }, children: [
       "\u0421\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E ",
       stats.sample,
       " \u0441\u0434\u0435\u043B\u043A\u0430\u043C. \u0413\u0440\u0443\u043F\u043F\u044B \u043F\u0435\u0440\u0435\u0441\u0435\u043A\u0430\u044E\u0442\u0441\u044F: \u043E\u0434\u043D\u0430 \u0441\u0434\u0435\u043B\u043A\u0430 \u043F\u043E\u043F\u0430\u0434\u0430\u0435\u0442 \u0432 \u043D\u0435\u0441\u043A\u043E\u043B\u044C\u043A\u043E \u0448\u043A\u0430\u043B \u0441\u0440\u0430\u0437\u0443.",
       stats.approxCount > 0 ? ` \u0423 ${stats.approxCount} \u0441\u0434\u0435\u043B\u043E\u043A \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u043E \u0438\u0437 \u0441\u0442\u0430\u0440\u043E\u0433\u043E \u0444\u043E\u0440\u043C\u0430\u0442\u0430 \u043F\u0440\u0438\u0431\u043B\u0438\u0437\u0438\u0442\u0435\u043B\u044C\u043D\u043E.` : ""
     ] })
   ] });
+}
+// V2.0 — дизайн-проход, этап 2: пустые состояния. До этого их не существовало как
+// сущности: там, где данных нет, стояла одинокая серая строка или вообще ничего. Это
+// первое, что видит новый пользователь, и именно оно создаёт впечатление незаконченности.
+//
+// Компонент даёт всем таким местам одну форму: иконка в круге, короткий заголовок, одно
+// поясняющее предложение и — там, где действие очевидно — кнопка. Тексты передаются
+// вызывающим, компонент ничего не придумывает сам.
+// V2.1 — дизайн-проход, этап 3: скелетоны. Пока данные едут, экран был пустым и потом
+// резко наполнялся. Скелетон повторяет ФОРМУ будущего содержимого, а не абстрактный
+// прямоугольник, — иначе он не снимает ощущение пустоты, а добавляет мельтешения.
+function Skeleton({ w = "100%", h = 12, className = "", style = {} }) {
+  return /* @__PURE__ */ jsx("div", { className: `skel ${className}`, style: { width: w, height: h, ...style } });
+}
+function SkeletonLines({ lines = 3, gap = 8 }) {
+  // Последняя строка короче: ровный блок из одинаковых полос читается как таблица,
+  // а не как текст, который вот-вот появится.
+  return /* @__PURE__ */ jsx("div", { className: "flex flex-col", style: { gap }, children: Array.from({ length: lines }, (_, i) => /* @__PURE__ */ jsx(Skeleton, { w: i === lines - 1 ? "62%" : "100%", h: 11 }, i)) });
+}
+function EmptyState({ icon: Icon, title, hint, actionLabel, onAction, accent, compact = false }) {
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      className: `flex flex-col items-center text-center ${compact ? "py-8" : "py-14"} px-6`,
+      children: [
+        Icon && /* @__PURE__ */ jsx(
+          "span",
+          {
+            className: "flex items-center justify-center rounded-full mb-4",
+            style: { width: 48, height: 48, border: `1px solid ${BASE.line}`, background: BASE.surface },
+            children: /* @__PURE__ */ jsx(Icon, { size: 20, style: { color: BASE.inkFaint } })
+          }
+        ),
+        /* @__PURE__ */ jsx("p", { className: "text-[13px] mb-1.5", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 600 }, children: title }),
+        hint && /* @__PURE__ */ jsx("p", { className: "text-[11px] leading-relaxed max-w-[280px]", style: { color: BASE.inkFaint }, children: hint }),
+        actionLabel && onAction && /* @__PURE__ */ jsx(
+          "button",
+          {
+            onClick: onAction,
+            className: "mt-5 px-5 py-2.5 rounded-xl text-[12px] transition-opacity duration-150 active:opacity-70",
+            style: { background: accent || BASE.ink, color: BASE.bg, fontWeight: 600 },
+            children: actionLabel
+          }
+        )
+      ]
+    }
+  );
 }
 function StatCard({ label, value, accent }) {
   return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-xl px-3 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
@@ -6118,6 +6319,20 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
   if (reviewOpen) {
     return /* @__PURE__ */ jsx(JournalReview, { entries: closedEntries, accent, onClose: () => setReviewOpen(false), t, lang });
   }
+  // V2.0 — вся аналитика построена на ЗАКРЫТЫХ сделках. Пока их нет, экран показывал
+  // вкладки, нулевые метрики и пустые графики — выглядело как сломанное приложение,
+  // хотя данных просто ещё не было. Теперь состояние названо прямо.
+  if (closedEntries.length === 0) {
+    return /* @__PURE__ */ jsx(
+      EmptyState,
+      {
+        icon: LineChartIcon,
+        title: entries.length === 0 ? "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430 \u043F\u043E\u044F\u0432\u0438\u0442\u0441\u044F \u043F\u043E\u0441\u043B\u0435 \u043F\u0435\u0440\u0432\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A" : "\u041D\u0435\u0442 \u0437\u0430\u043A\u0440\u044B\u0442\u044B\u0445 \u0441\u0434\u0435\u043B\u043E\u043A",
+        hint: entries.length === 0 ? "\u0417\u0434\u0435\u0441\u044C \u0431\u0443\u0434\u0435\u0442 \u0432\u0438\u0434\u043D\u043E, \u043A\u0430\u043A \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435 \u043D\u0430 \u0432\u0445\u043E\u0434\u0435 \u0441\u0432\u044F\u0437\u0430\u043D\u043E \u0441 \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442\u043E\u043C. \u0414\u043B\u044F \u044D\u0442\u043E\u0433\u043E \u043D\u0443\u0436\u043D\u044B \u0437\u0430\u043F\u0438\u0441\u0438 \u0441 \u043E\u0442\u043C\u0435\u0447\u0435\u043D\u043D\u044B\u043C \u0441\u043E\u0441\u0442\u043E\u044F\u043D\u0438\u0435\u043C." : `\u0421\u0434\u0435\u043B\u043E\u043A \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435: ${entries.length}, \u043D\u043E \u043D\u0438 \u043E\u0434\u043D\u0430 \u0435\u0449\u0451 \u043D\u0435 \u0437\u0430\u043A\u0440\u044B\u0442\u0430. \u0420\u0430\u0441\u0447\u0451\u0442\u044B \u0441\u0447\u0438\u0442\u0430\u044E\u0442\u0441\u044F \u0442\u043E\u043B\u044C\u043A\u043E \u043F\u043E \u0437\u0430\u043A\u0440\u044B\u0442\u044B\u043C.`,
+        accent
+      }
+    );
+  }
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
       /* @__PURE__ */ jsx(LineChartIcon, { size: 17, style: { color: accent } }),
@@ -6145,7 +6360,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
             "button",
             {
               onClick: () => setReviewOpen(true),
-              className: "shrink-0 px-2.5 py-1 rounded-full text-[10.5px] transition-all duration-150 active:scale-95",
+              className: "shrink-0 px-2.5 py-1 rounded-full text-[11px] transition-all duration-150 active:scale-95",
               style: { color: accent, border: `1px solid ${accent}40`, background: `${accent}0F`, fontFamily: "var(--font-display)" },
               children: "\u0420\u0430\u0437\u0431\u043E\u0440"
             }
@@ -6166,7 +6381,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
           className: "rounded-xl px-3 py-2.5",
           style: { border: `1px solid ${BASE.line}`, background: BASE.surface },
           children: [
-            /* @__PURE__ */ jsx("div", { className: "text-[9.5px] uppercase tracking-[0.08em] mb-1.5 truncate", style: { color: BASE.inkFaint }, children: m.label }),
+            /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.08em] mb-1.5 truncate", style: { color: BASE.inkFaint }, children: m.label }),
             /* @__PURE__ */ jsxs("div", { className: "flex items-baseline gap-1 mb-1.5", children: [
               /* @__PURE__ */ jsxs("span", { className: "text-[17px] leading-none", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: [
                 m.score,
@@ -8321,7 +8536,7 @@ function Coach({ entries, analytics, accent, userId, lang, t, strategyNote }) {
           }
         )
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[10.5px]", style: { color: BASE.inkFaint }, children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[11px]", style: { color: BASE.inkFaint }, children: [
         /* @__PURE__ */ jsx(ShieldCheck, { size: 11 }),
         /* @__PURE__ */ jsx(DecodeText, { text: t.coach.disclaimer })
       ] })
@@ -8331,10 +8546,10 @@ function Coach({ entries, analytics, accent, userId, lang, t, strategyNote }) {
         /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full animate-pulse", style: { background: WIN } }),
         /* @__PURE__ */ jsxs("div", { children: [
           /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.ink }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.statusReady }) }),
-          /* @__PURE__ */ jsx("p", { className: "text-[10.5px]", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.statusOnline }) })
+          /* @__PURE__ */ jsx("p", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.statusOnline }) })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[10.5px]", style: { color: accent }, children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-1.5 text-[11px]", style: { color: accent }, children: [
         /* @__PURE__ */ jsx(Zap, { size: 11 }),
         /* @__PURE__ */ jsx(DecodeText, { text: t.coach.modelLabel })
       ] })
@@ -8594,7 +8809,7 @@ function Simulator({ accent, onWin, t, lang }) {
             "button",
             {
               onClick: () => setTimeframeSec(tf),
-              className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150",
+              className: "px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150",
               style: {
                 fontFamily: "var(--font-mono)",
                 color: timeframeSec === tf ? accent : BASE.inkFaint,
@@ -8619,7 +8834,7 @@ function Simulator({ accent, onWin, t, lang }) {
       /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-2", children: [
         /* @__PURE__ */ jsxs("div", { children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.capital }),
-          /* @__PURE__ */ jsx("div", { className: "text-[22px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: formatSimMoney(liveEquity) }),
+          /* @__PURE__ */ jsx("div", { className: "text-[24px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: formatSimMoney(liveEquity) }),
           /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: liveEquity >= SIM_START_CAPITAL ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
             liveEquity >= SIM_START_CAPITAL ? "+" : "",
             ((liveEquity - SIM_START_CAPITAL) / SIM_START_CAPITAL * 100).toFixed(1),
@@ -8628,7 +8843,7 @@ function Simulator({ accent, onWin, t, lang }) {
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "text-right", children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-0.5", style: { color: BASE.inkFaint }, children: t.sim.price }),
-          /* @__PURE__ */ jsx("div", { className: "text-[18px] leading-none transition-colors duration-150", style: { fontFamily: "var(--font-mono)", color: upTick ? WIN : LOSS, fontWeight: 500 }, children: formatPrice(uiPrice) })
+          /* @__PURE__ */ jsx("div", { className: "text-[17px] leading-none transition-colors duration-150", style: { fontFamily: "var(--font-mono)", color: upTick ? WIN : LOSS, fontWeight: 500 }, children: formatPrice(uiPrice) })
         ] })
       ] }),
       /* @__PURE__ */ jsxs(Card, { className: "mb-2", style: { padding: "8px 6px 4px 6px", position: "relative", overflow: "hidden" }, children: [
@@ -8653,7 +8868,7 @@ function Simulator({ accent, onWin, t, lang }) {
             style: { background: "rgba(19,19,21,0.92)", borderBottom: `1px solid ${BASE.line}`, animation: "riseIn 0.25s ease-out" },
             children: [
               /* @__PURE__ */ jsx(Newspaper, { size: 11, style: { color: accent, flexShrink: 0 } }),
-              /* @__PURE__ */ jsx("span", { className: "text-[10.5px] leading-tight overflow-hidden text-ellipsis whitespace-nowrap", style: { color: BASE.ink }, children: uiNews.headline }),
+              /* @__PURE__ */ jsx("span", { className: "text-[11px] leading-tight overflow-hidden text-ellipsis whitespace-nowrap", style: { color: BASE.ink }, children: uiNews.headline }),
               uiNews.ageMs < uiNews.rampMs && /* @__PURE__ */ jsx("span", { className: "text-[9px] shrink-0 ml-auto", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: t.sim.reacting })
             ]
           }
@@ -8669,7 +8884,7 @@ function Simulator({ accent, onWin, t, lang }) {
             "button",
             {
               onClick: () => setTakeProfitPct(v),
-              className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150 shrink-0",
+              className: "px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 shrink-0",
               style: {
                 fontFamily: "var(--font-mono)",
                 color: takeProfitPct === v ? WIN : BASE.inkFaint,
@@ -8687,7 +8902,7 @@ function Simulator({ accent, onWin, t, lang }) {
             "button",
             {
               onClick: () => setStopLossPct(v),
-              className: "px-1.5 py-0.5 rounded-md text-[9.5px] transition-all duration-150 shrink-0",
+              className: "px-1.5 py-0.5 rounded-lg text-[10px] transition-all duration-150 shrink-0",
               style: {
                 fontFamily: "var(--font-mono)",
                 color: stopLossPct === v ? LOSS : BASE.inkFaint,
@@ -10524,6 +10739,23 @@ function MindExe() {
            headings and figures keeps existing layouts from re-wrapping. */
         h1, h2, h3 { letter-spacing: -0.015em; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        /* V2.1 — скелетоны. Блик идёт по градиенту фона, а не отдельным слоем: так он не
+           создаёт нового элемента в разметке и не перехватывает нажатия. Пульсация
+           намеренно медленная (1.6s) — быстрый мигающий скелетон читается как ошибка. */
+        @keyframes skelShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+        .skel {
+          background: linear-gradient(90deg, ${BASE.surface2} 25%, ${BASE.line} 50%, ${BASE.surface2} 75%);
+          background-size: 200% 100%;
+          animation: skelShimmer 1.6s ease-in-out infinite;
+          border-radius: 6px;
+        }
+        /* Появление уже загруженного контента. 0.32s достаточно, чтобы переход читался как
+           плавный, и мало, чтобы не воспринимался как дополнительная задержка. */
+        .content-in { animation: fadeIn 0.32s ease-out both; }
+        @media (prefers-reduced-motion: reduce) {
+          .skel { animation: none; }
+          .content-in { animation: none; }
+        }
         /* V0.9 — для BootLoading: Tailwind-класс animate-spin здесь не используется, вращение задаётся инлайн. */
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes logoPulseFade { 0%, 100% { opacity: 0.35; transform: scale(0.94); } 50% { opacity: 1; transform: scale(1.04); } }
@@ -10922,7 +11154,7 @@ function MindExe() {
           )
         ] }, tab)
       ] }) }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-[20px]", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-0.5 m-1", children:
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-2xl", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-0.5 m-1", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
@@ -10933,7 +11165,7 @@ function MindExe() {
           }
           return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
             /* @__PURE__ */ jsx("div", { className: "w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}10` : "transparent" }, children: /* @__PURE__ */ jsx(n.icon, { size: 15, strokeWidth: 1.8, style: { color: active ? accent : BASE.inkFaint } }) }),
-            /* @__PURE__ */ jsx("span", { className: "text-[8.5px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "var(--font-display)", transition: "color 0.25s ease" }, children: n.label })
+            /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "var(--font-display)", transition: "color 0.25s ease" }, children: n.label })
           ] }, n.id);
         })
       }) }) })
