@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#040405" />
+  <meta name="theme-color" content="#000000" />
   <title>mind.exe</title>
   <link rel="icon" href="icons/icon-32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="icons/icon-16.png" sizes="16x16" type="image/png" />
@@ -16,20 +16,23 @@
        importmap entries for recharts or firebase/* — those bare imports then failed to resolve and the
        page stayed black. This file is the original mind.exe index.html with only the font change
        applied; the importmap at the bottom of head is the part that must never be dropped.
-       V5.1 typography: Sora (display) + IBM Plex Mono (figures). app.js no longer names font families
-       inline — it reads --font-display / --font-mono, defined in the bundle's global style block — so
-       this link is what actually loads them. -->
+       V3.0 typography: моноширинный шрифт стал основным для всего приложения, а не только для
+       цифр. Sora больше не загружается — она не используется ни в одном месте бандла.
+       IBM Plex Mono покрывает кириллицу, поэтому русские экраны не деградируют. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <!-- The app is built entirely with Tailwind utility classes (flex, rounded-xl, text-[24px], etc.)
        — inside Claude's artifact preview Tailwind is provided automatically, but a plain static site
        needs it loaded explicitly. Without this script every className does nothing and the app falls
        back to unstyled browser-default form controls. -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    html, body { margin: 0; padding: 0; background: #040405; overscroll-behavior: none; }
-    body { font-family: 'Sora', system-ui, -apple-system, sans-serif; font-weight: 400; }
+    /* V3.0: фон чистый чёрный, как в теме приложения (был #040405). */
+    html, body { margin: 0; padding: 0; background: #000000; overscroll-behavior: none; }
+    /* Базовый шрифт до загрузки бандла — тот же моноширинный, что и внутри приложения,
+       иначе первый кадр рисуется системным гротеском и подменяется на глазах. */
+    body { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 400; }
     #root { min-height: 100vh; }
   </style>
 
@@ -101,6 +104,6 @@
        file on the server is correct. Bump this number on every new app.js version; the query string
        is otherwise ignored by the server, it only exists to change the URL so the browser treats it
        as a different resource and re-fetches. -->
-  <script type="module" src="./app.js?v=5.8"></script>
+  <script type="module" src="./app.js?v=3.0"></script>
 </body>
 </html>

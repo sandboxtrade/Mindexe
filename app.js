@@ -1,3 +1,32 @@
+// mind.exe — V3.0
+//
+// V3.0 — редизайн по референсам, этап 1: основание.
+//
+//        Изменены только центральные токены и примитивы — поэтому новый вид
+//        получают все экраны сразу, без правки каждого из них по отдельности.
+//
+//        ПАЛИТРА: фон #000 (был #0A0A0B), поверхность #0C0C0D, линия #1B1B1E.
+//        Линия теперь почти не читается глазом — это снимает рамки сразу в 41
+//        месте без правки этих мест. Прибыль/убыток переведены на чистые
+//        терминальные #22DD7F / #F0524D.
+//
+//        ШРИФТ: один моноширинный на всё (IBM Plex Mono). Смешение гротеска для
+//        текста и моноширинного для цифр было самым заметным признаком
+//        сборки из шаблонов. Sora больше не загружается.
+//
+//        ПРИМИТИВЫ: Card — без рамки, без внутреннего блика, радиус 22px;
+//        glowing больше не рисует свечение по периметру. Pill — без рамки.
+//
+//        НАВИГАЦИЯ: плавающая карточка с подписями заменена краем экрана:
+//        прозрачный фон, волосяная линия сверху, только иконки. Подписи при семи
+//        вкладках всё равно обрезались многоточием.
+//
+//        ГЛАВНАЯ: убраны приветствие и пояснительный подзаголовок; баланс поднят на
+//        их место и больше не лежит в карточке. Шапка выровнена по левому краю,
+//        декоративная градиентная черта под логотипом убрана.
+//
+//        Логика, расчёты, Firebase и Gemini не тронуты.
+//
 // mind.exe — V2.1
 //
 // V2.1 — дизайн-проход, этап 3 из 3: скелетоны и плавная загрузка.
@@ -372,25 +401,30 @@ import {
   Activity
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
+// V3.0 — палитра переведена на референс: чистый чёрный фон, поверхности почти сливаются
+// с ним, линии существуют, но не читаются как рамки. Раньше фон был #0A0A0B, а карточка
+// #131315 с видимой границей #25252A — на OLED это выглядит как набор коробок, а не как
+// один экран. Теперь разделение делается только сдвигом яркости поверхности.
 var BASE = {
-  bg: "#0A0A0B",
-  surface: "#131315",
-  surface2: "#18181B",
-  line: "#25252A",
-  ink: "#F3F3F1",
-  inkDim: "#8B8B90",
-  inkFaint: "#4E4E54"
+  bg: "#000000",
+  surface: "#0C0C0D",
+  surface2: "#141416",
+  line: "#1B1B1E",
+  ink: "#FFFFFF",
+  inkDim: "#7E7E83",
+  inkFaint: "#4A4A4F"
 };
-var WIN = "#5FAF96";
-var LOSS = "#C4645A";
-var FLAT = "#8B8B90";
+var WIN = "#22DD7F";
+var LOSS = "#F0524D";
+var FLAT = "#7E7E83";
 var WARN = "#D9A24A";
 var ACCENTS = [
   { name: "\u0411\u0438\u0440\u044E\u0437\u043E\u0432\u044B\u0439", value: "#2FD9BC", dim: "#175C4F" },
   { name: "\u042F\u043D\u0442\u0430\u0440\u043D\u044B\u0439", value: "#D9A24A", dim: "#5C441F" },
   { name: "\u0424\u0438\u043E\u043B\u0435\u0442\u043E\u0432\u044B\u0439", value: "#8C7FE0", dim: "#3C3570" },
   { name: "\u0420\u043E\u0437\u043E\u0432\u044B\u0439", value: "#E0708F", dim: "#5C2E3D" },
-  { name: "\u041A\u043E\u0441\u043C\u043E\u0441", value: "#F5F5F7", dim: "#3A3A3E", cosmic: true }
+  { name: "\u041A\u043E\u0441\u043C\u043E\u0441", value: "#F5F5F7", dim: "#3A3A3E", cosmic: true },
+  { name: "\u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B", value: "#22DD7F", dim: "#12583A" }
 ];
 var INSTRUMENTS = [
   { category: "\u041A\u0440\u0438\u043F\u0442\u043E", items: ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "DOGE/USD", "TON/USD"] },
@@ -3991,8 +4025,9 @@ function Pill({ active, children, onClick, accent }) {
     "button",
     {
       onClick,
-      className: "px-3.5 py-1.5 rounded-full text-[13px] transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0",
-      style: { background: active ? `${accent}12` : "transparent", color: active ? accent : BASE.inkDim, border: `1px solid ${active ? accent + "40" : BASE.line}` },
+      // V3.0 — рамка убрана: активность показывает заливка и цвет текста.
+      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0",
+      style: { background: active ? BASE.surface2 : "transparent", color: active ? BASE.ink : BASE.inkFaint, border: "none" },
       children
     }
   );
@@ -4001,11 +4036,15 @@ function Card({ children, className = "", glowing = false, accent, style = {} })
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: `rounded-2xl p-4 transition-shadow duration-300 break-inside-avoid ${className}`,
+      // V3.0 — карточка без рамки и без внутреннего блика. Рамка вокруг каждого блока
+      // на чёрном фоне превращает экран в сетку коробок; отделение делает сама
+      // поверхность. glowing больше не рисует свечение по периметру, а лишь чуть
+      // поднимает поверхность — акцент остаётся у текста и кнопок, а не у краёв.
+      className: `rounded-[22px] p-4 transition-colors duration-300 break-inside-avoid ${className}`,
       style: {
-        background: BASE.surface,
-        border: `1px solid ${glowing ? accent + "45" : BASE.line}`,
-        boxShadow: glowing ? ring(accent) + ", inset 0 1px 0 rgba(255,255,255,0.02)" : "inset 0 1px 0 rgba(255,255,255,0.02)",
+        background: glowing ? BASE.surface2 : BASE.surface,
+        border: "none",
+        boxShadow: "none",
         ...style
       },
       children
@@ -4307,32 +4346,25 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     { id: "simulator", label: t.home.simulatorTile, icon: Swords }
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("div", { className: "mb-6", children: [
-      /* @__PURE__ */ jsx("h1", { className: "text-[24px] leading-tight mb-1", style: { fontFamily: "var(--font-display)", color: BASE.ink, fontWeight: 500 }, children: t.home.welcomeBack(name || t.home.defaultName) }),
-      /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: t.home.subtitle })
-    ] }),
-    /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
-    /* @__PURE__ */ jsxs(Card, { accent, glowing: true, className: "mb-3", children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-1.5", children: [
-        /* @__PURE__ */ jsxs("span", { className: "text-[10px] uppercase tracking-wide", style: { color: BASE.inkFaint }, children: [
-          /* @__PURE__ */ jsx(Wallet, { size: 11, className: "inline mr-1 -mt-0.5", style: { color: accent } }),
-          measureMode === "currency" ? t.home.capital : t.home.totalResult
-        ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-7", children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between mb-2", children: [
+        /* @__PURE__ */ jsx("span", { className: "sec-cap text-[10px]", style: { color: BASE.inkFaint }, children: measureMode === "currency" ? t.home.capital : t.home.totalResult }),
         sparkPoints.length >= 2 && /* @__PURE__ */ jsx(Sparkline, { points: sparkPoints, color: cumResult >= 0 ? WIN : LOSS })
       ] }),
-      /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none mb-1", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: measureMode === "currency" ? formatBalance(animatedHero, currency) : formatResult(animatedHero, "R", currency) }),
-      measureMode === "currency" && /* @__PURE__ */ jsxs("span", { className: "text-[11px]", style: { color: cumResult >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
+      /* @__PURE__ */ jsx("div", { className: "text-[38px] leading-none mb-2", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500, letterSpacing: "-0.02em" }, children: measureMode === "currency" ? formatBalance(animatedHero, currency) : formatResult(animatedHero, "R", currency) }),
+      measureMode === "currency" && /* @__PURE__ */ jsxs("span", { className: "text-[13px]", style: { color: cumResult >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
         formatResult(cumResult, "currency", currency),
         " ",
         t.home.sinceStart
       ] })
     ] }),
+    /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
     /* @__PURE__ */ jsxs(
       "button",
       {
         onClick: () => goTo("calibration"),
-        className: "w-full flex items-center justify-between px-4 py-3 rounded-2xl mb-3 text-left transition-all duration-200 active:scale-[0.98] break-inside-avoid",
-        style: { border: `1px solid ${calibratedToday ? BASE.line : accent + "40"}`, background: calibratedToday ? BASE.surface : `${accent}0D` },
+        className: "w-full flex items-center justify-between px-4 py-3.5 rounded-[22px] mb-3 text-left transition-all duration-200 active:scale-[0.98] break-inside-avoid",
+        style: { border: "none", background: calibratedToday ? BASE.surface : BASE.surface2 },
         children: [
           /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-2.5 text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: [
             /* @__PURE__ */ jsx(Gauge, { size: 15, style: { color: calibratedToday ? lastCalibration.tierColor : accent } }),
@@ -5134,8 +5166,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
   };
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[11px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint, fontFamily: "var(--font-display)" }, children });
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-4", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " ",
       t.newEntry.title
     ] }),
@@ -5366,11 +5397,10 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
   ];
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-1", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " \u0417\u0430\u043A\u0440\u044B\u0442\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
     ] }),
-    /* @__PURE__ */ jsxs("p", { className: "text-sm mb-4", style: { color: BASE.inkFaint }, children: [
+    /* @__PURE__ */ jsxs("p", { className: "text-[11px] text-center mb-5", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
       entry.instrument, " \xB7 ", DIRECTION_LABEL[entry.direction],
       entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : "",
       hasPlan ? ` \xB7 \u043F\u043B\u0430\u043D 1:${entry.plannedRR.toFixed(2)}` : ""
@@ -5636,8 +5666,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
     { id: "manual", label: "\u0412\u0440\u0443\u0447\u043D\u0443\u044E" }
   ];
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(BookOpen, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-4", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " \u0420\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u0438\u0435 \u0441\u0434\u0435\u043B\u043A\u0438"
     ] }),
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: t.home.entrySection }),
@@ -5776,8 +5805,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
   const withR = closedEntries.filter((e) => e.r !== null && e.r !== void 0);
   const netR = withR.reduce((s, e) => s + e.r, 0);
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(NotebookText, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-4", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " ",
       t.log.title
     ] }),
@@ -6334,8 +6362,7 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     );
   }
   return /* @__PURE__ */ jsxs("div", { children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-4 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(LineChartIcon, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-4", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " \u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430"
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-4", children: [
@@ -6485,8 +6512,7 @@ function Challenge({ entries, accent, weeklyGoal, t, lang }) {
   const CHALLENGE_ICONS = { revenge: ShieldCheck, reflect: PenLine, winstreak: TrendingUp };
   const challenges = useMemo(() => calculateChallengeProgress(entries, lang), [entries, lang]);
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(Flame, { size: 17, style: { color: "#D98A4A" } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-5", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " ",
       t.challenge.title
     ] }),
@@ -8431,12 +8457,7 @@ function Coach({ entries, analytics, accent, userId, lang, t, strategyNote }) {
   ];
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
     /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
-      /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-1 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-        /* @__PURE__ */ jsx(Bot, { size: 17, style: { color: accent } }),
-        " ",
-        /* @__PURE__ */ jsx(DecodeText, { text: t.coach.title })
-      ] }),
-      /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkDim }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.subtitle }) })
+      /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px] text-center", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.title }) })
     ] }),
     /* @__PURE__ */ jsxs(Card, { accent, className: "mb-4", children: [
       /* @__PURE__ */ jsx("div", { className: "text-[11px] uppercase tracking-wide mb-3", style: { color: accent, fontFamily: "var(--font-display)" }, children: /* @__PURE__ */ jsx(DecodeText, { text: t.coach.analyzeTitle }) }),
@@ -9111,8 +9132,7 @@ function Settings({
   const Section = SettingsSection;
   const SectionLabel = SettingsSectionLabel;
   return /* @__PURE__ */ jsxs("div", { className: "stagger", children: [
-    /* @__PURE__ */ jsxs("h2", { className: "text-lg mb-5 flex items-center gap-2", style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 }, children: [
-      /* @__PURE__ */ jsx(SettingsIcon, { size: 17, style: { color: accent } }),
+    /* @__PURE__ */ jsxs("h2", { className: "sec-cap text-[10px] text-center mb-5", style: { color: BASE.inkDim, fontFamily: "var(--font-display)", fontWeight: 400 }, children: [
       " ",
       t.settings.title
     ] }),
@@ -10177,7 +10197,9 @@ function MindExe() {
   const [tab, setTab] = useState("home");
   const [closingId, setClosingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
+  // V3.0 — по умолчанию терминальный зелёный вместо космического белого. Сохранённый
+  // accentIndex по-прежнему перекрывает это значение при загрузке профиля.
+  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.value === "#22DD7F") || ACCENTS[0]);
   const [name, setName] = useState("");
   const [toast, setToast] = useState(null);
   const [soundOn, setSoundOn] = useState(true);
@@ -10718,7 +10740,7 @@ function MindExe() {
   const wideTab = ["home", "log", "patterns"].includes(tab);
   const formTab = ["new", "edit", "close"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
-  return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "'Inter', sans-serif" }, children: [
+  return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "var(--font-display)" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
         /* V5.1 typography. Everything in the app now points at two CSS variables instead of naming
            families inline in 78 + 77 places, so a future type change is a one-line edit here.
@@ -10729,15 +10751,27 @@ function MindExe() {
            JetBrains Mono without losing tabular alignment. Both are variable-weight on Google Fonts.
            The <link> tags in index.html load these; this @import is the belt-and-braces fallback so
            the bundle is self-sufficient if index.html is ever served stale. */
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
+        /* V3.0 \u2014 моноширинный шрифт стал основным, а не только шрифтом цифр.
+           Смешение гротеска для текста и моноширинного для чисел \u2014 самый заметный
+           признак \"собрано из шаблонов\": два разных ритма букв на одном экране.
+           Один моноширинный шрифт на всё даёт терминальный вид референса и убирает
+           необходимость решать, что именно \"цифра\", а что \"текст\". IBM Plex Mono
+           покрывает кириллицу, поэтому русские экраны не деградируют в подстановочный
+           шрифт. --font-display и --font-mono теперь указывают на одно семейство:
+           так все 155 мест, где они названы инлайн, меняются одной правкой, а
+           различие display/mono остаётся доступным, если оно понадобится обратно. */
         :root {
-          --font-display: 'Sora', 'Space Grotesk', system-ui, -apple-system, sans-serif;
+          --font-display: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
           --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
         }
-        body, #root { font-family: var(--font-display); }
+        body, #root { font-family: var(--font-display); letter-spacing: -0.01em; }
+        /* Референсные микроподписи: 9\u201110px, верхний регистр, широкий трекинг. */
+        .sec-cap { text-transform: uppercase; letter-spacing: 0.26em; }
+        .btn-cap { text-transform: uppercase; letter-spacing: 0.18em; }
         /* Sora runs a touch wider than Space Grotesk at the same size; a small negative tracking on
            headings and figures keeps existing layouts from re-wrapping. */
-        h1, h2, h3 { letter-spacing: -0.015em; }
+        h1, h2, h3 { letter-spacing: -0.02em; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         /* V2.1 — скелетоны. Блик идёт по градиенту фона, а не отдельным слоем: так он не
            создаёт нового элемента в разметке и не перехватывает нажатия. Пульсация
@@ -11006,7 +11040,7 @@ function MindExe() {
       /* @__PURE__ */ jsx(Toast, { text: toast }),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
-      /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-32 md:pb-16 relative`, children: [
+      /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-24 md:pb-16 relative`, children: [
         /* @__PURE__ */ jsxs(
           "div",
           {
@@ -11020,15 +11054,18 @@ function MindExe() {
             className: "-mx-5 px-5 pb-5 relative md:hidden",
             style: { background: "transparent", paddingTop: "calc(env(safe-area-inset-top, 0px) + 18px)" },
             children: [
-              /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-3 items-center", children: [
-                /* @__PURE__ */ jsx("div", {}),
-                /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-center gap-2", children: [
-                  /* @__PURE__ */ jsx(LogoMark, { size: 24, accent }),
+              /* V3.0 — шапка по левому краю, как в референсе: знак, под ним словесный знак.
+                 Центрированная композиция с пустой третью слева существовала только чтобы
+                 уравновесить кошелёк справа. Декоративная градиентная черта под логотипом
+                 убрана: она ничего не обозначала и была единственным чисто украшательным
+                 элементом на экране. */
+              /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between", children: [
+                /* @__PURE__ */ jsxs("div", { className: "flex flex-col items-start gap-2", children: [
+                  /* @__PURE__ */ jsx(LogoMark, { size: 28, accent }),
                   /* @__PURE__ */ jsx(Wordmark, { accent })
                 ] }),
                 /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
-              ] }),
-              /* @__PURE__ */ jsx("div", { className: "mx-auto mt-3", style: { width: "44px", height: "2px", background: `linear-gradient(90deg, transparent, ${accent}90, transparent)` } })
+              ] })
             ]
           }
         ),
@@ -11154,21 +11191,28 @@ function MindExe() {
           )
         ] }, tab)
       ] }) }),
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 flex justify-center pb-6 px-3 md:hidden", children: /* @__PURE__ */ jsx("div", { className: "max-w-md w-full rounded-2xl", style: { background: "rgba(19,19,21,0.94)", border: `1px solid ${BASE.line}`, backdropFilter: "blur(10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-end gap-0.5 m-1", children:
+      /* V3.0 — нижняя панель. Была плавающая карточка со своей рамкой, фоном и подписями
+         под каждой из семи иконок; подписи при семи вкладках всё равно обрезались
+         многоточием, то есть занимали место, ничего не сообщая. Теперь панель не
+         отдельный объект, а край экрана: прозрачный фон, одна волосяная линия сверху,
+         только иконки. Активная вкладка обозначена цветом и точкой под иконкой —
+         подпись выводится лишь для неё, где на неё есть место.
+         Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
+         достаточный акцент, свечение было единственным местом в панели с тенью. */
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.82)", backdropFilter: "blur(16px)", borderTop: `1px solid ${BASE.line}`, paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-center px-1 pt-2.5", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
-            return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 -mt-2 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
-              /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-xl flex items-center justify-center", style: { background: "#EDEDF0", boxShadow: "0 0 12px 2px rgba(255,255,255,0.18), 0 3px 8px rgba(0,0,0,0.3)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2.1, style: { color: "#141416" } }) }),
-              /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: "#fff", fontWeight: 600, fontFamily: "var(--font-display)" }, children: n.label })
-            ] }, n.id);
+            return /* @__PURE__ */ jsx("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-90", children:
+              /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-full flex items-center justify-center", style: { background: BASE.ink }, children: /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: "#000" } }) })
+            }, n.id);
           }
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), className: "relative z-10 flex flex-col items-center gap-1 py-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
-            /* @__PURE__ */ jsx("div", { className: "w-8 h-8 rounded-xl flex items-center justify-center transition-colors duration-200", style: { background: active ? `${accent}10` : "transparent" }, children: /* @__PURE__ */ jsx(n.icon, { size: 15, strokeWidth: 1.8, style: { color: active ? accent : BASE.inkFaint } }) }),
-            /* @__PURE__ */ jsx("span", { className: "text-[9px] leading-none max-w-full overflow-hidden text-ellipsis whitespace-nowrap px-0.5", style: { color: active ? accent : BASE.inkFaint, fontFamily: "var(--font-display)", transition: "color 0.25s ease" }, children: n.label })
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center gap-1.5 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
+            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease" } }),
+            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: 3, height: 3, background: active ? accent : "transparent", transition: "background 0.25s ease" } })
           ] }, n.id);
         })
-      }) }) })
+      }) })
     ] })
   ] });
 }
