@@ -1,3 +1,14 @@
+// mind.exe — V4.0
+//
+// V4.0 — Strategy Lab: отдельный модуль тестирования технических торговых стратегий.
+//        - несколько стратегий с названием, описанием и версией;
+//        - отдельные strategy-trades без обязательной психологической части;
+//        - обычная запись журнала может ссылаться на strategyId и автоматически
+//          учитывается в статистике стратегии без физического дублирования сделки;
+//        - отдельные Firebase documents для strategy index / trades / media;
+//        - Gemini анализирует описание + рассчитанную приложением статистику;
+//        - существующие journal/profile/media keys и schema не менялись.
+//
 // mind.exe — V3.4
 //
 // V3.4 — системный polish UI без изменения логики хранения данных.
@@ -488,7 +499,7 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0417\u0430\u043F\u0438\u0441\u044C", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0417\u0430\u043F\u0438\u0441\u044C", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", strategies: "\u0421\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
     coach: {
       title: "\u0418\u0418-\u0430\u043D\u0430\u043B\u0438\u0437",
       subtitle: "\u0422\u0432\u043E\u0439 \u043B\u0438\u0447\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041F\u043E\u043D\u0438\u043C\u0430\u0435\u0442 \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
@@ -832,7 +843,7 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "Home", new: "Entry", log: "Journal", patterns: "Analytics", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
+    nav: { home: "Home", new: "Entry", log: "Journal", patterns: "Analytics", strategies: "Strategies", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
     coach: {
       title: "AI Analysis",
       subtitle: "Your personal analyst. Understands your trading style.",
@@ -5037,6 +5048,72 @@ function PickerField({ value, onChange, options, placeholder, accent, allowCusto
     ] }, g.category)) })
   ] }) });
 }
+
+function StrategySelect({ value, onChange, strategies, accent, placeholder, allowNone = true }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [open]);
+  const selected = (strategies || []).find((s) => s.id === value);
+  return /* @__PURE__ */ jsxs("div", { ref, className: "relative", children: [
+    /* @__PURE__ */ jsxs("button", {
+      type: "button",
+      onClick: () => setOpen((v) => !v),
+      className: "w-full flex items-center justify-between border-b py-2.5 text-sm text-left",
+      style: { borderColor: BASE.line },
+      children: [
+        /* @__PURE__ */ jsxs("span", { className: "min-w-0 flex items-center gap-2", children: [
+          /* @__PURE__ */ jsx(Target, { size: 13, style: { color: selected ? accent : BASE.inkFaint } }),
+          /* @__PURE__ */ jsx("span", { className: "truncate", style: { color: selected ? BASE.ink : BASE.inkDim }, children: selected ? selected.name : placeholder || "Не выбрана" })
+        ] }),
+        /* @__PURE__ */ jsx(ChevronDown, { size: 14, style: { color: BASE.inkFaint, transform: open ? "rotate(180deg)" : "none", transition: "transform .2s ease" } })
+      ]
+    }),
+    open && /* @__PURE__ */ jsxs("div", {
+      className: "absolute z-40 left-0 right-0 top-[calc(100%+6px)] rounded-[18px] overflow-hidden",
+      style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, boxShadow: "0 18px 40px rgba(0,0,0,.55)" },
+      children: [
+        allowNone && /* @__PURE__ */ jsx("button", {
+          type: "button",
+          onClick: () => {
+            onChange("");
+            setOpen(false);
+          },
+          className: "w-full px-3 py-2.5 text-left text-sm",
+          style: { color: !value ? BASE.ink : BASE.inkDim, background: !value ? `${accent}10` : "transparent" },
+          children: "Без стратегии"
+        }),
+        (strategies || []).length === 0 ? /* @__PURE__ */ jsx("div", { className: "px-3 py-3 text-xs", style: { color: BASE.inkFaint }, children: "Сначала создай стратегию во вкладке «Стратегии»." }) : (strategies || []).map((s) => /* @__PURE__ */ jsxs("button", {
+          type: "button",
+          onClick: () => {
+            onChange(s.id);
+            setOpen(false);
+          },
+          className: "w-full px-3 py-2.5 text-left flex items-center justify-between gap-3",
+          style: { color: BASE.ink, background: value === s.id ? `${accent}10` : "transparent", borderTop: `1px solid ${BASE.line}` },
+          children: [
+            /* @__PURE__ */ jsxs("span", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsx("span", { className: "block text-sm truncate", children: s.name }),
+              /* @__PURE__ */ jsxs("span", { className: "block text-[10px] mt-0.5", style: { color: BASE.inkFaint }, children: ["v", s.version || 1, s.status === "archived" ? " · архив" : ""] })
+            ] }),
+            value === s.id && /* @__PURE__ */ jsx(Check, { size: 14, style: { color: accent } })
+          ]
+        }, s.id))
+      ]
+    })
+  ] });
+}
+
 // ---- AI text polish (Gemini) ---------------------------------------------------
 // Replaces the old voice-input mic button. Lightly copyedits the trader's own typed reflection —
 // fixes grammar/flow, merges fragments into full sentences — without changing meaning, adding
@@ -5095,13 +5172,14 @@ function PolishButton({ accent, notify, text, onPolished }) {
     }
   );
 }
-function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, notify, t }) {
+function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, strategies = [], notify, t, lang = "ru" }) {
   const [instrument, setInstrument] = useState("");
   const [direction, setDirection] = useState("Long");
   const [entryPrice, setEntryPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
   const [tag, setTag] = useState("");
+  const [strategyId, setStrategyId] = useState("");
   // V1.1 — состоянием теперь владеют проценты; x/y выводятся из них перед сохранением,
   // поэтому формат записи в журнале не изменился.
   const [emotions, setEmotions] = useState(null);
@@ -5191,6 +5269,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
       outcome: null,
       r: null,
       tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
+      strategyId: strategyId || null,
       x: point.x,
       y: point.y,
       emotions,
@@ -5212,6 +5291,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
     setInstrument("");
     setDirection("Long");
     setTag("");
+    setStrategyId("");
     setEmotions(null);
     setPull("");
     setScreenshots([]);
@@ -5253,6 +5333,11 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
         /* @__PURE__ */ jsx(L, { children: t.newEntry.setupType }),
         /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: lang === "en" ? "Strategy (optional)" : "Стратегия (необязательно)" }),
+      /* @__PURE__ */ jsx(StrategySelect, { value: strategyId, onChange: setStrategyId, strategies: strategies.filter((s) => s.status !== "archived"), accent, placeholder: lang === "en" ? "Not linked" : "Не привязана" }),
+      /* @__PURE__ */ jsx("p", { className: "text-[10px] mt-1.5", style: { color: BASE.inkFaint }, children: lang === "en" ? "If selected, this journal trade will automatically be included in that strategy's statistics." : "Если выбрать стратегию, эта сделка автоматически попадёт в её статистику без создания второй копии." })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
@@ -5598,10 +5683,11 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
     ] })
   ] });
 }
-function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, measureMode, currency, notify, t }) {
+function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, strategies = [], measureMode, currency, notify, t, lang = "ru" }) {
   const [instrument, setInstrument] = useState(entry?.instrument || "");
   const [direction, setDirection] = useState(entry?.direction || "Long");
   const [tag, setTag] = useState(entry?.tag === "\u041E\u0431\u0449\u0435\u0435" ? "" : entry?.tag || "");
+  const [strategyId, setStrategyId] = useState(entry?.strategyId || "");
   const [entryPrice, setEntryPrice] = useState(entry?.entryPrice != null ? String(entry.entryPrice) : "");
   const [stopLoss, setStopLoss] = useState(entry?.stopLoss != null ? String(entry.stopLoss) : "");
   const [takeProfit, setTakeProfit] = useState(entry?.takeProfit != null ? String(entry.takeProfit) : "");
@@ -5693,6 +5779,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
       instrument: instrument.trim(),
       direction,
       tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
+      strategyId: strategyId || null,
       x: point.x,
       y: point.y,
       emotions,
@@ -5736,6 +5823,10 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
         /* @__PURE__ */ jsx(L, { children: t.newEntry.setupType }),
         /* @__PURE__ */ jsx(PickerField, { value: tag, onChange: setTag, options: tagOptions, placeholder: t.newEntry.pickOrAdd, accent, allowCustom: true, flat: true, onCustomAdd: onAddCustomTag })
       ] })
+    ] }),
+    /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsx(L, { children: lang === "en" ? "Strategy (optional)" : "Стратегия (необязательно)" }),
+      /* @__PURE__ */ jsx(StrategySelect, { value: strategyId, onChange: setStrategyId, strategies, accent, placeholder: lang === "en" ? "Not linked" : "Не привязана" })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4", children: [
       /* @__PURE__ */ jsxs("div", { className: "flex-1 min-w-0", children: [
@@ -6598,6 +6689,468 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
     ] })
   ] });
 }
+
+function strategyAllTrades(strategyId, strategyTrades, journalEntries) {
+  const direct = (strategyTrades || []).filter((t) => t.strategyId === strategyId).map((t) => ({ ...t, __source: "strategy" }));
+  const linked = (journalEntries || []).filter((e) => e.strategyId === strategyId).map((e) => ({ ...e, __source: "journal" }));
+  return [...direct, ...linked].sort((a, b) => {
+    const da = a.date instanceof Date ? a.date.getTime() : new Date(a.date || 0).getTime();
+    const db = b.date instanceof Date ? b.date.getTime() : new Date(b.date || 0).getTime();
+    return da - db;
+  });
+}
+function calculateStrategyStats(strategyId, strategyTrades, journalEntries) {
+  const allTrades = strategyAllTrades(strategyId, strategyTrades, journalEntries);
+  const closed = allTrades.filter((t) => isEntryClosed(t) && typeof t.r === "number" && isFinite(t.r));
+  const open = allTrades.filter((t) => !isEntryClosed(t));
+  const wins = closed.filter((t) => t.r > 0);
+  const losses = closed.filter((t) => t.r < 0);
+  const breakevens = closed.filter((t) => t.r === 0);
+  const winRate = wins.length + losses.length ? wins.length / (wins.length + losses.length) * 100 : null;
+  const totalR = closed.reduce((s, t) => s + t.r, 0);
+  const avgR = closed.length ? totalR / closed.length : null;
+  const avgWin = wins.length ? wins.reduce((s, t) => s + t.r, 0) / wins.length : null;
+  const avgLoss = losses.length ? losses.reduce((s, t) => s + t.r, 0) / losses.length : null;
+  const grossProfit = wins.reduce((s, t) => s + t.r, 0);
+  const grossLoss = Math.abs(losses.reduce((s, t) => s + t.r, 0));
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : null;
+  let equity = 0, peak = 0, maxDrawdown = 0;
+  [...closed].sort((a, b) => {
+    const da = a.exitDate || a.date;
+    const db = b.exitDate || b.date;
+    return new Date(da || 0) - new Date(db || 0);
+  }).forEach((t) => {
+    equity += t.r;
+    peak = Math.max(peak, equity);
+    maxDrawdown = Math.max(maxDrawdown, peak - equity);
+  });
+  const longClosed = closed.filter((t) => t.direction === "Long");
+  const shortClosed = closed.filter((t) => t.direction === "Short");
+  const avgGroup = (arr) => arr.length ? arr.reduce((s, t) => s + t.r, 0) / arr.length : null;
+  const rulesKnown = closed.filter((t) => typeof t.rulesFollowed === "boolean");
+  const followed = rulesKnown.filter((t) => t.rulesFollowed);
+  const broken = rulesKnown.filter((t) => !t.rulesFollowed);
+  const directCount = allTrades.filter((t) => t.__source === "strategy").length;
+  const linkedCount = allTrades.filter((t) => t.__source === "journal").length;
+  return {
+    totalTrades: allTrades.length,
+    closedTrades: closed.length,
+    openTrades: open.length,
+    wins: wins.length,
+    losses: losses.length,
+    breakevens: breakevens.length,
+    winRate: winRate == null ? null : Math.round(winRate * 10) / 10,
+    totalR: Math.round(totalR * 100) / 100,
+    avgR: avgR == null ? null : Math.round(avgR * 100) / 100,
+    avgWin: avgWin == null ? null : Math.round(avgWin * 100) / 100,
+    avgLoss: avgLoss == null ? null : Math.round(avgLoss * 100) / 100,
+    profitFactor: profitFactor === Infinity ? "Infinity" : profitFactor == null ? null : Math.round(profitFactor * 100) / 100,
+    maxDrawdown: Math.round(maxDrawdown * 100) / 100,
+    long: { count: longClosed.length, avgR: avgGroup(longClosed) == null ? null : Math.round(avgGroup(longClosed) * 100) / 100 },
+    short: { count: shortClosed.length, avgR: avgGroup(shortClosed) == null ? null : Math.round(avgGroup(shortClosed) * 100) / 100 },
+    rules: {
+      known: rulesKnown.length,
+      followed: followed.length,
+      broken: broken.length,
+      followedAvgR: avgGroup(followed) == null ? null : Math.round(avgGroup(followed) * 100) / 100,
+      brokenAvgR: avgGroup(broken) == null ? null : Math.round(avgGroup(broken) * 100) / 100
+    },
+    directCount,
+    linkedCount
+  };
+}
+function StrategyEditor({ strategy, accent, lang, onCancel, onSave }) {
+  const isEn = lang === "en";
+  const [name, setName] = useState(strategy?.name || "");
+  const [description, setDescription] = useState(strategy?.description || "");
+  const canSave = name.trim().length >= 2 && description.trim().length >= 10;
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-5", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }) }),
+      /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px]", style: { color: BASE.inkDim }, children: strategy ? isEn ? "EDIT STRATEGY" : "РЕДАКТИРОВАНИЕ СТРАТЕГИИ" : isEn ? "NEW STRATEGY" : "НОВАЯ СТРАТЕГИЯ" })
+    ] }),
+    /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsx("label", { className: "block text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children: isEn ? "Name" : "Название" }),
+      /* @__PURE__ */ jsx("input", { value: name, onChange: (e) => setName(e.target.value), maxLength: 60, placeholder: isEn ? "Breakout M15" : "Например: Breakout M15", className: "w-full bg-transparent border-b outline-none py-2.5 text-[16px] mb-5", style: { borderColor: BASE.line, color: BASE.ink } }),
+      /* @__PURE__ */ jsx("label", { className: "block text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children: isEn ? "How the strategy should work" : "Как должна работать стратегия" }),
+      /* @__PURE__ */ jsx("textarea", { value: description, onChange: (e) => setDescription(e.target.value), rows: 8, maxLength: 4000, placeholder: isEn ? "Describe entry conditions, invalidation, stop placement, target logic and anything that must be repeatable..." : "Опиши условия входа, инвалидацию, постановку стопа, логику цели и всё, что должно повторяться от сделки к сделке...", className: "w-full bg-transparent rounded-[18px] outline-none p-3.5 text-sm resize-none", style: { border: `1px solid ${BASE.line}`, color: BASE.ink, lineHeight: 1.65 } }),
+      /* @__PURE__ */ jsx("p", { className: "text-[10px] mt-2", style: { color: BASE.inkFaint }, children: isEn ? "Gemini will use this as the strategy's rulebook and compare it with your actual sample." : "Gemini будет воспринимать это описание как правила стратегии и сравнивать их с реальной выборкой сделок." })
+    ] }) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({ name: name.trim(), description: description.trim() }), className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: strategy ? isEn ? "Save changes" : "Сохранить изменения" : isEn ? "Create strategy" : "Создать стратегию" })
+    ] })
+  ] });
+}
+function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomInstrument, notify, lang, onCancel, onSave }) {
+  const isEn = lang === "en";
+  const [instrument, setInstrument] = useState("");
+  const [direction, setDirection] = useState("Long");
+  const [timeframe, setTimeframe] = useState("");
+  const [entryPrice, setEntryPrice] = useState("");
+  const [stopLoss, setStopLoss] = useState("");
+  const [takeProfit, setTakeProfit] = useState("");
+  const [note, setNote] = useState("");
+  const [screenshots, setScreenshots] = useState([]);
+  const fileRef = useRef(null);
+  const MAX_SHOTS = 4;
+  const instrumentOptions = useMemo(() => customInstruments.length ? [{ category: isEn ? "Custom" : "Свои", items: customInstruments }, ...INSTRUMENTS] : INSTRUMENTS, [customInstruments, isEn]);
+  const rr = useMemo(() => {
+    const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
+    if ([en, sl, tp].some((v) => isNaN(v))) return { ok: false, error: null };
+    return computePlannedRR(direction, en, sl, tp);
+  }, [direction, entryPrice, stopLoss, takeProfit]);
+  const canSave = !!instrument.trim() && rr.ok;
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    const room = MAX_SHOTS - screenshots.length;
+    files.slice(0, Math.max(0, room)).forEach((file) => {
+      if (file.size > 15 * 1024 * 1024) {
+        notify?.(isEn ? `"${file.name}" is too large` : `«${file.name}» слишком большой`);
+        return;
+      }
+      compressImageFile(file).then((dataUrl) => setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(isEn ? "Could not process image" : "Не удалось обработать изображение"));
+    });
+  };
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children });
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }) }),
+      /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px]", style: { color: BASE.inkDim }, children: isEn ? "STRATEGY TRADE" : "СДЕЛКА СТРАТЕГИИ" })
+    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-xs mb-5 pl-11", style: { color: BASE.inkFaint }, children: strategy?.name || "" }),
+    /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx(L, { children: isEn ? "Instrument" : "Инструмент" }),
+          /* @__PURE__ */ jsx(PickerField, { value: instrument, onChange: setInstrument, options: instrumentOptions, placeholder: isEn ? "Select" : "Выбрать", accent, allowCustom: true, mono: true, onCustomAdd: onAddCustomInstrument })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx(L, { children: isEn ? "Timeframe" : "Таймфрейм" }),
+          /* @__PURE__ */ jsx("input", { value: timeframe, onChange: (e) => setTimeframe(e.target.value), placeholder: "M15", maxLength: 12, className: "w-full bg-transparent border-b outline-none py-2.5 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsx(L, { children: isEn ? "Direction" : "Направление" }),
+        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Long", "Short"].map((d) => /* @__PURE__ */ jsx("button", { onClick: () => setDirection(d), className: "flex-1 py-2 rounded-full text-sm", style: { border: `1px solid ${direction === d ? accent + "60" : BASE.line}`, background: direction === d ? `${accent}12` : "transparent", color: direction === d ? accent : BASE.inkDim }, children: d }, d)) })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-3 mb-2", children: [
+        ["Entry", entryPrice, setEntryPrice],
+        ["SL", stopLoss, setStopLoss],
+        ["TP", takeProfit, setTakeProfit]
+      ].map(([label, value, setter]) => /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx(L, { children: label }),
+        /* @__PURE__ */ jsx("input", { value, onChange: (e) => setter(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+      ] }, label)) }),
+      /* @__PURE__ */ jsx("div", { className: "text-xs mb-5", style: { color: rr.ok ? accent : rr.error ? LOSS : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: rr.ok ? `Planned RR 1:${rr.rr.toFixed(2)}` : rr.error || (isEn ? "Entry, SL and TP are required" : "Укажи Entry, SL и TP") }),
+      /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+        /* @__PURE__ */ jsx(L, { children: isEn ? "Entry screenshots" : "Скриншоты входа" }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+          screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+            /* @__PURE__ */ jsx("img", { src, className: "w-full h-full object-cover", alt: `strategy ${i + 1}` }),
+            /* @__PURE__ */ jsx("button", { onClick: () => setScreenshots((prev) => prev.filter((_, idx) => idx !== i)), className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center", style: { background: "rgba(0,0,0,.65)" }, children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" }) })
+          ] }, i)),
+          screenshots.length < MAX_SHOTS && /* @__PURE__ */ jsx("button", { onClick: () => fileRef.current?.click(), className: "w-20 h-20 rounded-xl flex items-center justify-center", style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 }) })
+        ] }),
+        /* @__PURE__ */ jsx("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, className: "hidden", onChange: handleFiles })
+      ] }),
+      /* @__PURE__ */ jsx(L, { children: isEn ? "Technical note (optional)" : "Технический комментарий (необязательно)" }),
+      /* @__PURE__ */ jsx("textarea", { value: note, onChange: (e) => setNote(e.target.value), rows: 3, placeholder: isEn ? "Why this setup meets the strategy rules..." : "Почему этот сетап соответствует правилам стратегии...", className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } })
+    ] }) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({
+        strategyId: strategy.id,
+        status: "open",
+        instrument: instrument.trim(),
+        direction,
+        timeframe: timeframe.trim() || null,
+        entryPrice: parseFloat(entryPrice),
+        stopLoss: parseFloat(stopLoss),
+        takeProfit: parseFloat(takeProfit),
+        plannedRR: rr.rr,
+        note: note.trim(),
+        date: /* @__PURE__ */ new Date(),
+        exitDate: null,
+        exitPrice: null,
+        closeType: null,
+        realizedRR: null,
+        r: null,
+        outcome: null,
+        rulesFollowed: null,
+        rulesNote: "",
+        screenshots,
+        exitScreenshots: []
+      }), className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: isEn ? "Add trade" : "Добавить сделку" })
+    ] })
+  ] });
+}
+function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang, onCancel, onSave }) {
+  const isEn = lang === "en";
+  const [closeType, setCloseType] = useState("manual");
+  const [manualExit, setManualExit] = useState("");
+  const [result, setResult] = useState("");
+  const [rulesFollowed, setRulesFollowed] = useState(null);
+  const [rulesNote, setRulesNote] = useState("");
+  const [exitScreenshots, setExitScreenshots] = useState([]);
+  const fileRef = useRef(null);
+  const hasPlan = trade && typeof trade.entryPrice === "number" && typeof trade.stopLoss === "number" && typeof trade.takeProfit === "number";
+  const effectiveExit = hasPlan ? closeType === "tp" ? trade.takeProfit : closeType === "sl" ? trade.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
+  const realizedRR = hasPlan && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(trade.direction, trade.entryPrice, trade.stopLoss, effectiveExit) : null;
+  const resultNum = result === "" ? null : parseFloat(result);
+  const canSave = resultNum != null && !isNaN(resultNum);
+  const handleFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    files.slice(0, 4 - exitScreenshots.length).forEach((file) => {
+      if (file.size > 15 * 1024 * 1024) return notify?.(isEn ? "Image is too large" : "Скриншот слишком большой");
+      compressImageFile(file).then((dataUrl) => setExitScreenshots((prev) => prev.length < 4 ? [...prev, dataUrl] : prev)).catch(() => notify?.(isEn ? "Could not process image" : "Не удалось обработать скриншот"));
+    });
+  };
+  if (!trade) return null;
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }) }),
+      /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px]", style: { color: BASE.inkDim }, children: isEn ? "CLOSE STRATEGY TRADE" : "ЗАКРЫТИЕ СДЕЛКИ" })
+    ] }),
+    /* @__PURE__ */ jsxs("p", { className: "text-xs mb-5 pl-11", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [trade.instrument, " · ", trade.direction, trade.timeframe ? ` · ${trade.timeframe}` : ""] }),
+    /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+      hasPlan && /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+        /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Close reason" : "Как закрылась" }),
+        /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2", children: [
+          { id: "tp", label: "TP" }, { id: "sl", label: "SL" }, { id: "manual", label: isEn ? "Manual" : "Вручную" }
+        ].map((o) => /* @__PURE__ */ jsx("button", { onClick: () => setCloseType(o.id), className: "py-2 rounded-full text-xs", style: { border: `1px solid ${closeType === o.id ? accent + "60" : BASE.line}`, color: closeType === o.id ? accent : BASE.inkDim, background: closeType === o.id ? `${accent}10` : "transparent" }, children: o.label }, o.id)) })
+      ] }),
+      (!hasPlan || closeType === "manual") && /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", placeholder: "Exit price", className: "w-full bg-transparent border-b outline-none py-2.5 text-sm mb-4", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
+      hasPlan && /* @__PURE__ */ jsx("div", { className: "text-xs mb-4", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `Realized ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR —" }),
+      /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children: `${isEn ? "Result" : "Результат"} (${unitSymbol(measureMode, currency)})` }),
+      /* @__PURE__ */ jsx("input", { value: result, onChange: (e) => setResult(e.target.value), type: "number", step: "0.1", placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80", className: "w-full bg-transparent border-b outline-none py-2.5 text-sm mb-5", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
+      /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Were the strategy rules followed?" : "Правила стратегии соблюдены?" }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
+        { v: true, label: isEn ? "Yes" : "Да" }, { v: false, label: isEn ? "No" : "Нет" }, { v: null, label: isEn ? "Skip" : "Не указывать" }
+      ].map((o, i) => /* @__PURE__ */ jsx("button", { onClick: () => setRulesFollowed(o.v), className: "py-2 rounded-full text-xs", style: { border: `1px solid ${rulesFollowed === o.v ? accent + "60" : BASE.line}`, color: rulesFollowed === o.v ? accent : BASE.inkDim, background: rulesFollowed === o.v ? `${accent}10` : "transparent" }, children: o.label }, i)) }),
+      rulesFollowed === false && /* @__PURE__ */ jsx("textarea", { value: rulesNote, onChange: (e) => setRulesNote(e.target.value), rows: 2, placeholder: isEn ? "What exactly was broken?" : "Что именно было нарушено?", className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none mb-4", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } }),
+      /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Exit screenshots" : "Скриншоты выхода" }),
+      /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+        exitScreenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("img", { src, className: "w-full h-full object-cover", alt: `exit ${i + 1}` }),
+          /* @__PURE__ */ jsx("button", { onClick: () => setExitScreenshots((prev) => prev.filter((_, idx) => idx !== i)), className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center", style: { background: "rgba(0,0,0,.65)" }, children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" }) })
+        ] }, i)),
+        exitScreenshots.length < 4 && /* @__PURE__ */ jsx("button", { onClick: () => fileRef.current?.click(), className: "w-20 h-20 rounded-xl flex items-center justify-center", style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 }) }),
+        /* @__PURE__ */ jsx("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, className: "hidden", onChange: handleFiles })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({
+        status: "closed",
+        closeType: hasPlan ? closeType : "manual",
+        exitPrice: effectiveExit,
+        realizedRR,
+        r: resultNum,
+        outcome: resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven",
+        exitDate: /* @__PURE__ */ new Date(),
+        rulesFollowed,
+        rulesNote: rulesNote.trim(),
+        exitScreenshots
+      }), className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: isEn ? "Close trade" : "Закрыть сделку" })
+    ] })
+  ] });
+}
+function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCreateStrategy, onUpdateStrategy, onCreateTrade, onCloseTrade }) {
+  const isEn = lang === "en";
+  const [mode, setMode] = useState("list");
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedTradeId, setSelectedTradeId] = useState(null);
+  const [detailTab, setDetailTab] = useState("trades");
+  const [aiBusy, setAiBusy] = useState(false);
+  const selected = strategies.find((s) => s.id === selectedId) || null;
+  const allSelectedTrades = selected ? strategyAllTrades(selected.id, strategyTrades, journalEntries) : [];
+  const stats = selected ? calculateStrategyStats(selected.id, strategyTrades, journalEntries) : null;
+  const openStrategy = (id) => {
+    setSelectedId(id);
+    setDetailTab("trades");
+    setMode("detail");
+  };
+  if (!loaded) {
+    return /* @__PURE__ */ jsx("div", { className: "py-16 flex justify-center", children: /* @__PURE__ */ jsx(LogoSpinner, { size: 24, accent }) });
+  }
+  if (mode === "create") return /* @__PURE__ */ jsx(StrategyEditor, { accent, lang, onCancel: () => setMode("list"), onSave: async (data) => {
+    const created = await onCreateStrategy(data);
+    if (created) {
+      setSelectedId(created.id);
+      setMode("detail");
+    }
+  } });
+  if (mode === "edit" && selected) return /* @__PURE__ */ jsx(StrategyEditor, { strategy: selected, accent, lang, onCancel: () => setMode("detail"), onSave: async (data) => {
+    const ok = await onUpdateStrategy(selected.id, { ...data, aiReview: "", aiReviewedAt: null });
+    if (ok) setMode("detail");
+  } });
+  if (mode === "newTrade" && selected) return /* @__PURE__ */ jsx(StrategyTradeForm, { strategy: selected, accent, customInstruments, onAddCustomInstrument, notify, lang, onCancel: () => setMode("detail"), onSave: async (trade) => {
+    const ok = await onCreateTrade(trade);
+    if (ok) setMode("detail");
+  } });
+  if (mode === "closeTrade" && selected) {
+    const trade = strategyTrades.find((t) => t.id === selectedTradeId) || null;
+    return /* @__PURE__ */ jsx(StrategyCloseTrade, { trade, accent, measureMode, currency, notify, lang, onCancel: () => setMode("detail"), onSave: async (patch) => {
+      const ok = await onCloseTrade(selectedTradeId, patch);
+      if (ok) {
+        setSelectedTradeId(null);
+        setMode("detail");
+      }
+    } });
+  }
+  if (mode === "detail" && selected && stats) {
+    const pf = stats.profitFactor === "Infinity" ? "∞" : stats.profitFactor == null ? "—" : stats.profitFactor.toFixed(2);
+    return /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-4", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-2 min-w-0", children: [
+          /* @__PURE__ */ jsx("button", { onClick: () => setMode("list"), className: "w-9 h-9 rounded-full flex items-center justify-center shrink-0", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }) }),
+          /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsx("h2", { className: "text-[20px] truncate", style: { color: BASE.ink, fontWeight: 500 }, children: selected.name }),
+            /* @__PURE__ */ jsxs("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: ["v", selected.version || 1, " · ", stats.totalTrades, " ", isEn ? "trades" : pluralRu(stats.totalTrades, "сделка", "сделки", "сделок"), stats.openTrades ? ` · ${stats.openTrades} ${isEn ? "open" : "открыто"}` : ""] })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx("button", { onClick: () => setMode("edit"), className: "w-9 h-9 rounded-full flex items-center justify-center shrink-0", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(PenLine, { size: 15 }) })
+      ] }),
+      /* @__PURE__ */ jsx(Card, { className: "mb-4", children: /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Strategy rules" : "Правила стратегии" }),
+        /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.inkDim }, children: selected.description })
+      ] }) }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-2 mb-4", children: [
+        /* @__PURE__ */ jsx(StatCard, { label: isEn ? "WIN RATE" : "ВИНРЕЙТ", value: stats.winRate == null ? "—" : `${stats.winRate}%`, accent: BASE.ink }),
+        /* @__PURE__ */ jsx(StatCard, { label: isEn ? "AVG RESULT" : "СРЕДНИЙ РЕЗУЛЬТАТ", value: stats.avgR == null ? "—" : formatResult(stats.avgR, measureMode, currency), accent: stats.avgR == null ? BASE.ink : stats.avgR >= 0 ? WIN : LOSS }),
+        /* @__PURE__ */ jsx(StatCard, { label: "PROFIT FACTOR", value: pf, accent: BASE.ink }),
+        /* @__PURE__ */ jsx(StatCard, { label: isEn ? "MAX DRAWDOWN" : "МАКС. ПРОСАДКА", value: formatResult(-stats.maxDrawdown, measureMode, currency), accent: stats.maxDrawdown > 0 ? LOSS : BASE.ink })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-5 hscroll", children: [
+        /* @__PURE__ */ jsx(Pill, { active: detailTab === "trades", onClick: () => setDetailTab("trades"), accent, children: isEn ? "Trades" : "Сделки" }),
+        /* @__PURE__ */ jsx(Pill, { active: detailTab === "stats", onClick: () => setDetailTab("stats"), accent, children: isEn ? "Statistics" : "Статистика" }),
+        /* @__PURE__ */ jsx(Pill, { active: detailTab === "ai", onClick: () => setDetailTab("ai"), accent, children: "Gemini" })
+      ] }),
+      detailTab === "trades" && /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("button", { onClick: () => setMode("newTrade"), className: "w-full mb-4 py-3 rounded-[18px] flex items-center justify-center gap-2 text-sm active:scale-[0.99]", style: { background: BASE.ink, color: "#000", fontWeight: 600 }, children: [
+          /* @__PURE__ */ jsx(Plus, { size: 15 }),
+          isEn ? "Add strategy trade" : "Добавить тестовую сделку"
+        ] }),
+        allSelectedTrades.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Target, title: isEn ? "No trades yet" : "Сделок пока нет", hint: isEn ? "Add a trade here or link a journal trade to this strategy." : "Добавь сделку здесь или привяжи обычную запись журнала к этой стратегии.", accent, compact: true }) : /* @__PURE__ */ jsx("div", { className: "space-y-2", children: [...allSelectedTrades].reverse().map((trade) => {
+          const closed = isEntryClosed(trade);
+          return /* @__PURE__ */ jsxs("div", { className: "rounded-[18px] px-3.5 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: closed ? outcomeColor(trade.outcome) : accent } }),
+              /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: trade.instrument }),
+              /* @__PURE__ */ jsx("span", { className: "text-[11px]", style: { color: BASE.inkDim }, children: trade.direction }),
+              trade.timeframe && /* @__PURE__ */ jsx("span", { className: "text-[10px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: trade.timeframe }),
+              /* @__PURE__ */ jsx("span", { className: "ml-auto text-[9px] px-2 py-0.5 rounded-full", style: { border: `1px solid ${BASE.line}`, color: trade.__source === "journal" ? BASE.inkDim : accent }, children: trade.__source === "journal" ? isEn ? "JOURNAL" : "ЖУРНАЛ" : "LAB" })
+            ] }),
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-3 mt-2 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
+              trade.plannedRR != null && /* @__PURE__ */ jsx("span", { children: `plan 1:${trade.plannedRR.toFixed(2)}` }),
+              closed && /* @__PURE__ */ jsx("span", { style: { color: outcomeColor(trade.outcome) }, children: formatResult(trade.r, measureMode, currency) }),
+              !closed && /* @__PURE__ */ jsx("span", { style: { color: accent }, children: isEn ? "OPEN" : "ОТКРЫТА" }),
+              typeof trade.rulesFollowed === "boolean" && /* @__PURE__ */ jsx("span", { style: { color: trade.rulesFollowed ? WIN : LOSS }, children: trade.rulesFollowed ? isEn ? "rules ✓" : "по правилам ✓" : isEn ? "rules broken" : "нарушение правил" })
+            ] }),
+            (trade.screenshots?.length > 0 || trade.exitScreenshots?.length > 0) && /* @__PURE__ */ jsx("div", { className: "flex gap-2 mt-3 hscroll", children: [...(trade.screenshots || []), ...(trade.exitScreenshots || [])].slice(0, 6).map((src, i) => /* @__PURE__ */ jsx("img", { src, className: "w-16 h-16 rounded-xl object-cover shrink-0", style: { border: `1px solid ${BASE.line}` }, alt: `strategy shot ${i + 1}` }, i)) }),
+            trade.__source === "strategy" && !closed && /* @__PURE__ */ jsx("button", { onClick: () => {
+              setSelectedTradeId(trade.id);
+              setMode("closeTrade");
+            }, className: "mt-3 w-full py-2 rounded-full text-xs", style: { border: `1px solid ${accent}55`, color: accent, background: `${accent}0B` }, children: isEn ? "Close trade" : "Закрыть сделку" })
+          ] }, `${trade.__source}_${trade.id}`);
+        }) })
+      ] }),
+      detailTab === "stats" && /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx(Card, { className: "mb-3", children: /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-3", style: { color: BASE.inkFaint }, children: isEn ? "RESULT QUALITY" : "КАЧЕСТВО РЕЗУЛЬТАТА" }),
+          /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-y-3 gap-x-5 text-sm", children: [
+            [isEn ? "Closed trades" : "Закрытых", stats.closedTrades],
+            [isEn ? "Total result" : "Общий результат", formatResult(stats.totalR, measureMode, currency)],
+            [isEn ? "Average win" : "Средний плюс", stats.avgWin == null ? "—" : formatResult(stats.avgWin, measureMode, currency)],
+            [isEn ? "Average loss" : "Средний минус", stats.avgLoss == null ? "—" : formatResult(stats.avgLoss, measureMode, currency)],
+            [isEn ? "Long avg" : "Long среднее", stats.long.avgR == null ? "—" : formatResult(stats.long.avgR, measureMode, currency)],
+            [isEn ? "Short avg" : "Short среднее", stats.short.avgR == null ? "—" : formatResult(stats.short.avgR, measureMode, currency)]
+          ].map(([label, value]) => /* @__PURE__ */ jsxs("div", { children: [
+            /* @__PURE__ */ jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: label }),
+            /* @__PURE__ */ jsx("div", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: value })
+          ] }, label)) })
+        ] }) }),
+        /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-3", style: { color: BASE.inkFaint }, children: isEn ? "DATA SOURCES & RULES" : "ИСТОЧНИКИ И СОБЛЮДЕНИЕ ПРАВИЛ" }),
+          /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-4", children: [
+            /* @__PURE__ */ jsx("span", { className: "px-2.5 py-1 rounded-full text-[10px]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: `${isEn ? "Lab" : "Lab"} ${stats.directCount}` }),
+            /* @__PURE__ */ jsx("span", { className: "px-2.5 py-1 rounded-full text-[10px]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: `${isEn ? "Journal" : "Журнал"} ${stats.linkedCount}` })
+          ] }),
+          stats.rules.known === 0 ? /* @__PURE__ */ jsx("p", { className: "text-xs", style: { color: BASE.inkFaint }, children: isEn ? "Rule adherence has not been marked yet." : "Пока нет закрытых сделок с отметкой о соблюдении правил." }) : /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3", children: [
+            /* @__PURE__ */ jsxs("div", { className: "rounded-[16px] p-3", style: { background: `${WIN}08`, border: `1px solid ${WIN}25` }, children: [
+              /* @__PURE__ */ jsx("div", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: isEn ? "Rules followed" : "По правилам" }),
+              /* @__PURE__ */ jsx("div", { className: "text-lg mt-1", style: { color: WIN, fontFamily: "var(--font-mono)" }, children: stats.rules.followedAvgR == null ? "—" : formatResult(stats.rules.followedAvgR, measureMode, currency) }),
+              /* @__PURE__ */ jsx("div", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: `${stats.rules.followed} ${isEn ? "trades" : "сд."}` })
+            ] }),
+            /* @__PURE__ */ jsxs("div", { className: "rounded-[16px] p-3", style: { background: `${LOSS}08`, border: `1px solid ${LOSS}25` }, children: [
+              /* @__PURE__ */ jsx("div", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: isEn ? "Rules broken" : "С нарушением" }),
+              /* @__PURE__ */ jsx("div", { className: "text-lg mt-1", style: { color: LOSS, fontFamily: "var(--font-mono)" }, children: stats.rules.brokenAvgR == null ? "—" : formatResult(stats.rules.brokenAvgR, measureMode, currency) }),
+              /* @__PURE__ */ jsx("div", { className: "text-[10px]", style: { color: BASE.inkFaint }, children: `${stats.rules.broken} ${isEn ? "trades" : "сд."}` })
+            ] })
+          ] })
+        ] }) })
+      ] }),
+      detailTab === "ai" && /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx(Card, { className: "mb-3", glowing: true, accent, children: /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-2", children: [
+            /* @__PURE__ */ jsx(Sparkles, { size: 14, style: { color: accent } }),
+            /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: isEn ? "Strategy review" : "Разбор стратегии" })
+          ] }),
+          /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-4", style: { color: BASE.inkFaint }, children: isEn ? "The app calculates the statistics. Gemini only interprets the sample and checks whether the rules are testable." : "Цифры считает само приложение. Gemini только интерпретирует выборку и проверяет, насколько правила стратегии вообще можно нормально тестировать." }),
+          /* @__PURE__ */ jsx("button", { disabled: aiBusy, onClick: async () => {
+            setAiBusy(true);
+            try {
+              const review = await aiAnalyzeStrategy(selected, stats, allSelectedTrades, measureMode, currency, lang);
+              await onUpdateStrategy(selected.id, { aiReview: review, aiReviewedAt: (/* @__PURE__ */ new Date()).toISOString() });
+            } catch (e) {
+              notify?.(isEn ? "Gemini strategy review is unavailable right now" : "Не удалось получить разбор Gemini");
+            } finally {
+              setAiBusy(false);
+            }
+          }, className: "w-full py-2.5 rounded-full text-sm", style: { background: accent, color: "#04120B", opacity: aiBusy ? 0.55 : 1, fontWeight: 600 }, children: aiBusy ? isEn ? "Analyzing..." : "Анализирую..." : selected.aiReview ? isEn ? "Refresh review" : "Обновить разбор" : isEn ? "Analyze strategy" : "Разобрать стратегию" })
+        ] }) }),
+        selected.aiReview ? /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+          selected.aiReviewedAt && /* @__PURE__ */ jsx("div", { className: "text-[10px] mb-3", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: new Date(selected.aiReviewedAt).toLocaleString(isEn ? "en-US" : "ru-RU") }),
+          /* @__PURE__ */ jsx("p", { className: "text-sm leading-[1.75] whitespace-pre-wrap", style: { color: BASE.ink }, children: selected.aiReview })
+        ] }) }) : /* @__PURE__ */ jsx(EmptyState, { icon: Brain, title: isEn ? "No AI review yet" : "Разбора пока нет", hint: isEn ? "Gemini can review the written rules even before the sample becomes large, but numerical conclusions stay limited by sample size." : "Gemini может проверить формулировку правил даже до большой выборки, но выводы по эффективности будут ограничены размером выборки.", accent, compact: true })
+      ] })
+    ] });
+  }
+  const activeStrategies = strategies.filter((s) => s.status !== "archived");
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-5", children: [
+      /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px]", style: { color: BASE.inkDim }, children: isEn ? "STRATEGY LAB" : "СТРАТЕГИИ" }),
+        /* @__PURE__ */ jsx("p", { className: "text-xs mt-1.5", style: { color: BASE.inkFaint }, children: isEn ? "Test the technical side separately from trading psychology." : "Тестируй техническую часть отдельно от психологии торговли." })
+      ] }),
+      /* @__PURE__ */ jsx("button", { onClick: () => setMode("create"), className: "w-10 h-10 rounded-full flex items-center justify-center", style: { background: BASE.ink, color: "#000" }, children: /* @__PURE__ */ jsx(Plus, { size: 17 }) })
+    ] }),
+    activeStrategies.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Target, title: isEn ? "Create your first strategy" : "Создай первую стратегию", hint: isEn ? "Describe the rules, add technical trades, and mind.exe will calculate the sample separately." : "Опиши правила, добавляй технические сделки, а mind.exe будет отдельно считать эффективность выборки.", actionLabel: isEn ? "New strategy" : "Новая стратегия", onAction: () => setMode("create"), accent }) : /* @__PURE__ */ jsx("div", { className: "space-y-3", children: activeStrategies.map((s) => {
+      const st = calculateStrategyStats(s.id, strategyTrades, journalEntries);
+      return /* @__PURE__ */ jsx("button", { onClick: () => openStrategy(s.id), className: "w-full text-left rounded-[24px] p-4 active:scale-[0.995] transition-transform", style: { background: `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`, border: `1px solid ${BASE.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)" }, children: /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-4", children: [
+          /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsx("div", { className: "text-[17px] truncate", style: { color: BASE.ink, fontWeight: 500 }, children: s.name }),
+            /* @__PURE__ */ jsxs("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: ["v", s.version || 1, " · ", st.totalTrades, " ", isEn ? "trades" : pluralRu(st.totalTrades, "сделка", "сделки", "сделок")] })
+          ] }),
+          /* @__PURE__ */ jsx(ChevronRight, { size: 16, style: { color: BASE.inkFaint } })
+        ] }),
+        /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2", children: [
+          [isEn ? "WR" : "WR", st.winRate == null ? "—" : `${st.winRate}%`, BASE.ink],
+          [isEn ? "AVG" : "AVG", st.avgR == null ? "—" : formatResult(st.avgR, measureMode, currency), st.avgR == null ? BASE.ink : st.avgR >= 0 ? WIN : LOSS],
+          [isEn ? "TOTAL" : "TOTAL", st.closedTrades ? formatResult(st.totalR, measureMode, currency) : "—", st.totalR >= 0 ? WIN : LOSS]
+        ].map(([label, value, color]) => /* @__PURE__ */ jsxs("div", { className: "rounded-[16px] p-2.5", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
+          /* @__PURE__ */ jsx("div", { className: "text-[9px] mb-1", style: { color: BASE.inkFaint }, children: label }),
+          /* @__PURE__ */ jsx("div", { className: "text-sm", style: { color, fontFamily: "var(--font-mono)" }, children: value })
+        ] }, label)) })
+      ] }) }, s.id);
+    }) })
+  ] });
+}
+
 function ChallengeCard({ icon: Icon, title, desc, progress, goal, accent }) {
   const pct = Math.min(100, Math.round(progress / goal * 100));
   const completed = progress >= goal;
@@ -7803,6 +8356,73 @@ USER_QUESTION:
 ${question}`;
   return aiCallGemini(prompt);
 }
+
+// ---- aiService.js: Strategy Lab -----------------------------------------------
+var aiStrategyModel = null;
+var AI_STRATEGY_SYSTEM_INSTRUCTION = `You are the Strategy Lab analyst inside mind.exe.
+Your job is to evaluate a trader's self-defined technical strategy using ONLY:
+1) the strategy description;
+2) statistics already calculated by the app;
+3) a compact list of the trader's own closed trades.
+
+Do not predict future prices, do not invent market facts, and do not claim that a strategy is
+profitable or has an edge from a tiny sample. If the sample is under 10 closed trades, explicitly say
+that confidence is low; under 5, treat numerical conclusions as preliminary only.
+
+Focus on test quality: whether the rules are specific enough to reproduce, what the data actually
+suggests, where results differ by long/short or rule adherence when those fields exist, and what ONE
+or TWO concrete variables should be tested next. Never fabricate a metric that is not present.
+Write in the requested language. Keep the answer concise, practical, and grounded in numbers.`;
+function aiGetStrategyModel() {
+  if (!aiStrategyModel) {
+    aiStrategyModel = getGenerativeModel(aiLogic, {
+      model: AI_MODEL,
+      systemInstruction: AI_STRATEGY_SYSTEM_INSTRUCTION,
+      generationConfig: { temperature: 0.35, maxOutputTokens: 750 }
+    });
+  }
+  return aiStrategyModel;
+}
+async function aiAnalyzeStrategy(strategy, stats, trades, measureMode, currency, lang = "ru") {
+  const compactTrades = (trades || []).filter((t) => isEntryClosed(t) && typeof t.r === "number").slice(-80).map((t) => ({
+    source: t.__source || t.source || "strategy",
+    instrument: t.instrument || null,
+    direction: t.direction || null,
+    timeframe: t.timeframe || null,
+    plannedRR: typeof t.plannedRR === "number" ? Math.round(t.plannedRR * 100) / 100 : null,
+    realizedRR: typeof t.realizedRR === "number" ? Math.round(t.realizedRR * 100) / 100 : null,
+    result: typeof t.r === "number" ? Math.round(t.r * 100) / 100 : null,
+    rulesFollowed: typeof t.rulesFollowed === "boolean" ? t.rulesFollowed : null
+  }));
+  const prompt = `LANG: ${lang}
+MEASURE_MODE: ${measureMode}
+CURRENCY: ${currency}
+
+STRATEGY:
+${JSON.stringify({
+    name: strategy?.name || "",
+    version: strategy?.version || 1,
+    description: strategy?.description || ""
+  })}
+
+APP_CALCULATED_STATS:
+${JSON.stringify(stats)}
+
+CLOSED_TRADES:
+${JSON.stringify(compactTrades)}
+
+Return plain text with three short sections:
+1. What the sample actually shows.
+2. Weak spots / ambiguity in the rules or data.
+3. What to test next.
+Do not use markdown tables.`;
+  const model = aiGetStrategyModel();
+  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_strategy_timeout");
+  const text = result?.response?.text?.();
+  if (!text || !text.trim()) throw new Error("ai_empty_response");
+  return text.trim();
+}
+
 // ---- aiService.js: Journal review --------------------------------------------
 // V1.5 — Gemini подключён к «Разбору» по той же схеме, что и к калибровке: приложение
 // само считает ФАКТЫ (числа, выборки, средние) и само хранит рекомендации, а модель
@@ -9515,6 +10135,7 @@ function sanitizeImportedEntry(e, fallbackIndex) {
     outcome,
     r: typeof e.r === "number" && !isNaN(e.r) ? e.r : null,
     tag: typeof e.tag === "string" && e.tag ? e.tag : "\u041E\u0431\u0449\u0435\u0435",
+    strategyId: typeof e.strategyId === "string" && e.strategyId ? e.strategyId : null,
     x: clampCoord(e.x),
     y: clampCoord(e.y),
     exitX: clampCoord(e.exitX),
@@ -9765,6 +10386,165 @@ async function saveMedia(userId, mediaMap) {
   }
   if (firstError) throw firstError;
 }
+
+// ---- Strategy Lab persistence -------------------------------------------------
+// Kept completely separate from PROFILE_KEY / MEDIA_KEY. Journal entries only store an optional
+// strategyId reference; direct Strategy Lab trades live in their own documents and have their own
+// media documents. This avoids both profile bloat and duplicated journal screenshots.
+var STRATEGY_SCHEMA_VERSION = 1;
+var STRATEGY_INDEX_KEY = "mind-exe-strategy-index";
+var STRATEGY_TRADE_KEY = "mind-exe-strategy-trade";
+var STRATEGY_MEDIA_KEY = "mind-exe-strategy-media";
+function strategyIndexKey(userId) {
+  return `${STRATEGY_INDEX_KEY}:${userId}`;
+}
+function strategyTradeKey(userId, tradeId) {
+  return `${STRATEGY_TRADE_KEY}:${userId}:${tradeId}`;
+}
+function strategyMediaKey(userId, tradeId, phase, index) {
+  return `${STRATEGY_MEDIA_KEY}:${userId}:${tradeId}:${phase}:${index}`;
+}
+function normalizeStrategy(raw) {
+  if (!raw || typeof raw !== "object" || !raw.id) return null;
+  return {
+    ...raw,
+    name: typeof raw.name === "string" ? raw.name : "Strategy",
+    description: typeof raw.description === "string" ? raw.description : "",
+    version: typeof raw.version === "number" && raw.version > 0 ? raw.version : 1,
+    status: raw.status === "archived" ? "archived" : "active",
+    tradeIds: Array.isArray(raw.tradeIds) ? [...new Set(raw.tradeIds.filter(Boolean))] : [],
+    createdAt: raw.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+    updatedAt: raw.updatedAt || raw.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+    aiReview: typeof raw.aiReview === "string" ? raw.aiReview : "",
+    aiReviewedAt: raw.aiReviewedAt || null
+  };
+}
+function migrateStrategyTrade(raw) {
+  if (!raw || typeof raw !== "object" || !raw.id || !raw.strategyId) return null;
+  return {
+    ...raw,
+    status: raw.status === "closed" ? "closed" : "open",
+    date: raw.date instanceof Date ? raw.date : new Date(raw.date || Date.now()),
+    exitDate: raw.exitDate ? raw.exitDate instanceof Date ? raw.exitDate : new Date(raw.exitDate) : null,
+    screenshots: Array.isArray(raw.screenshots) ? raw.screenshots : [],
+    exitScreenshots: Array.isArray(raw.exitScreenshots) ? raw.exitScreenshots : [],
+    entryPrice: typeof raw.entryPrice === "number" && isFinite(raw.entryPrice) ? raw.entryPrice : null,
+    stopLoss: typeof raw.stopLoss === "number" && isFinite(raw.stopLoss) ? raw.stopLoss : null,
+    takeProfit: typeof raw.takeProfit === "number" && isFinite(raw.takeProfit) ? raw.takeProfit : null,
+    plannedRR: typeof raw.plannedRR === "number" && isFinite(raw.plannedRR) ? raw.plannedRR : null,
+    exitPrice: typeof raw.exitPrice === "number" && isFinite(raw.exitPrice) ? raw.exitPrice : null,
+    realizedRR: typeof raw.realizedRR === "number" && isFinite(raw.realizedRR) ? raw.realizedRR : null,
+    r: typeof raw.r === "number" && isFinite(raw.r) ? raw.r : null,
+    rulesFollowed: typeof raw.rulesFollowed === "boolean" ? raw.rulesFollowed : null,
+    rulesNote: typeof raw.rulesNote === "string" ? raw.rulesNote : ""
+  };
+}
+async function loadStrategyLabState(userId) {
+  if (!fbAuth.currentUser || !userId) return { strategies: [], trades: [], rawIndex: null };
+  const res = await storageGet(strategyIndexKey(userId), false);
+  if (!res?.value) return { strategies: [], trades: [], rawIndex: null };
+  let parsed;
+  try {
+    parsed = JSON.parse(res.value);
+  } catch (_) {
+    throw new Error("strategy_index_unreadable");
+  }
+  if (!parsed || typeof parsed !== "object") throw new Error("strategy_index_unreadable");
+  const strategies = (Array.isArray(parsed.strategies) ? parsed.strategies : []).map(normalizeStrategy).filter(Boolean);
+  const tradeIds = [...new Set(strategies.flatMap((s) => s.tradeIds || []))];
+  const rows = await Promise.all(tradeIds.map(async (id) => {
+    try {
+      const tradeRes = await storageGet(strategyTradeKey(userId, id), false);
+      if (!tradeRes?.value) return null;
+      const tradeRaw = JSON.parse(tradeRes.value);
+      const trade = migrateStrategyTrade(tradeRaw);
+      if (!trade) return null;
+      const entryCount = Math.max(0, Math.min(4, Number(tradeRaw.entryShotCount) || 0));
+      const exitCount = Math.max(0, Math.min(4, Number(tradeRaw.exitShotCount) || 0));
+      const readShots = async (phase, count) => {
+        const rows = await Promise.all(Array.from({ length: count }, (_, i) => storageGet(strategyMediaKey(userId, id, phase, i), false).then((r) => r?.value || null).catch(() => null)));
+        return rows.filter((v) => typeof v === "string" && v.startsWith("data:image/"));
+      };
+      trade.screenshots = await readShots("entry", entryCount);
+      trade.exitScreenshots = await readShots("exit", exitCount);
+      return trade;
+    } catch (_) {
+      return null;
+    }
+  }));
+  return { strategies, trades: rows.filter(Boolean), rawIndex: parsed };
+}
+async function saveStrategyIndex(userId, strategies) {
+  if (!fbAuth.currentUser || !userId) return;
+  const payload = {
+    version: STRATEGY_SCHEMA_VERSION,
+    strategies: (strategies || []).map((s) => ({
+      ...s,
+      tradeIds: Array.isArray(s.tradeIds) ? [...new Set(s.tradeIds.filter(Boolean))] : []
+    }))
+  };
+  await storageSet(strategyIndexKey(userId), JSON.stringify(payload), false);
+  return payload;
+}
+async function saveStrategyTradeRecord(userId, trade) {
+  if (!fbAuth.currentUser || !userId || !trade?.id) return { mediaErrors: [] };
+  const clean = { ...trade };
+  const entryShots = Array.isArray(clean.screenshots) ? clean.screenshots.slice(0, 4) : [];
+  const exitShots = Array.isArray(clean.exitScreenshots) ? clean.exitScreenshots.slice(0, 4) : [];
+  delete clean.screenshots;
+  delete clean.exitScreenshots;
+  clean.entryShotCount = entryShots.length;
+  clean.exitShotCount = exitShots.length;
+  clean.date = clean.date instanceof Date ? clean.date.toISOString() : clean.date;
+  clean.exitDate = clean.exitDate instanceof Date ? clean.exitDate.toISOString() : clean.exitDate;
+  // The structured trade is the primary record. Screenshot writes are isolated one image per
+  // Firestore document so even four entry + four exit images can never collide with the 1 MiB
+  // document limit as one combined base64 payload.
+  await storageSet(strategyTradeKey(userId, trade.id), JSON.stringify(clean), false);
+  const mediaErrors = [];
+  const savePhase = async (phase, shots) => {
+    for (let i = 0; i < shots.length; i++) {
+      let lastError = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await storageSet(strategyMediaKey(userId, trade.id, phase, i), shots[i], false);
+          lastError = null;
+          break;
+        } catch (e) {
+          lastError = e;
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 180 * (attempt + 1)));
+        }
+      }
+      if (lastError) mediaErrors.push({ phase, index: i, error: lastError });
+    }
+    // Remove stale slots only after the trade itself is safely in Firestore.
+    for (let i = shots.length; i < 4; i++) {
+      try {
+        await storageDelete(strategyMediaKey(userId, trade.id, phase, i), false);
+      } catch (_) {
+      }
+    }
+  };
+  await savePhase("entry", entryShots);
+  await savePhase("exit", exitShots);
+  return { mediaErrors };
+}
+async function deleteStrategyTradeRecord(userId, tradeId) {
+  if (!fbAuth.currentUser || !userId || !tradeId) return;
+  try {
+    await storageDelete(strategyTradeKey(userId, tradeId), false);
+  } catch (_) {
+  }
+  for (const phase of ["entry", "exit"]) {
+    for (let i = 0; i < 4; i++) {
+      try {
+        await storageDelete(strategyMediaKey(userId, tradeId, phase, i), false);
+      } catch (_) {
+      }
+    }
+  }
+}
+
 var AUTH_USERS_KEY = "mind-exe-auth-users";
 var LEGACY_CLAIMED_KEY = "mind-exe-legacy-claimed";
 var LOCAL_MIGRATED_KEY = "mind-exe-local-migrated";
@@ -10311,7 +11091,7 @@ function MindExe() {
   const [editingId, setEditingId] = useState(null);
   // V3.0 — по умолчанию терминальный зелёный вместо космического белого. Сохранённый
   // accentIndex по-прежнему перекрывает это значение при загрузке профиля.
-  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.value === "#22DD7F") || ACCENTS[0]);
+  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.value === "#31E98F") || ACCENTS[0]);
   const [name, setName] = useState("");
   const [toast, setToast] = useState(null);
   const [soundOn, setSoundOn] = useState(true);
@@ -10323,6 +11103,9 @@ function MindExe() {
   // V0.4 — описание собственной стратегии. Хранится в settings профиля (Firestore) и
   // передаётся во все AI-контексты, чтобы модель не предлагала ломать стиль торговли.
   const [strategyNote, setStrategyNote] = useState("");
+  const [strategies, setStrategies] = useState([]);
+  const [strategyTrades, setStrategyTrades] = useState([]);
+  const [strategyLoaded, setStrategyLoaded] = useState(false);
   const [startingCapital, setStartingCapital] = useState(1e3);
   const [customInstruments, setCustomInstruments] = useState([]);
   const [customTags, setCustomTags] = useState([]);
@@ -10343,6 +11126,9 @@ function MindExe() {
   const firstLoadRef = useRef(true);
   const firstDailyRewardRef = useRef(true);
   const canPersistRef = useRef(false);
+  const strategyCanPersistRef = useRef(false);
+  const strategyRawIndexRef = useRef(null);
+  const strategyBackupPendingRef = useRef(false);
   // Holds the profile document exactly as it was loaded. buildPayload merges its output ON TOP of
   // this, so any field written by a NEWER build of the app (or one this build simply doesn't know
   // about) survives a save instead of being silently dropped \u2014 which is what would otherwise make
@@ -10366,6 +11152,12 @@ function MindExe() {
     setCurrency("USD");
     setTradingAsset(null);
     setStrategyNote("");
+    setStrategies([]);
+    setStrategyTrades([]);
+    setStrategyLoaded(false);
+    strategyCanPersistRef.current = false;
+    strategyRawIndexRef.current = null;
+    strategyBackupPendingRef.current = false;
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -10399,7 +11191,9 @@ function MindExe() {
   const handleLogout = async () => {
     await authLogout();
     canPersistRef.current = false;
+    strategyCanPersistRef.current = false;
     rawProfileRef.current = null;
+    strategyRawIndexRef.current = null;
     backupPendingRef.current = false;
     resetMediaCache();
     setLoaded(false);
@@ -10540,6 +11334,55 @@ function MindExe() {
       cancelled = true;
     };
   }, [authStatus, userId, migrateFor]);
+  // Strategy Lab loads independently from the journal profile. A failure here never blocks the
+  // journal, and — just like canPersistRef for the profile — strategyCanPersistRef stays false so an
+  // empty in-memory Strategy Lab can never overwrite an existing cloud index after a failed read.
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !userId || migrateFor) return;
+    let cancelled = false;
+    setStrategyLoaded(false);
+    strategyCanPersistRef.current = false;
+    strategyRawIndexRef.current = null;
+    strategyBackupPendingRef.current = false;
+    setStrategies([]);
+    setStrategyTrades([]);
+    const load = async (attempt = 0) => {
+      if (cancelled) return;
+      if (!fbAuth.currentUser) {
+        if (attempt < 20) {
+          setTimeout(() => load(attempt + 1), 100);
+          return;
+        }
+        if (!cancelled) setStrategyLoaded(true);
+        return;
+      }
+      try {
+        const state = await caWithTimeout(loadStrategyLabState(userId), 18e3, "strategy_load_timeout");
+        if (cancelled) return;
+        setStrategies(state.strategies || []);
+        setStrategyTrades(state.trades || []);
+        strategyRawIndexRef.current = state.rawIndex || null;
+        strategyBackupPendingRef.current = !!state.rawIndex;
+        strategyCanPersistRef.current = true;
+        setStrategyLoaded(true);
+      } catch (e) {
+        if (attempt < 2 && !cancelled) {
+          setTimeout(() => load(attempt + 1), 700 * (attempt + 1));
+          return;
+        }
+        console.error("mind.exe: Strategy Lab load failed — Strategy Lab writes disabled for session", e);
+        if (!cancelled) {
+          setStrategyLoaded(true);
+          showToast(lang === "en" ? "Could not load Strategy Lab. Journal data is safe; reload before editing strategies." : "Не удалось загрузить стратегии. Журнал в безопасности; перезайди перед изменением стратегий.");
+        }
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, userId, migrateFor]);
+
   const buildPayload = (overrides = {}) => {
     const prev = rawProfileRef.current || {};
     const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
@@ -10644,6 +11487,116 @@ function MindExe() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
+  const persistStrategyIndexNow = async (nextStrategies) => {
+    if (!strategyCanPersistRef.current || !fbAuth.currentUser || !userId) {
+      showToast(lang === "en" ? "Strategy Lab is not ready to save yet" : "Strategy Lab ещё не готов к сохранению");
+      return false;
+    }
+    try {
+      if (strategyBackupPendingRef.current && strategyRawIndexRef.current) {
+        strategyBackupPendingRef.current = false;
+        try {
+          await storageSet(`${STRATEGY_INDEX_KEY}:backup:${userId}`, JSON.stringify(strategyRawIndexRef.current), false);
+        } catch (_) {
+        }
+      }
+      const payload = await saveStrategyIndex(userId, nextStrategies);
+      strategyRawIndexRef.current = payload || { version: STRATEGY_SCHEMA_VERSION, strategies: nextStrategies };
+      return true;
+    } catch (e) {
+      console.error("mind.exe: strategy index save failed", e);
+      showToast(lang === "en" ? "Could not save Strategy Lab — check connection" : "Не удалось сохранить стратегии — проверь связь");
+      return false;
+    }
+  };
+  const handleCreateStrategy = async ({ name: strategyName, description }) => {
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const strategy = normalizeStrategy({
+      id: `st_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: strategyName,
+      description,
+      version: 1,
+      status: "active",
+      tradeIds: [],
+      createdAt: now,
+      updatedAt: now,
+      aiReview: "",
+      aiReviewedAt: null
+    });
+    const next = [...strategies, strategy];
+    const ok = await persistStrategyIndexNow(next);
+    if (!ok) return null;
+    setStrategies(next);
+    showToast(lang === "en" ? "Strategy created" : "Стратегия создана");
+    return strategy;
+  };
+  const handleUpdateStrategy = async (strategyId, patch) => {
+    const next = strategies.map((s) => s.id === strategyId ? normalizeStrategy({ ...s, ...patch, updatedAt: (/* @__PURE__ */ new Date()).toISOString() }) : s);
+    const ok = await persistStrategyIndexNow(next);
+    if (!ok) return false;
+    setStrategies(next);
+    return true;
+  };
+  const handleCreateStrategyTrade = async (draft) => {
+    if (!strategyCanPersistRef.current || !userId) return false;
+    const strategy = strategies.find((s) => s.id === draft.strategyId);
+    if (!strategy) {
+      showToast(lang === "en" ? "Strategy not found" : "Стратегия не найдена");
+      return false;
+    }
+    const trade = migrateStrategyTrade({
+      ...draft,
+      id: `strade_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      source: "strategy"
+    });
+    const now = (/* @__PURE__ */ new Date()).toISOString();
+    const nextStrategies = strategies.map((s) => s.id === strategy.id ? {
+      ...s,
+      tradeIds: [...new Set([...(s.tradeIds || []), trade.id])],
+      updatedAt: now
+    } : s);
+    try {
+      // Write the trade first. If the index write then fails, remove the orphan so the cloud
+      // cannot contain an invisible trade that the user has no way to reach.
+      const saveResult = await saveStrategyTradeRecord(userId, trade);
+      const indexOk = await persistStrategyIndexNow(nextStrategies);
+      if (!indexOk) {
+        await deleteStrategyTradeRecord(userId, trade.id);
+        return false;
+      }
+      setStrategyTrades((prev) => [...prev, trade]);
+      setStrategies(nextStrategies);
+      if (saveResult?.mediaErrors?.length) {
+        showToast(lang === "en" ? "Trade saved, but one or more screenshots did not upload" : "Сделка сохранена, но часть скриншотов не загрузилась");
+      } else {
+        showToast(lang === "en" ? "Strategy trade added" : "Тестовая сделка добавлена");
+      }
+      return true;
+    } catch (e) {
+      console.error("mind.exe: strategy trade save failed", e);
+      showToast(lang === "en" ? "Could not save strategy trade" : "Не удалось сохранить тестовую сделку");
+      return false;
+    }
+  };
+  const handleCloseStrategyTrade = async (tradeId, patch) => {
+    const current = strategyTrades.find((t) => t.id === tradeId);
+    if (!current || !strategyCanPersistRef.current || !userId) return false;
+    const nextTrade = migrateStrategyTrade({ ...current, ...patch });
+    try {
+      const saveResult = await saveStrategyTradeRecord(userId, nextTrade);
+      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? nextTrade : t));
+      if (saveResult?.mediaErrors?.length) {
+        showToast(lang === "en" ? "Trade closed, but one or more screenshots did not upload" : "Сделка закрыта, но часть скриншотов не загрузилась");
+      } else {
+        showToast(lang === "en" ? "Strategy trade closed" : "Тестовая сделка закрыта");
+      }
+      return true;
+    } catch (e) {
+      console.error("mind.exe: strategy trade close failed", e);
+      showToast(lang === "en" ? "Could not save closing trade" : "Не удалось сохранить закрытие сделки");
+      return false;
+    }
+  };
   const awardCoins = (amount, reason) => {
     const tx = { id: `mc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, amount, reason, date: (/* @__PURE__ */ new Date()).toISOString() };
     const nextCoins = mindCoins + amount;
@@ -10732,6 +11685,15 @@ function MindExe() {
     try {
       const payload = buildPayload();
       payload.journal.entries = entries.map((e) => ({ ...e, date: e.date instanceof Date ? e.date.toISOString() : e.date, exitDate: e.exitDate instanceof Date ? e.exitDate.toISOString() : e.exitDate }));
+      payload.strategyLab = {
+        version: STRATEGY_SCHEMA_VERSION,
+        strategies,
+        trades: strategyTrades.map((trade) => ({
+          ...trade,
+          date: trade.date instanceof Date ? trade.date.toISOString() : trade.date,
+          exitDate: trade.exitDate instanceof Date ? trade.exitDate.toISOString() : trade.exitDate
+        }))
+      };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -10748,7 +11710,7 @@ function MindExe() {
   };
   const importFullBackup = (file) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const raw = JSON.parse(reader.result);
         const profile = migrateProfile(raw);
@@ -10772,7 +11734,7 @@ function MindExe() {
         if (typeof wallet.mindCoins === "number") setMindCoins(wallet.mindCoins);
         if (Array.isArray(wallet.coinLedger)) setCoinLedger(wallet.coinLedger);
         if (wallet.lastDailyReward) setLastDailyReward(wallet.lastDailyReward);
-        persistNow({
+        await persistNow({
           entries: restoredEntries,
           name: user.name ?? name,
           accentIndex: typeof settings.accentIndex === "number" ? settings.accentIndex : ACCENTS.findIndex((a) => a.value === accentPreset.value),
@@ -10791,7 +11753,33 @@ function MindExe() {
           coinLedger: wallet.coinLedger ?? coinLedger,
           lastDailyReward: wallet.lastDailyReward ?? lastDailyReward
         });
-        showToast("\u0411\u044D\u043A\u0430\u043F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D");
+        let strategyRestoreFailed = false;
+        if (raw.strategyLab && (!strategyCanPersistRef.current || !userId)) {
+          strategyRestoreFailed = true;
+        } else if (raw.strategyLab && strategyCanPersistRef.current && userId) {
+          try {
+            const importedStrategies = (Array.isArray(raw.strategyLab.strategies) ? raw.strategyLab.strategies : []).map(normalizeStrategy).filter(Boolean);
+            const importedTrades = (Array.isArray(raw.strategyLab.trades) ? raw.strategyLab.trades : []).map(migrateStrategyTrade).filter(Boolean);
+            const tradeIdsByStrategy = {};
+            importedTrades.forEach((trade) => {
+              (tradeIdsByStrategy[trade.strategyId] = tradeIdsByStrategy[trade.strategyId] || []).push(trade.id);
+            });
+            const fixedStrategies = importedStrategies.map((s) => ({
+              ...s,
+              tradeIds: [...new Set([...(s.tradeIds || []), ...(tradeIdsByStrategy[s.id] || [])])]
+            }));
+            for (const trade of importedTrades) await saveStrategyTradeRecord(userId, trade);
+            const indexPayload = await saveStrategyIndex(userId, fixedStrategies);
+            strategyRawIndexRef.current = indexPayload;
+            strategyBackupPendingRef.current = !!fixedStrategies.length;
+            setStrategies(fixedStrategies);
+            setStrategyTrades(importedTrades);
+          } catch (e) {
+            console.error("mind.exe: Strategy Lab backup restore failed", e);
+            strategyRestoreFailed = true;
+          }
+        }
+        showToast(strategyRestoreFailed ? "\u0411\u044D\u043A\u0430\u043F \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u043D\u043E Strategy Lab \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043B\u0441\u044F" : "\u0411\u044D\u043A\u0430\u043F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D");
       } catch (_) {
         showToast("\u0424\u0430\u0439\u043B \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0451\u043D \u0438\u043B\u0438 \u044D\u0442\u043E \u043D\u0435 \u0431\u044D\u043A\u0430\u043F mind.exe");
       }
@@ -10849,12 +11837,13 @@ function MindExe() {
     { id: "home", label: t.nav.home, icon: Sparkles },
     { id: "log", label: t.nav.log, icon: NotebookText },
     { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
+    { id: "strategies", label: t.nav.strategies, icon: Target },
     { id: "new", label: t.nav.new, icon: BookOpen, primary: true },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: SettingsIcon }
   ];
-  const wideTab = ["home", "log", "patterns"].includes(tab);
+  const wideTab = ["home", "log", "patterns", "strategies"].includes(tab);
   const formTab = ["new", "edit", "close"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "var(--font-display)" }, children: [
@@ -11205,8 +12194,10 @@ function MindExe() {
               customTags,
               onAddCustomInstrument: addCustomInstrument,
               onAddCustomTag: addCustomTag,
+              strategies: strategies.filter((s) => s.status !== "archived"),
               notify: showToast,
               t,
+              lang,
               onSave: (e) => {
                 const next = [...entries, e];
                 setEntries(next);
@@ -11254,8 +12245,10 @@ function MindExe() {
             customTags,
             onAddCustomInstrument: addCustomInstrument,
             onAddCustomTag: addCustomTag,
+            strategies,
             notify: showToast,
             t,
+            lang,
             onCancel: () => {
               setEditingId(null);
               setTab("log");
@@ -11270,6 +12263,23 @@ function MindExe() {
             }
           }),
           tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics, t, lang }),
+          tab === "strategies" && /* @__PURE__ */ jsx(StrategyLab, {
+            strategies,
+            strategyTrades,
+            journalEntries: entries,
+            loaded: strategyLoaded,
+            accent,
+            measureMode,
+            currency,
+            customInstruments,
+            onAddCustomInstrument: addCustomInstrument,
+            notify: showToast,
+            lang,
+            onCreateStrategy: handleCreateStrategy,
+            onUpdateStrategy: handleUpdateStrategy,
+            onCreateTrade: handleCreateStrategyTrade,
+            onCloseTrade: handleCloseStrategyTrade
+          }),
           tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t, entries, analytics, userId, strategyNote }),
           tab === "simulator" && /* @__PURE__ */ jsx(Simulator, { accent, onWin: () => {
             awardCoins(5, lang === "en" ? "Win in the game" : "\u041F\u043E\u0431\u0435\u0434\u0430 \u0432 \u0438\u0433\u0440\u0435");
@@ -11323,7 +12333,7 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-center px-1.5 pt-2.5", children:
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-8 items-center px-1 pt-2.5", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
