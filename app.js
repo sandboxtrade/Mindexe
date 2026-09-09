@@ -1,3 +1,26 @@
+// mind.exe — V3.4
+//
+// V3.4 — системный polish UI без изменения логики хранения данных.
+//        Фокус: сделать интерфейс более собранным, тёмным и «доделанным», чтобы
+//        приложение выглядело как продукт, а не как сырая вайбкодерская сборка.
+//        Что обновлено:
+//        - подтянута базовая палитра: поверхности темнее и ближе друг к другу,
+//          вторичный текст чище, зелёный/красный читаются увереннее;
+//        - унифицированы Card / StatCard / Pill / mobile nav / badge styles;
+//        - уменьшена визуальная «коробочность», добавлены мягкие слои и тени;
+//        - уточнены микротипографика и трекинг служебных подписей.
+//        Storage / Firestore / media / journal persistence не менялись.
+//
+// mind.exe — V3.3
+//
+// V3.3 — переработан дизайн вкладки «Аналитика» → «Динамика».
+//        - кривая доходности теперь строится по дням, а не искусственно сглаженным
+//          точкам отдельных сделок, поэтому график выглядит спокойнее и чище;
+//        - график помещён в полноценную карточку с более аккуратной сеткой и tooltip;
+//        - блок «Результат по типу сетапа» переделан из тонких progress-баров в более
+//          плотные карточки с итогом, средним результатом и количеством сделок;
+//        - storage / Firestore / media / journal persistence не менялись.
+//
 // mind.exe — V3.2.1
 //
 // V3.2.1 — аудит надёжности после V3.2. Формат Firestore и ключи документов не менялись.
@@ -435,24 +458,24 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 // один экран. Теперь разделение делается только сдвигом яркости поверхности.
 var BASE = {
   bg: "#000000",
-  surface: "#0C0C0D",
-  surface2: "#141416",
-  line: "#1B1B1E",
-  ink: "#FFFFFF",
-  inkDim: "#7E7E83",
-  inkFaint: "#4A4A4F"
+  surface: "#09090A",
+  surface2: "#101012",
+  line: "#1D1D22",
+  ink: "#FCFCFD",
+  inkDim: "#9A9AA2",
+  inkFaint: "#62626A"
 };
-var WIN = "#22DD7F";
-var LOSS = "#F0524D";
-var FLAT = "#7E7E83";
+var WIN = "#31E98F";
+var LOSS = "#FF625C";
+var FLAT = "#84848C";
 var WARN = "#D9A24A";
 var ACCENTS = [
-  { name: "\u0411\u0438\u0440\u044E\u0437\u043E\u0432\u044B\u0439", value: "#2FD9BC", dim: "#175C4F" },
-  { name: "\u042F\u043D\u0442\u0430\u0440\u043D\u044B\u0439", value: "#D9A24A", dim: "#5C441F" },
-  { name: "\u0424\u0438\u043E\u043B\u0435\u0442\u043E\u0432\u044B\u0439", value: "#8C7FE0", dim: "#3C3570" },
-  { name: "\u0420\u043E\u0437\u043E\u0432\u044B\u0439", value: "#E0708F", dim: "#5C2E3D" },
-  { name: "\u041A\u043E\u0441\u043C\u043E\u0441", value: "#F5F5F7", dim: "#3A3A3E", cosmic: true },
-  { name: "\u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B", value: "#22DD7F", dim: "#12583A" }
+  { name: "\u0411\u0438\u0440\u044E\u0437\u043E\u0432\u044B\u0439", value: "#37D7C0", dim: "#174F47" },
+  { name: "\u042F\u043D\u0442\u0430\u0440\u043D\u044B\u0439", value: "#D8A04A", dim: "#5A421F" },
+  { name: "\u0424\u0438\u043E\u043B\u0435\u0442\u043E\u0432\u044B\u0439", value: "#9285E6", dim: "#38336E" },
+  { name: "\u0420\u043E\u0437\u043E\u0432\u044B\u0439", value: "#DD7397", dim: "#5B2F40" },
+  { name: "\u041A\u043E\u0441\u043C\u043E\u0441", value: "#F4F4F6", dim: "#34343A", cosmic: true },
+  { name: "\u0422\u0435\u0440\u043C\u0438\u043D\u0430\u043B", value: "#31E98F", dim: "#124E34" }
 ];
 var INSTRUMENTS = [
   { category: "\u041A\u0440\u0438\u043F\u0442\u043E", items: ["BTC/USD", "ETH/USD", "SOL/USD", "BNB/USD", "XRP/USD", "DOGE/USD", "TON/USD"] },
@@ -4051,9 +4074,13 @@ function Pill({ active, children, onClick, accent }) {
     "button",
     {
       onClick,
-      // V3.0 — рамка убрана: активность показывает заливка и цвет текста.
-      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-95 whitespace-nowrap shrink-0",
-      style: { background: active ? BASE.surface2 : "transparent", color: active ? BASE.ink : BASE.inkFaint, border: "none" },
+      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0",
+      style: {
+        background: active ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : "transparent",
+        color: active ? BASE.ink : BASE.inkDim,
+        border: active ? `1px solid ${BASE.line}` : "1px solid transparent",
+        boxShadow: active ? "0 10px 22px -14px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.04)" : "none"
+      },
       children
     }
   );
@@ -4062,15 +4089,11 @@ function Card({ children, className = "", glowing = false, accent, style = {} })
   return /* @__PURE__ */ jsx(
     "div",
     {
-      // V3.0 — карточка без рамки и без внутреннего блика. Рамка вокруг каждого блока
-      // на чёрном фоне превращает экран в сетку коробок; отделение делает сама
-      // поверхность. glowing больше не рисует свечение по периметру, а лишь чуть
-      // поднимает поверхность — акцент остаётся у текста и кнопок, а не у краёв.
-      className: `rounded-[22px] p-4 transition-colors duration-300 break-inside-avoid ${className}`,
+      className: `rounded-[24px] p-4 transition-colors duration-300 break-inside-avoid ${className}`,
       style: {
-        background: glowing ? BASE.surface2 : BASE.surface,
-        border: "none",
-        boxShadow: "none",
+        background: glowing ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`,
+        border: `1px solid ${BASE.line}`,
+        boxShadow: glowing ? `0 18px 40px -22px ${accent || BASE.ink}33, inset 0 1px 0 rgba(255,255,255,0.05)` : "0 14px 34px -24px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.03)",
         ...style
       },
       children
@@ -4093,8 +4116,8 @@ function WalletBadge({ balance, accent, onClick }) {
     "button",
     {
       onClick,
-      className: "flex items-center gap-1.5 pl-2 pr-2.5 py-1.5 rounded-full transition-all duration-150 active:scale-95",
-      style: { border: `1px solid ${BASE.line}`, background: BASE.surface },
+      className: "flex items-center gap-1.5 pl-2.5 pr-3 py-1.5 rounded-full transition-all duration-150 active:scale-[0.98]",
+      style: { border: `1px solid ${BASE.line}`, background: `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)`, boxShadow: "0 10px 26px -18px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.04)" },
       children: [
         /* @__PURE__ */ jsx(Coins, { size: 13, style: { color: accent } }),
         /* @__PURE__ */ jsx("span", { className: "text-[12px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: groupThousands(balance) })
@@ -6140,28 +6163,42 @@ function EmptyState({ icon: Icon, title, hint, actionLabel, onAction, accent, co
   );
 }
 function StatCard({ label, value, accent }) {
-  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-xl px-3 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
-    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: label }),
-    /* @__PURE__ */ jsx("div", { className: "text-lg", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
+  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-[18px] px-3.5 py-3.5 min-w-0", style: { border: `1px solid ${BASE.line}`, background: `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }, children: [
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-1.5 truncate", style: { color: BASE.inkFaint }, children: label }),
+    /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none truncate", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
   ] });
 }
 function TagBars({ data, measureMode, currency }) {
-  const maxAbs = Math.max(...data.map((d) => Math.abs(d.avgR)), 0.1);
-  return /* @__PURE__ */ jsx("div", { className: "space-y-3", children: data.map((d) => {
-    const positive = d.avgR >= 0;
-    const width = Math.max(4, Math.abs(d.avgR) / maxAbs * 100);
-    return /* @__PURE__ */ jsxs("div", { children: [
-      /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-between mb-1", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink }, children: d.tag }),
-        /* @__PURE__ */ jsxs("span", { className: "text-xs", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
-          formatResult(d.avgR, measureMode, currency),
-          " \xB7 ",
-          d.count,
-          " \u0441\u0434."
-        ] })
-      ] }),
-      /* @__PURE__ */ jsx("div", { className: "w-full h-1 rounded-full", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-1 rounded-full transition-all duration-500 ease-out", style: { width: `${width}%`, background: positive ? WIN : LOSS } }) })
-    ] }, d.tag);
+  const maxAbs = Math.max(...data.map((d) => Math.abs(d.totalR != null ? d.totalR : d.avgR)), 0.1);
+  return /* @__PURE__ */ jsx("div", { className: "space-y-2.5", children: data.map((d) => {
+    const result = d.totalR != null ? d.totalR : d.avgR;
+    const positive = result >= 0;
+    const width = Math.max(6, Math.abs(result) / maxAbs * 100);
+    return /* @__PURE__ */ jsxs(
+      "div",
+      {
+        className: "rounded-[18px] px-3.5 py-3",
+        style: { background: BASE.surface2, border: `1px solid ${BASE.line}` },
+        children: [
+          /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-2.5", children: [
+            /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsx("div", { className: "text-[15px] truncate", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: d.tag }),
+              /* @__PURE__ */ jsx("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${d.count} ${pluralRu(d.count, "сделка", "сделки", "сделок")}` })
+            ] }),
+            /* @__PURE__ */ jsxs("div", { className: "shrink-0 text-right", children: [
+              /* @__PURE__ */ jsx("div", { className: "text-[15px] leading-none", style: { color: positive ? WIN : LOSS, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: formatResult(result, measureMode, currency) }),
+              /* @__PURE__ */ jsxs("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
+                "ср. ",
+                formatResult(d.avgR, measureMode, currency),
+                " / сделку"
+              ] })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsx("div", { className: "w-full h-[6px] rounded-full overflow-hidden", style: { background: BASE.line }, children: /* @__PURE__ */ jsx("div", { className: "h-[6px] rounded-full transition-all duration-500 ease-out", style: { width: `${width}%`, background: positive ? WIN : LOSS, boxShadow: `0 0 18px ${positive ? WIN : LOSS}33` } }) })
+        ]
+      },
+      d.tag
+    );
   }) });
 }
 function CalendarView({ entries, accent, measureMode, currency, t }) {
@@ -6325,20 +6362,53 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
   }, [grouped, traderPatterns, analytics, t]);
   const equityCurve = useMemo(() => {
     const sorted = [...withR].sort((a, b) => a.date - b.date);
+    const grouped = [];
+    sorted.forEach((e) => {
+      const dayKey = e.date.toLocaleDateString("sv-SE");
+      let bucket = grouped[grouped.length - 1];
+      if (!bucket || bucket.dayKey !== dayKey) {
+        bucket = {
+          dayKey,
+          dateLabel: e.date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }),
+          dayResult: 0,
+          tradeCount: 0,
+          instruments: []
+        };
+        grouped.push(bucket);
+      }
+      bucket.dayResult += e.r;
+      bucket.tradeCount += 1;
+      if (e.instrument && !bucket.instruments.includes(e.instrument)) bucket.instruments.push(e.instrument);
+    });
     let cum = 0;
-    return sorted.map((e) => {
-      cum += e.r;
-      return { ...e, cum, dateLabel: e.date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" }) };
+    return grouped.map((d) => {
+      cum += d.dayResult;
+      return {
+        ...d,
+        cum,
+        instrumentsLabel: d.instruments.slice(0, 2).join(", ") + (d.instruments.length > 2 ? " +" : "")
+      };
     });
   }, [withR]);
   const tagStats = useMemo(() => {
     const stats = {};
     withR.forEach((e) => {
-      stats[e.tag] = stats[e.tag] || { count: 0, sumR: 0 };
+      stats[e.tag] = stats[e.tag] || { count: 0, sumR: 0, wins: 0, losses: 0, breakevens: 0 };
       stats[e.tag].count += 1;
       stats[e.tag].sumR += e.r;
+      if (e.r > 0) stats[e.tag].wins += 1;
+      else if (e.r < 0) stats[e.tag].losses += 1;
+      else stats[e.tag].breakevens += 1;
     });
-    return Object.entries(stats).map(([tag, s]) => ({ tag, avgR: s.sumR / s.count, count: s.count })).sort((a, b) => b.avgR - a.avgR);
+    return Object.entries(stats).map(([tag, s]) => ({
+      tag,
+      totalR: s.sumR,
+      avgR: s.sumR / s.count,
+      count: s.count,
+      wins: s.wins,
+      losses: s.losses,
+      breakevens: s.breakevens
+    })).sort((a, b) => b.totalR - a.totalR || b.avgR - a.avgR);
   }, [withR]);
   const emotionImpact = useMemo(() => emotionImpactStats(closedEntries, t.newEntry.emotionGrid.scales), [closedEntries, t]);
   const planVsFact = useMemo(() => {
@@ -6358,19 +6428,23 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
   const EquityTooltip = ({ active, payload }) => {
     if (!active || !payload?.length) return null;
     const e = payload[0].payload;
-    return /* @__PURE__ */ jsxs("div", { className: "px-3 py-2 rounded-lg text-xs", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [
+    const dayPositive = e.dayResult >= 0;
+    return /* @__PURE__ */ jsxs("div", { className: "px-3 py-2.5 rounded-xl text-xs", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [
       /* @__PURE__ */ jsxs("div", { style: { color: BASE.inkFaint }, children: [
         e.dateLabel,
         " \xB7 ",
-        e.instrument
+        e.tradeCount,
+        " ",
+        pluralRu(e.tradeCount, "сделка", "сделки", "сделок")
       ] }),
-      /* @__PURE__ */ jsxs("div", { style: { fontFamily: "var(--font-mono)" }, children: [
-        "\u0418\u0442\u043E\u0433\u043E: ",
+      e.instrumentsLabel && /* @__PURE__ */ jsx("div", { className: "mt-0.5", style: { color: BASE.inkDim }, children: e.instrumentsLabel }),
+      /* @__PURE__ */ jsxs("div", { className: "mt-1.5", style: { fontFamily: "var(--font-mono)" }, children: [
+        "Итого: ",
         formatResult(e.cum, measureMode, currency)
       ] }),
-      /* @__PURE__ */ jsxs("div", { style: { color: outcomeColor(e.outcome) }, children: [
-        formatResult(e.r, measureMode, currency),
-        " \u0437\u0430 \u044D\u0442\u0443 \u0441\u0434\u0435\u043B\u043A\u0443"
+      /* @__PURE__ */ jsxs("div", { className: "mt-0.5", style: { color: dayPositive ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: [
+        formatResult(e.dayResult, measureMode, currency),
+        " за день"
       ] })
     ] });
   };
@@ -6464,29 +6538,42 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
       /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsx(EmotionImpact, { stats: emotionImpact, measureMode, currency }) })
     ] }),
     view === "performance" && /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-      /* @__PURE__ */ jsxs("div", { className: "mb-2 flex items-center justify-between", children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041A\u0440\u0438\u0432\u0430\u044F \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438" }),
-        equityCurve.length > 0 && /* @__PURE__ */ jsx("span", { className: "text-xs", style: { color: equityCurve[equityCurve.length - 1].cum >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(equityCurve[equityCurve.length - 1].cum, measureMode, currency) })
+      /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-3", children: [
+          /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
+            /* @__PURE__ */ jsx("span", { className: "text-sm block", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "Кривая доходности" }),
+            /* @__PURE__ */ jsx("span", { className: "text-[10px] block mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: "накопительный результат по дням" })
+          ] }),
+          equityCurve.length > 0 && /* @__PURE__ */ jsx("span", { className: "shrink-0 text-sm", style: { color: equityCurve[equityCurve.length - 1].cum >= 0 ? WIN : LOSS, fontFamily: "var(--font-mono)" }, children: formatResult(equityCurve[equityCurve.length - 1].cum, measureMode, currency) })
+        ] }),
+        equityCurve.length < 2 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "Добавь результат хотя бы к паре сделок, чтобы увидеть динамику по дням." }) : /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 240 }, children: /* @__PURE__ */ jsx(ResponsiveContainer, { children: /* @__PURE__ */ jsxs(AreaChart, { data: equityCurve, margin: { top: 8, right: 6, bottom: 6, left: -14 }, children: [
+          /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsxs("linearGradient", { id: "eqGrad", x1: "0", y1: "0", x2: "0", y2: "1", children: [
+            /* @__PURE__ */ jsx("stop", { offset: "0%", stopColor: accent, stopOpacity: 0.26 }),
+            /* @__PURE__ */ jsx("stop", { offset: "100%", stopColor: accent, stopOpacity: 0.02 })
+          ] }) }),
+          /* @__PURE__ */ jsx(CartesianGrid, { stroke: `${BASE.line}CC`, vertical: false, strokeDasharray: "3 6" }),
+          /* @__PURE__ */ jsx(XAxis, { dataKey: "dateLabel", tick: { fill: BASE.inkFaint, fontSize: 10 }, stroke: "transparent", tickLine: false, axisLine: false, dy: 6 }),
+          /* @__PURE__ */ jsx(YAxis, { tick: { fill: BASE.inkFaint, fontSize: 10 }, stroke: "transparent", tickLine: false, axisLine: false, width: 36 }),
+          /* @__PURE__ */ jsx(Tooltip, { content: /* @__PURE__ */ jsx(EquityTooltip, {}), cursor: { stroke: BASE.line, strokeDasharray: "3 4" } }),
+          /* @__PURE__ */ jsx(Area, { type: "linear", dataKey: "cum", stroke: accent, strokeWidth: 2.5, fill: "url(#eqGrad)", dot: { r: 3.5, fill: BASE.ink, stroke: accent, strokeWidth: 1.5 }, activeDot: { r: 5, fill: BASE.ink, stroke: accent, strokeWidth: 2 }, isAnimationActive: true, animationDuration: 650 })
+        ] }) }) })
       ] }),
-      equityCurve.length < 2 ? /* @__PURE__ */ jsx("p", { className: "text-sm mb-6", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u0445\u043E\u0442\u044F \u0431\u044B \u043A \u043F\u0430\u0440\u0435 \u0441\u0434\u0435\u043B\u043E\u043A, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C \u043A\u0440\u0438\u0432\u0443\u044E \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438 \u0432\u043E \u0432\u0440\u0435\u043C\u0435\u043D\u0438." }) : /* @__PURE__ */ jsx("div", { style: { width: "100%", height: 220 }, className: "mb-6", children: /* @__PURE__ */ jsx(ResponsiveContainer, { children: /* @__PURE__ */ jsxs(AreaChart, { data: equityCurve, margin: { top: 10, right: 10, bottom: 0, left: -10 }, children: [
-        /* @__PURE__ */ jsx("defs", { children: /* @__PURE__ */ jsxs("linearGradient", { id: "eqGrad", x1: "0", y1: "0", x2: "0", y2: "1", children: [
-          /* @__PURE__ */ jsx("stop", { offset: "0%", stopColor: accent, stopOpacity: 0.3 }),
-          /* @__PURE__ */ jsx("stop", { offset: "100%", stopColor: accent, stopOpacity: 0 })
-        ] }) }),
-        /* @__PURE__ */ jsx(CartesianGrid, { stroke: BASE.line, vertical: false }),
-        /* @__PURE__ */ jsx(XAxis, { dataKey: "dateLabel", tick: { fill: BASE.inkFaint, fontSize: 10 }, stroke: BASE.line }),
-        /* @__PURE__ */ jsx(YAxis, { tick: { fill: BASE.inkFaint, fontSize: 10 }, stroke: BASE.line, width: 32 }),
-        /* @__PURE__ */ jsx(Tooltip, { content: /* @__PURE__ */ jsx(EquityTooltip, {}), cursor: { stroke: BASE.line } }),
-        /* @__PURE__ */ jsx(Area, { type: "monotone", dataKey: "cum", stroke: accent, strokeWidth: 2, fill: "url(#eqGrad)", dot: { r: 3, fill: accent, strokeWidth: 0 }, isAnimationActive: true, animationDuration: 700 })
-      ] }) }) }),
-      /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043F\u043E \u0442\u0438\u043F\u0443 \u0441\u0435\u0442\u0430\u043F\u0430" }),
-      /* @__PURE__ */ jsxs("div", { className: "lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start", children: [
-      tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm lg:col-span-2", style: { color: BASE.inkFaint }, children: "\u0414\u043E\u0431\u0430\u0432\u044C \u0440\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442 \u043A \u0441\u0434\u0435\u043B\u043A\u0430\u043C, \u0447\u0442\u043E\u0431\u044B \u0443\u0432\u0438\u0434\u0435\u0442\u044C, \u043A\u0430\u043A\u0438\u0435 \u0441\u0435\u0442\u0430\u043F\u044B \u0440\u0435\u0430\u043B\u044C\u043D\u043E \u0440\u0430\u0431\u043E\u0442\u0430\u044E\u0442." }) : /* @__PURE__ */ jsx(Card, { className: "mb-6", children: /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency }) }),
+      /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
+        /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-3", children: [
+          /* @__PURE__ */ jsxs("div", { children: [
+            /* @__PURE__ */ jsx("span", { className: "text-sm block", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "Результат по типу сетапа" }),
+            /* @__PURE__ */ jsx("span", { className: "text-[10px] block mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: "итог + средний результат на сделку" })
+          ] }),
+          tagStats.length > 0 && /* @__PURE__ */ jsx("span", { className: "shrink-0 text-[10px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${tagStats.length} сетап.` })
+        ] }),
+        tagStats.length === 0 ? /* @__PURE__ */ jsx("p", { className: "text-sm", style: { color: BASE.inkFaint }, children: "Добавь результат к сделкам, чтобы увидеть, какие сетапы реально работают." }) : /* @__PURE__ */ jsx(TagBars, { data: tagStats, measureMode, currency })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start", children: [
       analytics.rrStats && analytics.rrStats.sampleSize > 0 && /* @__PURE__ */ jsxs(Card, { className: "mb-6", children: [
         /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: t.home.avgRrWinRate }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-2", children: [
-          /* @__PURE__ */ jsx(StatCard, { label: "Average RR", value: analytics.rrStats.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "\u2014", accent: analytics.rrStats.avgRealizedRR != null ? analytics.rrStats.avgRealizedRR >= 0 ? WIN : LOSS : BASE.ink }),
-          /* @__PURE__ */ jsx(StatCard, { label: "Win Rate", value: analytics.rrStats.winRate != null ? `${analytics.rrStats.winRate}%` : "\u2014", accent: BASE.ink })
+          /* @__PURE__ */ jsx(StatCard, { label: "Average RR", value: analytics.rrStats.avgRealizedRR != null ? `${analytics.rrStats.avgRealizedRR >= 0 ? "+" : ""}${analytics.rrStats.avgRealizedRR}R` : "—", accent: analytics.rrStats.avgRealizedRR != null ? analytics.rrStats.avgRealizedRR >= 0 ? WIN : LOSS : BASE.ink }),
+          /* @__PURE__ */ jsx(StatCard, { label: "Win Rate", value: analytics.rrStats.winRate != null ? `${analytics.rrStats.winRate}%` : "—", accent: BASE.ink })
         ] }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
           /* @__PURE__ */ jsxs("span", { children: ["Wins ", analytics.rrStats.wins] }),
@@ -6495,10 +6582,10 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
         ] })
       ] }),
       planVsFact && /* @__PURE__ */ jsxs(Card, { children: [
-        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041F\u043B\u0430\u043D vs \u0424\u0430\u043A\u0442" }),
+        /* @__PURE__ */ jsx("span", { className: "text-sm block mb-3", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "План vs Факт" }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mb-3", children: [
-          /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Planned RR", value: `${planVsFact.avgPlanned.toFixed(1)}R`, accent: BASE.ink }),
-          /* @__PURE__ */ jsx(StatCard, { label: "\u0421\u0440. Realized RR", value: `${planVsFact.avgRealized.toFixed(1)}R`, accent: planVsFact.avgRealized >= 0 ? WIN : LOSS }),
+          /* @__PURE__ */ jsx(StatCard, { label: "Ср. Planned RR", value: `${planVsFact.avgPlanned.toFixed(1)}R`, accent: BASE.ink }),
+          /* @__PURE__ */ jsx(StatCard, { label: "Ср. Realized RR", value: `${planVsFact.avgRealized.toFixed(1)}R`, accent: planVsFact.avgRealized >= 0 ? WIN : LOSS }),
           planVsFact.captureRatio != null && /* @__PURE__ */ jsx(StatCard, { label: "TP Capture", value: `${Math.round(planVsFact.captureRatio)}%`, accent: BASE.ink })
         ] }),
         planVsFact.closeTotal > 0 && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
@@ -10795,10 +10882,18 @@ function MindExe() {
           --font-display: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
           --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
         }
-        body, #root { font-family: var(--font-display); letter-spacing: -0.01em; }
+        body, #root {
+          font-family: var(--font-display);
+          letter-spacing: -0.012em;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
+          text-rendering: optimizeLegibility;
+        }
+        input, textarea, select, button { font: inherit; }
+        ::selection { background: rgba(255,255,255,0.16); color: #fff; }
         /* Референсные микроподписи: 9\u201110px, верхний регистр, широкий трекинг. */
-        .sec-cap { text-transform: uppercase; letter-spacing: 0.26em; }
-        .btn-cap { text-transform: uppercase; letter-spacing: 0.18em; }
+        .sec-cap { text-transform: uppercase; letter-spacing: 0.18em; }
+        .btn-cap { text-transform: uppercase; letter-spacing: 0.14em; }
         /* Sora runs a touch wider than Space Grotesk at the same size; a small negative tracking on
            headings and figures keeps existing layouts from re-wrapping. */
         h1, h2, h3 { letter-spacing: -0.02em; }
@@ -11228,17 +11323,17 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.82)", backdropFilter: "blur(16px)", borderTop: `1px solid ${BASE.line}`, paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-center px-1 pt-2.5", children:
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-7 items-center px-1.5 pt-2.5", children:
         nav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
-            return /* @__PURE__ */ jsx("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-90", children:
-              /* @__PURE__ */ jsx("div", { className: "w-9 h-9 rounded-full flex items-center justify-center", style: { background: BASE.ink }, children: /* @__PURE__ */ jsx(n.icon, { size: 16, strokeWidth: 2, style: { color: "#000" } }) })
+            return /* @__PURE__ */ jsx("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children:
+              /* @__PURE__ */ jsx("div", { className: "w-10 h-10 rounded-full flex items-center justify-center", style: { background: BASE.ink, boxShadow: "0 14px 30px -16px rgba(255,255,255,0.12), 0 10px 26px -18px rgba(0,0,0,0.95)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 17, strokeWidth: 2, style: { color: "#000" } }) })
             }, n.id);
           }
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center gap-1.5 pb-2 min-w-0 transition-transform duration-150 active:scale-90", children: [
-            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease" } }),
-            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: 3, height: 3, background: active ? accent : "transparent", transition: "background 0.25s ease" } })
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center gap-1.5 pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children: [
+            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: active ? 1.9 : 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease, transform 0.25s ease", transform: active ? "translateY(-1px)" : "none" } }),
+            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 3, height: 3, background: active ? accent : "transparent", opacity: active ? 1 : 0.7, transition: "background 0.25s ease, width 0.25s ease, opacity 0.25s ease" } })
           ] }, n.id);
         })
       }) })
