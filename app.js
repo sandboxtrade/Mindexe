@@ -9,6 +9,12 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.3
+//
+// V4.3 — аварийный аудит сохранений + PWA.
+//        Сериализация cloud-save, flush перед logout, recovery из backup/legacy/shadow.
+//        Canonical Firestore keys и SCHEMA_VERSION не менялись.
+//
 // mind.exe — V4.2.4
 //
 // V4.2.4 — исправлен чёрный экран при открытии формы тестовой сделки.
@@ -10384,7 +10390,9 @@ function sanitizeImportedEntry(e, fallbackIndex) {
 var SCHEMA_VERSION = 2;
 var PROFILE_KEY = "mind-exe-journal-state";
 var MEDIA_KEY = "mind-exe-journal-media";
+var PROFILE_SHADOW_KEY = "mind-exe-cloud-shadow";
 var ANON_ID_KEY = "mind-exe-anon-id";
+var __lastProfileRecoverySource = null;
 function getOrCreateAnonId() {
   try {
     let id = window.localStorage?.getItem(ANON_ID_KEY);
@@ -10510,24 +10518,121 @@ async function saveAiState(userId, aiState) {
   } catch (_) {
   }
 }
-async function loadProfile(userId) {
-  if (!fbAuth.currentUser || !userId) return null;
-  const res = await storageGet(profileKey(userId), false);
-  if (!res?.value) return null;
-  // A document that EXISTS but can't be parsed or migrated is not the same thing as "no profile
-  // yet". Returning null here would let the app treat a real account as brand new and then
-  // overwrite the (possibly recoverable) document with empty state on the next autosave. Throwing
-  // routes this into tryLoad's failure path instead, which leaves canPersistRef false \u2014 nothing
-  // auto-saves for the session and the person is told to reload.
-  const parsed = migrateProfile(JSON.parse(res.value));
+function assertProfileAuthUser(userId) {
+  const uid = fbAuth.currentUser?.uid;
+  if (!uid || !userId || uid !== userId) throw new Error("profile_auth_uid_mismatch");
+}
+function parseStoredProfileValue(value) {
+  if (!value) return null;
+  const parsed = migrateProfile(JSON.parse(value));
   if (!parsed) throw new Error("profile_unreadable");
   return parsed;
 }
-async function saveProfile(userId, profile) {
-  if (!fbAuth.currentUser || !userId) return;
-  await storageSet(profileKey(userId), JSON.stringify({ ...profile, version: SCHEMA_VERSION }), false);
+function profileEntryCount(profile) {
+  return Array.isArray(profile?.journal?.entries) ? profile.journal.entries.filter((e) => e && e.id).length : 0;
 }
-// V4.8 \u2014 screenshots used to live in ONE Firestore document (mediaKey(userId)). Firestore hard-
+function profileMeaningScore(profile) {
+  if (!profile) return -1;
+  let score = profileEntryCount(profile) * 100;
+  if (profile?.user?.name) score += 10;
+  if (profile?.settings?.strategyNote) score += 8;
+  if (profile?.settings?.tradingAsset) score += 4;
+  if (Array.isArray(profile?.settings?.customInstruments)) score += Math.min(10, profile.settings.customInstruments.length);
+  if (Array.isArray(profile?.settings?.customTags)) score += Math.min(10, profile.settings.customTags.length);
+  if (profile?.progress?.lastCalibration) score += 5;
+  if (typeof profile?.wallet?.mindCoins === "number" && profile.wallet.mindCoins !== 0) score += 3;
+  if (Array.isArray(profile?.wallet?.coinLedger)) score += Math.min(10, profile.wallet.coinLedger.length);
+  return score;
+}
+function profileIsEffectivelyBlank(profile) {
+  if (!profile) return true;
+  return profileEntryCount(profile) === 0
+    && !profile?.user?.name
+    && !profile?.settings?.strategyNote
+    && !profile?.settings?.tradingAsset
+    && (!Array.isArray(profile?.settings?.customInstruments) || profile.settings.customInstruments.length === 0)
+    && (!Array.isArray(profile?.settings?.customTags) || profile.settings.customTags.length === 0)
+    && !profile?.progress?.lastCalibration
+    && !(typeof profile?.wallet?.mindCoins === "number" && profile.wallet.mindCoins !== 0)
+    && (!Array.isArray(profile?.wallet?.coinLedger) || profile.wallet.coinLedger.length === 0);
+}
+async function readProfileCandidateCloud(key) {
+  try {
+    const res = await storageGet(key, false);
+    if (!res?.value) return null;
+    return { key, profile: parseStoredProfileValue(res.value), local: false };
+  } catch (_) {
+    return null;
+  }
+}
+async function readProfileShadow(userId) {
+  try {
+    const res = await legacyStorageGet(`${PROFILE_SHADOW_KEY}:${userId}`, false);
+    if (!res?.value) return null;
+    return { key: `${PROFILE_SHADOW_KEY}:${userId}`, profile: parseStoredProfileValue(res.value), local: true };
+  } catch (_) {
+    return null;
+  }
+}
+async function saveProfile(userId, profile) {
+  assertProfileAuthUser(userId);
+  const normalized = { ...profile, version: SCHEMA_VERSION };
+  await storageSet(profileKey(userId), JSON.stringify(normalized), false);
+  try {
+    await legacyStorageSet(`${PROFILE_SHADOW_KEY}:${userId}`, JSON.stringify(normalized), false);
+  } catch (_) {
+  }
+}
+async function saveProfileBackupIfSafer(userId, candidateProfile) {
+  assertProfileAuthUser(userId);
+  if (!candidateProfile) return;
+  const backupKey = `${PROFILE_KEY}:backup:${userId}`;
+  let existing = null;
+  try {
+    const res = await storageGet(backupKey, false);
+    existing = res?.value ? parseStoredProfileValue(res.value) : null;
+  } catch (_) {
+  }
+  // Recovery archive should never be replaced by a clearly emptier state.
+  if (existing && profileMeaningScore(existing) > profileMeaningScore(candidateProfile)) return;
+  await storageSet(backupKey, JSON.stringify({ ...candidateProfile, version: SCHEMA_VERSION }), false);
+}
+async function loadProfile(userId) {
+  assertProfileAuthUser(userId);
+  __lastProfileRecoverySource = null;
+
+  const canonicalKey = profileKey(userId);
+  let canonical = null;
+  let canonicalExists = false;
+
+  const primary = await storageGet(canonicalKey, false);
+  canonicalExists = !!primary?.value;
+  if (primary?.value) canonical = parseStoredProfileValue(primary.value);
+
+  const intentionalFullReset = canonical?.meta?.intentionalFullReset === true;
+  const shouldRecover = !canonicalExists || (profileIsEffectivelyBlank(canonical) && !intentionalFullReset);
+  if (!shouldRecover) return canonical;
+
+  const candidates = (await Promise.all([
+    readProfileCandidateCloud(`${PROFILE_KEY}:backup:${userId}`),
+    // Older Firestore builds may have used the unsuffixed key inside the same uid collection.
+    readProfileCandidateCloud(PROFILE_KEY),
+    readProfileShadow(userId)
+  ])).filter(Boolean);
+
+  let best = null;
+  for (const candidate of candidates) {
+    if (!best || profileMeaningScore(candidate.profile) > profileMeaningScore(best.profile)) best = candidate;
+  }
+
+  if (best && profileMeaningScore(best.profile) > profileMeaningScore(canonical)) {
+    await saveProfile(userId, best.profile);
+    canonical = best.profile;
+    __lastProfileRecoverySource = best.local ? "device-shadow" : best.key;
+  }
+  return canonical;
+}
+// V4.8 \u2014 screenshots used to live in ONE Firestore document// V4.8 \u2014 screenshots used to live in ONE Firestore document (mediaKey(userId)). Firestore hard-
 // caps a document at 1 MiB; compressed screenshots are ~150-300 KB each, so a handful of trades with
 // images pushed that single doc over the limit and setDoc started rejecting every write \u2014 silently,
 // because the only caller swallowed the error. Screenshots are now one document per journal entry,
@@ -11356,6 +11461,7 @@ function MindExe() {
   const firstLoadRef = useRef(true);
   const firstDailyRewardRef = useRef(true);
   const canPersistRef = useRef(false);
+  const profilePersistChainRef = useRef(Promise.resolve(true));
   const strategyCanPersistRef = useRef(false);
   const strategyRawIndexRef = useRef(null);
   const strategyBackupPendingRef = useRef(false);
@@ -11419,9 +11525,18 @@ function MindExe() {
     setMigrateFor(null);
   };
   const handleLogout = async () => {
-    await authLogout();
+    // Keep Firebase Auth active until the newest queued profile/media state is confirmed saved.
+    if (loaded && canPersistRef.current && fbAuth.currentUser && userId) {
+      const saved = await persistNow();
+      await profilePersistChainRef.current.catch(() => false);
+      if (!saved) {
+        showToast(lang === "en" ? "Sync failed. Logout cancelled to protect your data." : "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0434\u0430\u043D\u043D\u044B\u0435. \u0412\u044B\u0445\u043E\u0434 \u043E\u0442\u043C\u0435\u043D\u0451\u043D.");
+        return;
+      }
+    }
     canPersistRef.current = false;
     strategyCanPersistRef.current = false;
+    await authLogout();
     rawProfileRef.current = null;
     strategyRawIndexRef.current = null;
     backupPendingRef.current = false;
@@ -11432,7 +11547,7 @@ function MindExe() {
     resetInMemoryState();
     setTab("home");
   };
-  useEffect(() => {
+  useEffect(() => {  useEffect(() => {
     if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
     setShowBootIntro(true);
     setIntroResolved(true);
@@ -11510,6 +11625,9 @@ function MindExe() {
         // Firestore answered (with or without an existing profile) without throwing \u2014 that's the
         // only condition under which we trust the in-memory state enough to let it overwrite the
         // cloud copy. A thrown error below deliberately does NOT reach this line.
+        if (__lastProfileRecoverySource && profileEntryCount(profile) > 0) {
+          setTimeout(() => showToast(lang === "en" ? "Cloud data recovered from backup" : "\u0414\u0430\u043D\u043D\u044B\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u044B \u0438\u0437 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0439 \u043A\u043E\u043F\u0438\u0438"), 350);
+        }
         rawProfileRef.current = profile || null;
         backupPendingRef.current = !!profile;
         canPersistRef.current = true;
@@ -11616,11 +11734,15 @@ function MindExe() {
   const buildPayload = (overrides = {}) => {
     const prev = rawProfileRef.current || {};
     const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
+    const nextMeta = { ...(prev.meta || {}) };
+    if (overrides.__intentionalFullReset === true) nextMeta.intentionalFullReset = true;
+    if (Array.isArray(src.entries) && src.entries.length > 0) nextMeta.intentionalFullReset = false;
     return {
       // spread the previously stored document first so unknown / future top-level fields are kept;
       // every section below then overwrites only the keys this build actually owns.
       ...prev,
       version: SCHEMA_VERSION,
+      meta: nextMeta,
       user: { ...prev.user, name: src.name, anonId },
       journal: {
         entries: src.entries.map(({ screenshots, exitScreenshots, ...rest }) => ({ ...rest, date: rest.date instanceof Date ? rest.date.toISOString() : rest.date, exitDate: rest.exitDate instanceof Date ? rest.exitDate.toISOString() : rest.exitDate }))
@@ -11643,50 +11765,54 @@ function MindExe() {
       wallet: { ...prev.wallet, mindCoins: src.mindCoins, coinLedger: src.coinLedger, lastDailyReward: src.lastDailyReward }
     };
   };
-  const persistNow = async (overrides = {}) => {
-    // Single gate for every write path in the app (auto-save effect, deleteEntry, import, coins,
-    // settings reset\u2026): nothing may reach Firestore until a load has actually succeeded for this
-    // session, otherwise a failed load would let empty in-memory state overwrite real cloud data.
-    if (!canPersistRef.current || !fbAuth.currentUser || !userId) return;
-    try {
-      const payload = buildPayload(overrides);
-      // V5.6 dedup. Skips ONLY the profile-document write, and only when the payload is
-      // byte-identical to the one already in Firestore (rawProfileRef holds exactly what was last
-      // written, and stays stale if a write threw \u2014 so a failed save is always retried).
-      // saveMedia below runs unconditionally: buildPayload strips screenshots out of journal
-      // entries, so an image-only change yields an identical payload and must never be skipped
-      // here. saveMedia does its own per-entry hash check, so the unchanged case is nearly free.
-      let profileUnchanged = false;
+  const persistNow = (overrides = {}) => {
+    // Capture this render's state before it enters the async queue.
+    const capturedPayload = buildPayload(overrides);
+    const capturedEntries = overrides.entries ?? entries;
+
+    const run = async () => {
+      if (!canPersistRef.current || !fbAuth.currentUser || !userId) return false;
       try {
-        profileUnchanged = !!rawProfileRef.current && JSON.stringify(payload) === JSON.stringify(rawProfileRef.current);
-      } catch (_) {
-        profileUnchanged = false;
-      }
-      if (!profileUnchanged) {
-        if (backupPendingRef.current && rawProfileRef.current) {
-          backupPendingRef.current = false;
-          try {
-            await storageSet(`${PROFILE_KEY}:backup:${userId}`, JSON.stringify(rawProfileRef.current), false);
-          } catch (_) {
+        const payload = capturedPayload;
+        let profileUnchanged = false;
+        try {
+          profileUnchanged = !!rawProfileRef.current && JSON.stringify(payload) === JSON.stringify(rawProfileRef.current);
+        } catch (_) {
+          profileUnchanged = false;
+        }
+
+        if (!profileUnchanged) {
+          if (backupPendingRef.current && rawProfileRef.current) {
+            backupPendingRef.current = false;
+            try {
+              await saveProfileBackupIfSafer(userId, rawProfileRef.current);
+            } catch (_) {
+            }
+          }
+          await saveProfile(userId, payload);
+          rawProfileRef.current = payload;
+        }
+
+        const mediaMap = {};
+        for (const e of capturedEntries) {
+          if ((Array.isArray(e.screenshots) && e.screenshots.length > 0) || (Array.isArray(e.exitScreenshots) && e.exitScreenshots.length > 0)) {
+            mediaMap[e.id] = { entry: e.screenshots || [], exit: e.exitScreenshots || [] };
           }
         }
-        await saveProfile(userId, payload);
-        rawProfileRef.current = payload;
+        await saveMedia(userId, mediaMap);
+        return true;
+      } catch (e) {
+        console.error("mind.exe: persist failed", e);
+        showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0441\u0432\u044F\u0437\u044C");
+        return false;
       }
-      const srcEntries = overrides.entries ?? entries;
-      const mediaMap = {};
-      for (const e of srcEntries) {
-        if ((Array.isArray(e.screenshots) && e.screenshots.length > 0) || (Array.isArray(e.exitScreenshots) && e.exitScreenshots.length > 0)) {
-          mediaMap[e.id] = { entry: e.screenshots || [], exit: e.exitScreenshots || [] };
-        }
-      }
-      await saveMedia(userId, mediaMap);
-    } catch (e) {
-      console.error("mind.exe: persist failed", e);
-      showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0441\u0432\u044F\u0437\u044C");
-    }
+    };
+
+    const queued = profilePersistChainRef.current.then(run, run);
+    profilePersistChainRef.current = queued.catch(() => false);
+    return queued;
   };
-  // V5.6 \u2014 duplicate Firestore write on every journal action. Each onSave handler already calls
+  // V5.6 \u2014 duplicate Firestore write on every journal action.  // V5.6 \u2014 duplicate Firestore write on every journal action. Each onSave handler already calls
   // persistNow({ entries: next }) explicitly; setEntries then changed `entries`, this effect fired,
   // and persistNow() ran a SECOND time with identical data \u2014 two full profile writes plus two
   // media writes (base64 screenshots) per saved trade. The de-duplication now lives inside
@@ -12061,6 +12187,7 @@ function MindExe() {
       lang: "ru",
       measureMode: "R",
       currency: "USD",
+      tradingAsset: null,
       strategyNote: "",
       startingCapital: 1e3,
       customInstruments: [],
@@ -12087,7 +12214,7 @@ function MindExe() {
     setMindCoins(0);
     setCoinLedger([]);
     setLastDailyReward(null);
-    persistNow(defaults);
+    persistNow({ ...defaults, __intentionalFullReset: true });
     showToast("\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u043E");
   };
   const addCustomInstrument = (v) => setCustomInstruments((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
