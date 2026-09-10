@@ -9,6 +9,12 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.1.1
+//
+// V4.1.1 — выравнивание нижней мобильной навигации: центральная кнопка теперь
+//          стоит ровно по центру, а остальные пункты симметрично распределены по бокам.
+//          Изменение только в mobile nav layout; persistence не затрагивается.
+//
 // mind.exe — V4.1
 //
 // V4.1 — кнопка настроек вынесена из нижней навигации в правую часть верхней шапки
@@ -11867,6 +11873,10 @@ function MindExe() {
     { id: "settings", label: t.nav.settings, icon: User }
   ];
   const mobileNav = nav.filter((n) => n.id !== "settings");
+  const mobilePrimaryNav = mobileNav.find((n) => n.primary) || null;
+  const mobileSideNav = mobileNav.filter((n) => !n.primary);
+  const mobileLeftNav = mobileSideNav.slice(0, Math.ceil(mobileSideNav.length / 2));
+  const mobileRightNav = mobileSideNav.slice(Math.ceil(mobileSideNav.length / 2));
   const wideTab = ["home", "log", "patterns", "strategies"].includes(tab);
   const formTab = ["new", "edit", "close"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
@@ -12360,20 +12370,25 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-8 items-center px-1 pt-2.5", children:
-        mobileNav.map((n) => {
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsxs("div", { className: "relative flex items-start justify-between px-4 pt-2.5", children: [
+        /* @__PURE__ */ jsx("div", { className: "flex flex-1 items-start justify-evenly pr-7", children: mobileLeftNav.map((n) => {
           const active = tab === n.id;
-          if (n.primary) {
-            return /* @__PURE__ */ jsx("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children:
-              /* @__PURE__ */ jsx("div", { className: "w-10 h-10 rounded-full flex items-center justify-center", style: { background: BASE.ink, boxShadow: "0 14px 30px -16px rgba(255,255,255,0.12), 0 10px 26px -18px rgba(0,0,0,0.95)" }, children: /* @__PURE__ */ jsx(n.icon, { size: 17, strokeWidth: 2, style: { color: "#000" } }) })
-            }, n.id);
-          }
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center gap-1.5 pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children: [
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex min-w-0 flex-col items-center gap-1.5 pb-2 transition-transform duration-150 active:scale-[0.96]", children: [
             /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: active ? 1.9 : 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease, transform 0.25s ease", transform: active ? "translateY(-1px)" : "none" } }),
             /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 3, height: 3, background: active ? accent : "transparent", opacity: active ? 1 : 0.7, transition: "background 0.25s ease, width 0.25s ease, opacity 0.25s ease" } })
           ] }, n.id);
-        })
-      }) })
+        }) }),
+        mobilePrimaryNav && /* @__PURE__ */ jsx("div", { className: "absolute left-1/2 top-2.5 -translate-x-1/2", children: /* @__PURE__ */ jsx("button", { onClick: () => setTab(mobilePrimaryNav.id), "aria-label": mobilePrimaryNav.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children:
+          /* @__PURE__ */ jsx("div", { className: "w-10 h-10 rounded-full flex items-center justify-center", style: { background: BASE.ink, boxShadow: "0 14px 30px -16px rgba(255,255,255,0.12), 0 10px 26px -18px rgba(0,0,0,0.95)" }, children: /* @__PURE__ */ jsx(mobilePrimaryNav.icon, { size: 17, strokeWidth: 2, style: { color: "#000" } }) })
+        }, mobilePrimaryNav.id) }),
+        /* @__PURE__ */ jsx("div", { className: "flex flex-1 items-start justify-evenly pl-7", children: mobileRightNav.map((n) => {
+          const active = tab === n.id;
+          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex min-w-0 flex-col items-center gap-1.5 pb-2 transition-transform duration-150 active:scale-[0.96]", children: [
+            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: active ? 1.9 : 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease, transform 0.25s ease", transform: active ? "translateY(-1px)" : "none" } }),
+            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 3, height: 3, background: active ? accent : "transparent", opacity: active ? 1 : 0.7, transition: "background 0.25s ease, width 0.25s ease, opacity 0.25s ease" } })
+          ] }, n.id);
+        }) })
+      ] }) })
     ] })
   ] });
 }
