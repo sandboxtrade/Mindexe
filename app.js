@@ -9,6 +9,13 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.2.4
+//
+// V4.2.4 — исправлен чёрный экран при открытии формы тестовой сделки.
+//          Причина: StrategyTradeForm использовал saving/setSaving, но локальный
+//          useState для них отсутствовал после предыдущего патча.
+//          Изменение только в локальном React-state формы; Firestore/persistence не менялись.
+//
 // mind.exe — V4.2.3
 //
 // V4.2.3 — в Strategy Lab добавлено безопасное удаление стратегии.
@@ -6891,6 +6898,7 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
   const [note, setNote] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [recognizing, setRecognizing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const recognizeInputRef = useRef(null);
   const MAX_SHOTS = 4;
