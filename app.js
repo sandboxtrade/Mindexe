@@ -9,6 +9,23 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.2.3
+//
+// V4.2.3 — в Strategy Lab добавлено безопасное удаление стратегии.
+//          - удаляется сама стратегия, её прямые Strategy Lab-сделки и их media;
+//          - обычные сделки журнала и их скриншоты НЕ удаляются;
+//          - перед удалением показывается отдельное подтверждение.
+//          Journal/Firestore schema и старые media keys не менялись.
+//
+// mind.exe — V4.2.2
+//
+// V4.2.2 — исправлено сохранение новых сделок Strategy Lab и уменьшена нижняя панель.
+//          - новая тестовая сделка больше не делает до 8 лишних deleteDoc для пустых media-слотов;
+//          - media-запросы выполняются параллельно, а не последовательно;
+//          - кнопка показывает состояние «Сохраняю…» и защищена от двойного нажатия;
+//          - нижний mobile nav приведён к стандартной компактной высоте iPhone.
+//          Схема Firestore, ключи документов и старый journal/media persistence не менялись.
+//
 // mind.exe — V4.2.1
 //
 // V4.2.1 — Gemini Vision распознавание добавлено в создание сделки Strategy Lab.
@@ -4187,14 +4204,14 @@ function MobileNavItem({ item, active, accent, onClick }) {
     {
       onClick,
       "aria-label": item.label,
-      className: "w-[54px] h-[48px] flex flex-col items-center justify-end gap-1.5 rounded-2xl transition-all duration-200 active:scale-[0.96]",
+      className: "w-[48px] h-[40px] flex flex-col items-center justify-end gap-1 rounded-xl transition-all duration-200 active:scale-[0.96]",
       style: {
         color: active ? BASE.ink : BASE.inkFaint,
         background: active ? "rgba(255,255,255,0.018)" : "transparent"
       },
       children: [
-        /* @__PURE__ */ jsx(Icon, { size: 20, strokeWidth: active ? 1.95 : 1.7, style: { color: active ? BASE.ink : BASE.inkFaint, transition: "color 0.22s ease, transform 0.22s ease", transform: active ? "translateY(-0.5px)" : "none" } }),
-        /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 14 : 6, height: 3, background: active ? accent : "rgba(255,255,255,0.14)", opacity: active ? 1 : 0.55, transition: "width 0.22s ease, background 0.22s ease, opacity 0.22s ease" } })
+        /* @__PURE__ */ jsx(Icon, { size: 19, strokeWidth: active ? 1.9 : 1.65, style: { color: active ? BASE.ink : BASE.inkFaint, transition: "color 0.22s ease, transform 0.22s ease", transform: active ? "translateY(-0.5px)" : "none" } }),
+        /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 5, height: 2.5, background: active ? accent : "rgba(255,255,255,0.14)", opacity: active ? 1 : 0.55, transition: "width 0.22s ease, background 0.22s ease, opacity 0.22s ease" } })
       ]
     }
   );
@@ -4206,13 +4223,13 @@ function MobileNavPrimaryButton({ item, onClick }) {
     {
       onClick,
       "aria-label": item.label,
-      className: "w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.97]",
+      className: "w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.97]",
       style: {
         background: BASE.ink,
         border: "1px solid rgba(255,255,255,0.04)",
         boxShadow: "0 16px 32px -18px rgba(255,255,255,0.12), 0 18px 34px -22px rgba(0,0,0,0.95)"
       },
-      children: /* @__PURE__ */ jsx(Icon, { size: 21, strokeWidth: 2, style: { color: "#050505" } })
+      children: /* @__PURE__ */ jsx(Icon, { size: 19, strokeWidth: 2, style: { color: "#050505" } })
     }
   );
 }
@@ -5267,6 +5284,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
   const [pull, setPull] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [recognizing, setRecognizing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
   const recognizeInputRef = useRef(null);
   const MAX_SHOTS = 4;
@@ -6941,6 +6959,37 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
       compressImageFile(file).then((dataUrl) => setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(isEn ? "Could not process image" : "Не удалось обработать изображение"));
     });
   };
+  const handleSubmit = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        strategyId: strategy.id,
+        status: "open",
+        instrument: instrument.trim(),
+        direction,
+        timeframe: timeframe.trim() || null,
+        entryPrice: parseFloat(entryPrice),
+        stopLoss: parseFloat(stopLoss),
+        takeProfit: parseFloat(takeProfit),
+        plannedRR: rr.rr,
+        note: note.trim(),
+        date: /* @__PURE__ */ new Date(),
+        exitDate: null,
+        exitPrice: null,
+        closeType: null,
+        realizedRR: null,
+        r: null,
+        outcome: null,
+        rulesFollowed: null,
+        rulesNote: "",
+        screenshots,
+        exitScreenshots: []
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
   const L = ({ children }) => /* @__PURE__ */ jsx("label", { className: "block text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children });
   return /* @__PURE__ */ jsxs("div", { children: [
     /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1", children: [
@@ -7014,29 +7063,13 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
       /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
-      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({
-        strategyId: strategy.id,
-        status: "open",
-        instrument: instrument.trim(),
-        direction,
-        timeframe: timeframe.trim() || null,
-        entryPrice: parseFloat(entryPrice),
-        stopLoss: parseFloat(stopLoss),
-        takeProfit: parseFloat(takeProfit),
-        plannedRR: rr.rr,
-        note: note.trim(),
-        date: /* @__PURE__ */ new Date(),
-        exitDate: null,
-        exitPrice: null,
-        closeType: null,
-        realizedRR: null,
-        r: null,
-        outcome: null,
-        rulesFollowed: null,
-        rulesNote: "",
-        screenshots,
-        exitScreenshots: []
-      }), className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: isEn ? "Add trade" : "Добавить сделку" })
+      /* @__PURE__ */ jsx("button", {
+        disabled: !canSave || saving,
+        onClick: handleSubmit,
+        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
+        children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Add trade" : "Добавить сделку"
+      })
     ] })
   ] });
 }
@@ -7112,19 +7145,22 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
     ] })
   ] });
 }
-function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCreateStrategy, onUpdateStrategy, onCreateTrade, onCloseTrade }) {
+function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCreateStrategy, onUpdateStrategy, onDeleteStrategy, onCreateTrade, onCloseTrade }) {
   const isEn = lang === "en";
   const [mode, setMode] = useState("list");
   const [selectedId, setSelectedId] = useState(null);
   const [selectedTradeId, setSelectedTradeId] = useState(null);
   const [detailTab, setDetailTab] = useState("trades");
   const [aiBusy, setAiBusy] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const selected = strategies.find((s) => s.id === selectedId) || null;
   const allSelectedTrades = selected ? strategyAllTrades(selected.id, strategyTrades, journalEntries) : [];
   const stats = selected ? calculateStrategyStats(selected.id, strategyTrades, journalEntries) : null;
   const openStrategy = (id) => {
     setSelectedId(id);
     setDetailTab("trades");
+    setDeleteConfirm(false);
     setMode("detail");
   };
   if (!loaded) {
@@ -7166,8 +7202,35 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
             /* @__PURE__ */ jsxs("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: ["v", selected.version || 1, " · ", stats.totalTrades, " ", isEn ? "trades" : pluralRu(stats.totalTrades, "сделка", "сделки", "сделок"), stats.openTrades ? ` · ${stats.openTrades} ${isEn ? "open" : "открыто"}` : ""] })
           ] })
         ] }),
-        /* @__PURE__ */ jsx("button", { onClick: () => setMode("edit"), className: "w-9 h-9 rounded-full flex items-center justify-center shrink-0", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(PenLine, { size: 15 }) })
+        /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+          /* @__PURE__ */ jsx("button", { onClick: () => setMode("edit"), "aria-label": isEn ? "Edit strategy" : "Редактировать стратегию", className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(PenLine, { size: 15 }) }),
+          /* @__PURE__ */ jsx("button", { onClick: () => setDeleteConfirm(true), "aria-label": isEn ? "Delete strategy" : "Удалить стратегию", className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${LOSS}35`, color: LOSS, background: `${LOSS}08` }, children: /* @__PURE__ */ jsx(Trash2, { size: 15 }) })
+        ] })
       ] }),
+      deleteConfirm && /* @__PURE__ */ jsx(Card, { className: "mb-4", style: { border: `1px solid ${LOSS}35`, background: `${LOSS}06` }, children: /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx("div", { className: "text-sm mb-2", style: { color: BASE.ink, fontWeight: 500 }, children: isEn ? "Delete this strategy?" : "Удалить эту стратегию?" }),
+        /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-4", style: { color: BASE.inkDim }, children: isEn
+          ? "Strategy Lab trades and their screenshots will be deleted. Journal trades linked to this strategy and their screenshots will remain in the journal."
+          : "Тестовые сделки Strategy Lab и их скриншоты будут удалены. Обычные сделки журнала, привязанные к этой стратегии, и их скриншоты останутся в журнале."
+        }),
+        /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
+          /* @__PURE__ */ jsx("button", { disabled: deleteBusy, onClick: () => setDeleteConfirm(false), className: "flex-1 py-2.5 rounded-full text-xs", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, opacity: deleteBusy ? 0.5 : 1 }, children: isEn ? "Cancel" : "Отмена" }),
+          /* @__PURE__ */ jsx("button", { disabled: deleteBusy, onClick: async () => {
+            if (!selected || deleteBusy) return;
+            setDeleteBusy(true);
+            try {
+              const ok = await onDeleteStrategy(selected.id);
+              if (ok) {
+                setDeleteConfirm(false);
+                setSelectedId(null);
+                setMode("list");
+              }
+            } finally {
+              setDeleteBusy(false);
+            }
+          }, className: "flex-1 py-2.5 rounded-full text-xs", style: { background: LOSS, color: "#090909", fontWeight: 600, opacity: deleteBusy ? 0.65 : 1 }, children: deleteBusy ? isEn ? "Deleting…" : "Удаляю…" : isEn ? "Delete" : "Удалить" })
+        ] })
+      ] }) }),
       /* @__PURE__ */ jsx(Card, { className: "mb-4", children: /* @__PURE__ */ jsxs("div", { children: [
         /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Strategy rules" : "Правила стратегии" }),
         /* @__PURE__ */ jsx("p", { className: "text-sm leading-relaxed whitespace-pre-wrap", style: { color: BASE.inkDim }, children: selected.description })
@@ -10640,8 +10703,9 @@ async function saveStrategyIndex(userId, strategies) {
   await storageSet(strategyIndexKey(userId), JSON.stringify(payload), false);
   return payload;
 }
-async function saveStrategyTradeRecord(userId, trade) {
+async function saveStrategyTradeRecord(userId, trade, options = {}) {
   if (!fbAuth.currentUser || !userId || !trade?.id) return { mediaErrors: [] };
+  const cleanupStale = options.cleanupStale !== false;
   const clean = { ...trade };
   const entryShots = Array.isArray(clean.screenshots) ? clean.screenshots.slice(0, 4) : [];
   const exitShots = Array.isArray(clean.exitScreenshots) ? clean.exitScreenshots.slice(0, 4) : [];
@@ -10651,36 +10715,40 @@ async function saveStrategyTradeRecord(userId, trade) {
   clean.exitShotCount = exitShots.length;
   clean.date = clean.date instanceof Date ? clean.date.toISOString() : clean.date;
   clean.exitDate = clean.exitDate instanceof Date ? clean.exitDate.toISOString() : clean.exitDate;
-  // The structured trade is the primary record. Screenshot writes are isolated one image per
-  // Firestore document so even four entry + four exit images can never collide with the 1 MiB
-  // document limit as one combined base64 payload.
+  // Primary structured record first. Existing Firestore key/schema remains unchanged.
   await storageSet(strategyTradeKey(userId, trade.id), JSON.stringify(clean), false);
   const mediaErrors = [];
-  const savePhase = async (phase, shots) => {
-    for (let i = 0; i < shots.length; i++) {
-      let lastError = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        try {
-          await storageSet(strategyMediaKey(userId, trade.id, phase, i), shots[i], false);
-          lastError = null;
-          break;
-        } catch (e) {
-          lastError = e;
-          if (attempt < 2) await new Promise((r) => setTimeout(r, 180 * (attempt + 1)));
-        }
-      }
-      if (lastError) mediaErrors.push({ phase, index: i, error: lastError });
-    }
-    // Remove stale slots only after the trade itself is safely in Firestore.
-    for (let i = shots.length; i < 4; i++) {
+  const saveOne = async (phase, index, value) => {
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        await storageDelete(strategyMediaKey(userId, trade.id, phase, i), false);
-      } catch (_) {
+        await storageSet(strategyMediaKey(userId, trade.id, phase, index), value, false);
+        return;
+      } catch (e) {
+        lastError = e;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 180 * (attempt + 1)));
       }
     }
+    mediaErrors.push({ phase, index, error: lastError });
   };
-  await savePhase("entry", entryShots);
-  await savePhase("exit", exitShots);
+  const savePhase = async (phase, shots) => {
+    const writes = shots.map((value, i) => saveOne(phase, i, value));
+    const cleanup = [];
+    // A brand-new trade cannot have stale screenshot slots, so creation explicitly skips these
+    // network calls. Updates/closing trades still clean removed screenshots exactly as before.
+    if (cleanupStale) {
+      for (let i = shots.length; i < 4; i++) {
+        cleanup.push(
+          storageDelete(strategyMediaKey(userId, trade.id, phase, i), false).catch(() => null)
+        );
+      }
+    }
+    await Promise.all([...writes, ...cleanup]);
+  };
+  await Promise.all([
+    savePhase("entry", entryShots),
+    savePhase("exit", exitShots)
+  ]);
   return { mediaErrors };
 }
 async function deleteStrategyTradeRecord(userId, tradeId) {
@@ -11712,7 +11780,7 @@ function MindExe() {
     try {
       // Write the trade first. If the index write then fails, remove the orphan so the cloud
       // cannot contain an invisible trade that the user has no way to reach.
-      const saveResult = await saveStrategyTradeRecord(userId, trade);
+      const saveResult = await saveStrategyTradeRecord(userId, trade, { cleanupStale: false });
       const indexOk = await persistStrategyIndexNow(nextStrategies);
       if (!indexOk) {
         await deleteStrategyTradeRecord(userId, trade.id);
@@ -11748,6 +11816,35 @@ function MindExe() {
     } catch (e) {
       console.error("mind.exe: strategy trade close failed", e);
       showToast(lang === "en" ? "Could not save closing trade" : "Не удалось сохранить закрытие сделки");
+      return false;
+    }
+  };
+  const handleDeleteStrategy = async (strategyId) => {
+    if (!strategyCanPersistRef.current || !userId || !strategyId) return false;
+    const strategy = strategies.find((s) => s.id === strategyId);
+    if (!strategy) return false;
+    // Only Strategy Lab's own trades are physically deleted. Journal trades may still contain
+    // the old optional strategyId reference, but their journal record and media are deliberately
+    // left untouched so deleting a strategy can never delete historical journal data.
+    const directTradeIds = [...new Set([
+      ...(Array.isArray(strategy.tradeIds) ? strategy.tradeIds : []),
+      ...strategyTrades.filter((t) => t.strategyId === strategyId).map((t) => t.id)
+    ].filter(Boolean))];
+    const nextStrategies = strategies.filter((s) => s.id !== strategyId);
+    try {
+      // Persist the new index FIRST. If this fails, no trade/media document is deleted.
+      const indexOk = await persistStrategyIndexNow(nextStrategies);
+      if (!indexOk) return false;
+      setStrategies(nextStrategies);
+      setStrategyTrades((prev) => prev.filter((t) => t.strategyId !== strategyId));
+      // Cleanup happens only after the strategy is safely removed from the index.
+      // Failure here can leave an unreachable orphan document, but can never erase journal data.
+      await Promise.allSettled(directTradeIds.map((tradeId) => deleteStrategyTradeRecord(userId, tradeId)));
+      showToast(lang === "en" ? "Strategy deleted" : "Стратегия удалена");
+      return true;
+    } catch (e) {
+      console.error("mind.exe: strategy delete failed", e);
+      showToast(lang === "en" ? "Could not delete strategy" : "Не удалось удалить стратегию");
       return false;
     }
   };
@@ -12439,6 +12536,7 @@ function MindExe() {
             lang,
             onCreateStrategy: handleCreateStrategy,
             onUpdateStrategy: handleUpdateStrategy,
+            onDeleteStrategy: handleDeleteStrategy,
             onCreateTrade: handleCreateStrategyTrade,
             onCloseTrade: handleCloseStrategyTrade
           }),
@@ -12495,9 +12593,9 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "linear-gradient(180deg, rgba(9,9,10,0.92) 0%, rgba(0,0,0,0.98) 100%)", backdropFilter: "blur(22px)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "0 -14px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.015)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-md px-3 pt-2.5", children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-[1fr_auto_1fr] items-end gap-1", children: [
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "linear-gradient(180deg, rgba(8,8,9,0.94) 0%, rgba(0,0,0,0.985) 100%)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.045)", boxShadow: "0 -10px 28px rgba(0,0,0,0.28)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }, children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-md px-3 pt-1.5 pb-1", children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-[1fr_auto_1fr] items-end gap-1", children: [
         /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileLeftNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) }),
-        /* @__PURE__ */ jsx("div", { className: "flex items-end justify-center px-1 pb-0.5", children: mobilePrimaryNav && /* @__PURE__ */ jsx(MobileNavPrimaryButton, { item: mobilePrimaryNav, onClick: () => setTab(mobilePrimaryNav.id) }) }),
+        /* @__PURE__ */ jsx("div", { className: "flex items-end justify-center px-1", children: mobilePrimaryNav && /* @__PURE__ */ jsx(MobileNavPrimaryButton, { item: mobilePrimaryNav, onClick: () => setTab(mobilePrimaryNav.id) }) }),
         /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileRightNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) })
       ] }) }) })
     ] })
