@@ -9,6 +9,12 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.3.1
+//
+// V4.3.1 — исправлен startup regression из v4.3.
+//          После handleLogout случайно оказался вложенный useEffect внутри useEffect,
+//          из-за чего React падал до splash screen. Persistence v4.3 не менялся.
+//
 // mind.exe — V4.3
 //
 // V4.3 — аварийный аудит сохранений + PWA.
@@ -10632,7 +10638,7 @@ async function loadProfile(userId) {
   }
   return canonical;
 }
-// V4.8 \u2014 screenshots used to live in ONE Firestore document// V4.8 \u2014 screenshots used to live in ONE Firestore document (mediaKey(userId)). Firestore hard-
+// V4.8 \u2014 screenshots used to live in ONE Firestore document (mediaKey(userId)). Firestore hard-
 // caps a document at 1 MiB; compressed screenshots are ~150-300 KB each, so a handful of trades with
 // images pushed that single doc over the limit and setDoc started rejecting every write \u2014 silently,
 // because the only caller swallowed the error. Screenshots are now one document per journal entry,
@@ -11547,7 +11553,7 @@ function MindExe() {
     resetInMemoryState();
     setTab("home");
   };
-  useEffect(() => {  useEffect(() => {
+  useEffect(() => {
     if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
     setShowBootIntro(true);
     setIntroResolved(true);
@@ -11812,7 +11818,7 @@ function MindExe() {
     profilePersistChainRef.current = queued.catch(() => false);
     return queued;
   };
-  // V5.6 \u2014 duplicate Firestore write on every journal action.  // V5.6 \u2014 duplicate Firestore write on every journal action. Each onSave handler already calls
+  // V5.6 \u2014 duplicate Firestore write on every journal action. Each onSave handler already calls
   // persistNow({ entries: next }) explicitly; setEntries then changed `entries`, this effect fired,
   // and persistNow() ran a SECOND time with identical data \u2014 two full profile writes plus two
   // media writes (base64 screenshots) per saved trade. The de-duplication now lives inside
