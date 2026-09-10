@@ -9,6 +9,21 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.2.1
+//
+// V4.2.1 — Gemini Vision распознавание добавлено в создание сделки Strategy Lab.
+//          Используется тот же aiRecognizeTradeFromImage(), что и в обычном журнале:
+//          скрин добавляется в сделку и заполняет instrument / direction / Entry / SL / TP.
+//          Firebase / journal / media / strategy persistence не менялись.
+//
+// mind.exe — V4.2
+//
+// V4.2 — полная полировка нижней мобильной навигации.
+//        Центральная кнопка теперь сидит в отдельном центральном слоте,
+//        боковые табы выровнены по одинаковым оптическим слотам, active-state
+//        стал чище, а сам бар собраннее и визуально дороже.
+//        Изменения только в mobile nav / UI, persistence не затрагивается.
+//
 // mind.exe — V4.1.1
 //
 // V4.1.1 — выравнивание нижней мобильной навигации: центральная кнопка теперь
@@ -4165,6 +4180,42 @@ function ProfileBadge({ onClick, label }) {
     }
   );
 }
+function MobileNavItem({ item, active, accent, onClick }) {
+  const Icon = item.icon;
+  return /* @__PURE__ */ jsxs(
+    "button",
+    {
+      onClick,
+      "aria-label": item.label,
+      className: "w-[54px] h-[48px] flex flex-col items-center justify-end gap-1.5 rounded-2xl transition-all duration-200 active:scale-[0.96]",
+      style: {
+        color: active ? BASE.ink : BASE.inkFaint,
+        background: active ? "rgba(255,255,255,0.018)" : "transparent"
+      },
+      children: [
+        /* @__PURE__ */ jsx(Icon, { size: 20, strokeWidth: active ? 1.95 : 1.7, style: { color: active ? BASE.ink : BASE.inkFaint, transition: "color 0.22s ease, transform 0.22s ease", transform: active ? "translateY(-0.5px)" : "none" } }),
+        /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 14 : 6, height: 3, background: active ? accent : "rgba(255,255,255,0.14)", opacity: active ? 1 : 0.55, transition: "width 0.22s ease, background 0.22s ease, opacity 0.22s ease" } })
+      ]
+    }
+  );
+}
+function MobileNavPrimaryButton({ item, onClick }) {
+  const Icon = item.icon;
+  return /* @__PURE__ */ jsx(
+    "button",
+    {
+      onClick,
+      "aria-label": item.label,
+      className: "w-14 h-14 rounded-full flex items-center justify-center transition-all duration-200 active:scale-[0.97]",
+      style: {
+        background: BASE.ink,
+        border: "1px solid rgba(255,255,255,0.04)",
+        boxShadow: "0 16px 32px -18px rgba(255,255,255,0.12), 0 18px 34px -22px rgba(0,0,0,0.95)"
+      },
+      children: /* @__PURE__ */ jsx(Icon, { size: 21, strokeWidth: 2, style: { color: "#050505" } })
+    }
+  );
+}
 function WalletSheet({ open, onClose, balance, ledger, accent }) {
   if (!open) return null;
   const rows = [...ledger].reverse();
@@ -6821,7 +6872,9 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
   const [takeProfit, setTakeProfit] = useState("");
   const [note, setNote] = useState("");
   const [screenshots, setScreenshots] = useState([]);
+  const [recognizing, setRecognizing] = useState(false);
   const fileRef = useRef(null);
+  const recognizeInputRef = useRef(null);
   const MAX_SHOTS = 4;
   const instrumentOptions = useMemo(() => customInstruments.length ? [{ category: isEn ? "Custom" : "Свои", items: customInstruments }, ...INSTRUMENTS] : INSTRUMENTS, [customInstruments, isEn]);
   const rr = useMemo(() => {
@@ -6830,6 +6883,52 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
     return computePlannedRR(direction, en, sl, tp);
   }, [direction, entryPrice, stopLoss, takeProfit]);
   const canSave = !!instrument.trim() && rr.ok;
+  const handleRecognizeFile = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 15 * 1024 * 1024) {
+      notify?.(isEn ? `"${file.name}" is too large (max 15 MB)` : `«${file.name}» слишком большой (макс. 15 МБ)`);
+      return;
+    }
+    if (screenshots.length >= MAX_SHOTS) {
+      notify?.(isEn ? `Maximum ${MAX_SHOTS} screenshots` : `Максимум ${MAX_SHOTS} скриншота`);
+      return;
+    }
+    setRecognizing(true);
+    try {
+      const dataUrl = await compressImageFile(file);
+      setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev);
+      const rec = await aiRecognizeTradeFromImage(dataUrl);
+      if (rec.asset) setInstrument(rec.asset);
+      if (rec.direction) setDirection(rec.direction);
+      if (rec.entryPrice != null) setEntryPrice(String(rec.entryPrice));
+      if (rec.stopLoss != null) setStopLoss(String(rec.stopLoss));
+      if (rec.takeProfit != null) setTakeProfit(String(rec.takeProfit));
+      if (rec.entryPrice != null && rec.stopLoss != null && rec.takeProfit != null) {
+        const check = computePlannedRR(rec.direction || direction, rec.entryPrice, rec.stopLoss, rec.takeProfit);
+        notify?.(
+          check.ok
+            ? isEn ? "Trade recognized — verify the values" : "Сделка распознана — проверь значения"
+            : isEn ? "Verify the recognized values" : "Проверь распознанные значения"
+        );
+      } else {
+        notify?.(
+          isEn
+            ? "Trade recognized partially — fill in the missing fields manually"
+            : "Сделка распознана частично — дозаполни остальное вручную"
+        );
+      }
+    } catch {
+      notify?.(
+        isEn
+          ? "Could not recognize the trade. Fill in the data manually."
+          : "Не удалось распознать сделку. Заполни данные вручную."
+      );
+    } finally {
+      setRecognizing(false);
+    }
+  };
   const handleFiles = (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -6850,6 +6949,32 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
     ] }),
     /* @__PURE__ */ jsx("p", { className: "text-xs mb-5 pl-11", style: { color: BASE.inkFaint }, children: strategy?.name || "" }),
     /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+        /* @__PURE__ */ jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: () => recognizeInputRef.current?.click(),
+            disabled: recognizing,
+            className: "w-full flex items-center justify-center gap-2 px-3.5 py-3 rounded-[16px] text-xs transition-all active:scale-[0.98]",
+            style: {
+              border: `1px solid ${accent}35`,
+              color: recognizing ? BASE.inkDim : accent,
+              background: recognizing ? BASE.surface2 : `${accent}0A`,
+              opacity: recognizing ? 0.72 : 1,
+              fontFamily: "var(--font-display)"
+            },
+            children: [
+              /* @__PURE__ */ jsx(Camera, { size: 14 }),
+              recognizing
+                ? isEn ? "Analyzing screenshot…" : "Анализируем скриншот…"
+                : isEn ? "Recognize trade from screenshot" : "Распознать сделку по скриншоту"
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsx("input", { ref: recognizeInputRef, type: "file", accept: "image/*", onChange: handleRecognizeFile, className: "hidden" }),
+        /* @__PURE__ */ jsx("p", { className: "text-[10px] mt-2 px-1", style: { color: BASE.inkFaint }, children: isEn ? "Gemini fills instrument, direction, Entry, SL and TP. Verify everything before saving." : "Gemini заполнит инструмент, направление, Entry, SL и TP. Перед сохранением проверь значения." })
+      ] }),
       /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
         /* @__PURE__ */ jsxs("div", { children: [
           /* @__PURE__ */ jsx(L, { children: isEn ? "Instrument" : "Инструмент" }),
@@ -12370,25 +12495,11 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsxs("div", { className: "relative flex items-start justify-between px-4 pt-2.5", children: [
-        /* @__PURE__ */ jsx("div", { className: "flex flex-1 items-start justify-evenly pr-7", children: mobileLeftNav.map((n) => {
-          const active = tab === n.id;
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex min-w-0 flex-col items-center gap-1.5 pb-2 transition-transform duration-150 active:scale-[0.96]", children: [
-            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: active ? 1.9 : 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease, transform 0.25s ease", transform: active ? "translateY(-1px)" : "none" } }),
-            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 3, height: 3, background: active ? accent : "transparent", opacity: active ? 1 : 0.7, transition: "background 0.25s ease, width 0.25s ease, opacity 0.25s ease" } })
-          ] }, n.id);
-        }) }),
-        mobilePrimaryNav && /* @__PURE__ */ jsx("div", { className: "absolute left-1/2 top-2.5 -translate-x-1/2", children: /* @__PURE__ */ jsx("button", { onClick: () => setTab(mobilePrimaryNav.id), "aria-label": mobilePrimaryNav.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children:
-          /* @__PURE__ */ jsx("div", { className: "w-10 h-10 rounded-full flex items-center justify-center", style: { background: BASE.ink, boxShadow: "0 14px 30px -16px rgba(255,255,255,0.12), 0 10px 26px -18px rgba(0,0,0,0.95)" }, children: /* @__PURE__ */ jsx(mobilePrimaryNav.icon, { size: 17, strokeWidth: 2, style: { color: "#000" } }) })
-        }, mobilePrimaryNav.id) }),
-        /* @__PURE__ */ jsx("div", { className: "flex flex-1 items-start justify-evenly pl-7", children: mobileRightNav.map((n) => {
-          const active = tab === n.id;
-          return /* @__PURE__ */ jsxs("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex min-w-0 flex-col items-center gap-1.5 pb-2 transition-transform duration-150 active:scale-[0.96]", children: [
-            /* @__PURE__ */ jsx(n.icon, { size: 19, strokeWidth: active ? 1.9 : 1.6, style: { color: active ? accent : BASE.inkFaint, transition: "color 0.25s ease, transform 0.25s ease", transform: active ? "translateY(-1px)" : "none" } }),
-            /* @__PURE__ */ jsx("span", { className: "block rounded-full", style: { width: active ? 12 : 3, height: 3, background: active ? accent : "transparent", opacity: active ? 1 : 0.7, transition: "background 0.25s ease, width 0.25s ease, opacity 0.25s ease" } })
-          ] }, n.id);
-        }) })
-      ] }) })
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "linear-gradient(180deg, rgba(9,9,10,0.92) 0%, rgba(0,0,0,0.98) 100%)", backdropFilter: "blur(22px)", borderTop: "1px solid rgba(255,255,255,0.05)", boxShadow: "0 -14px 36px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.015)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-md px-3 pt-2.5", children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-[1fr_auto_1fr] items-end gap-1", children: [
+        /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileLeftNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) }),
+        /* @__PURE__ */ jsx("div", { className: "flex items-end justify-center px-1 pb-0.5", children: mobilePrimaryNav && /* @__PURE__ */ jsx(MobileNavPrimaryButton, { item: mobilePrimaryNav, onClick: () => setTab(mobilePrimaryNav.id) }) }),
+        /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileRightNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) })
+      ] }) }) })
     ] })
   ] });
 }
