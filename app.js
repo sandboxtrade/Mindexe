@@ -9,6 +9,29 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.4.2
+//
+// V4.4.2 — полноэкранный просмотр сохранённых скриншотов.
+//          Тап по thumbnail открывает изображение поверх приложения; закрытие по X/фону/Escape.
+//          Формат screenshot data, Firestore keys/schema и persistence НЕ менялись.
+//
+// mind.exe — V4.4.1
+//
+// V4.4.1 — финальный QA guard: local shadow пишется только после разрешённой cloud-load gate,
+//          добавлен React Error Boundary вместо чёрного экрана при render crash.
+//
+// mind.exe — V4.4
+//
+// V4.4 — полный QA/stability pass.
+//        - Strategy close: single-submit + saving state + только exit-media при закрытии;
+//        - Strategy delete media cleanup параллельный;
+//        - регистрация нового аккаунта не делает лишний cloud migration-check;
+//        - fresh account пропускает аварийный recovery scan, если canonical профиля ещё нет;
+//        - BootIntro ускорен;
+//        - branding больше не вспыхивает старым зелёным до загрузки профиля;
+//        - direct local shadow сохраняет последний профиль перед cloud write как страховку.
+//        Canonical Firestore keys/schema и journal entry model не менялись.
+//
 // mind.exe — V4.3.1
 //
 // V4.3.1 — исправлен startup regression из v4.3.
@@ -463,7 +486,7 @@ function fsDocRef(key, shared) {
 }
 
 // mind-exe.tsx
-import { useState, useMemo, useRef, useEffect } from "react";
+import { Component, useState, useMemo, useRef, useEffect } from "react";
 import {
   ScatterChart,
   Scatter,
@@ -4002,7 +4025,7 @@ function LogoMark({ size = 26, color, accent, animated = false }) {
       "path",
       {
         d: "M13 32 H23 L27 23 L32 41 L36 32 H51",
-        stroke: accent,
+        stroke: c,
         strokeWidth: "2.6",
         strokeLinecap: "round",
         strokeLinejoin: "round",
@@ -4051,11 +4074,12 @@ function DecodeText({ text, as = "span", className = "", style, maxTotalMs = 520
   }) });
 }
 function Wordmark({ accent, size = 15, animated = false, wide = false }) {
-  return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "var(--font-display)", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: BASE.ink, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
+  const c = BASE.ink;
+  return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "var(--font-display)", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: c, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
     "mind",
-    /* @__PURE__ */ jsxs("span", { className: "relative", style: { color: accent }, children: [
+    /* @__PURE__ */ jsxs("span", { className: "relative", style: { color: c }, children: [
       ".exe",
-      /* @__PURE__ */ jsx("span", { className: "absolute left-0 -bottom-[3px] w-full h-px", style: { background: `repeating-linear-gradient(90deg, ${accent} 0, ${accent} 3px, transparent 3px, transparent 6px)` } })
+      /* @__PURE__ */ jsx("span", { className: "absolute left-0 -bottom-[3px] w-full h-px", style: { background: `repeating-linear-gradient(90deg, ${c} 0, ${c} 3px, transparent 3px, transparent 6px)` } })
     ] })
   ] });
 }
@@ -4184,6 +4208,129 @@ function Toast({ text }) {
       children: text
     }
   );
+}
+function openScreenshotPreview(src, alt = "") {
+  if (!src || typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent("mindexe:preview-screenshot", { detail: { src, alt } }));
+}
+function ScreenshotPreviewHost() {
+  const [preview, setPreview] = useState(null);
+
+  useEffect(() => {
+    const onPreview = (e) => {
+      const src = e?.detail?.src;
+      if (!src) return;
+      setPreview({ src, alt: e?.detail?.alt || "" });
+    };
+    window.addEventListener("mindexe:preview-screenshot", onPreview);
+    return () => window.removeEventListener("mindexe:preview-screenshot", onPreview);
+  }, []);
+
+  useEffect(() => {
+    if (!preview) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => {
+      if (e.key === "Escape") setPreview(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [preview]);
+
+  if (!preview) return null;
+
+  return /* @__PURE__ */ jsxs(
+    "div",
+    {
+      className: "fixed inset-0 z-[140] flex flex-col",
+      onClick: () => setPreview(null),
+      style: {
+        background: "rgba(0,0,0,0.96)",
+        backdropFilter: "blur(14px)",
+        WebkitBackdropFilter: "blur(14px)"
+      },
+      children: [
+        /* @__PURE__ */ jsxs("div", {
+          className: "flex items-center justify-between px-4 shrink-0",
+          style: {
+            paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)",
+            paddingBottom: 10
+          },
+          children: [
+            /* @__PURE__ */ jsx("div", {
+              className: "text-[10px] uppercase tracking-[0.14em] truncate pr-4",
+              style: { color: BASE.inkFaint },
+              children: preview.alt || "Screenshot"
+            }),
+            /* @__PURE__ */ jsx("button", {
+              type: "button",
+              onClick: (e) => {
+                e.stopPropagation();
+                setPreview(null);
+              },
+              "aria-label": "Закрыть",
+              className: "w-10 h-10 rounded-full flex items-center justify-center shrink-0 active:scale-[0.96]",
+              style: {
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.06)",
+                color: BASE.ink
+              },
+              children: /* @__PURE__ */ jsx(XIcon, { size: 19 })
+            })
+          ]
+        }),
+        /* @__PURE__ */ jsx("div", {
+          className: "flex-1 min-h-0 overflow-auto flex items-center justify-center px-3 pb-3",
+          onClick: () => setPreview(null),
+          style: {
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-x pan-y"
+          },
+          children: /* @__PURE__ */ jsx("img", {
+            src: preview.src,
+            alt: preview.alt || "Screenshot",
+            draggable: false,
+            onClick: (e) => e.stopPropagation(),
+            className: "block object-contain select-none",
+            style: {
+              maxWidth: "100%",
+              maxHeight: "100%",
+              width: "auto",
+              height: "auto",
+              borderRadius: 12,
+              boxShadow: "0 24px 70px rgba(0,0,0,0.55)"
+            }
+          })
+        })
+      ]
+    }
+  );
+}
+function ScreenshotImage({ src, alt, className = "", style = {}, onClick }) {
+  const open = (e) => {
+    e?.stopPropagation?.();
+    onClick?.(e);
+    openScreenshotPreview(src, alt);
+  };
+  return /* @__PURE__ */ jsx("img", {
+    src,
+    alt,
+    onClick: open,
+    draggable: false,
+    className: `${className} cursor-zoom-in`,
+    style,
+    role: "button",
+    tabIndex: 0,
+    onKeyDown: (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        open(e);
+      }
+    }
+  });
 }
 function WalletBadge({ balance, accent, onClick }) {
   return /* @__PURE__ */ jsxs(
@@ -5526,7 +5673,7 @@ function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomIn
       /* @__PURE__ */ jsx(L, { children: t.newEntry.screenshots(MAX_SHOTS) }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
         screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+          /* @__PURE__ */ jsx(ScreenshotImage, { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
           /* @__PURE__ */ jsx(
             "button",
             {
@@ -5720,7 +5867,7 @@ function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, no
       /* @__PURE__ */ jsx(L, { children: "\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u0432\u044B\u0445\u043E\u0434\u0430" }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
         exitScreenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+          /* @__PURE__ */ jsx(ScreenshotImage, { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
           /* @__PURE__ */ jsx(
             "button",
             {
@@ -5865,7 +6012,7 @@ function EditTrade({ entry, onSave, onCancel, accent, customInstruments, customT
   };
   const ShotRow = ({ list, setList, fileRef, onFiles }) => /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
     list.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden shrink-0", style: { border: `1px solid ${BASE.line}` }, children: [
-      /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
+      /* @__PURE__ */ jsx(ScreenshotImage, { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-full h-full object-cover block" }),
       /* @__PURE__ */ jsx(
         "button",
         {
@@ -6115,7 +6262,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
             e.takeProfit != null && /* @__PURE__ */ jsxs("span", { children: ["TP ", formatPriceValue(e.takeProfit)] }),
             e.plannedRR != null && /* @__PURE__ */ jsxs("span", { style: { color: accent }, children: ["\u041F\u043B\u0430\u043D 1:", e.plannedRR.toFixed(2)] })
           ] }),
-          e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          e.screenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.screenshots.map((src, i) => /* @__PURE__ */ jsx(ScreenshotImage, { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
           /* @__PURE__ */ jsx("span", { className: "inline-block px-2 py-0.5 rounded-full text-[11px] mb-1", style: { border: `1px solid ${BASE.line}`, color: accent }, children: e.tag }),
           /* @__PURE__ */ jsxs("p", { children: [
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0417\u0430\u0442\u044F\u043D\u0443\u043B\u043E \u2014 " }),
@@ -6140,7 +6287,7 @@ function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode
               /* @__PURE__ */ jsx("span", { style: { color: entryStateColor(e.exitEmotions, e.exitX, e.exitY, "exit") }, children: entryStateText(e.exitEmotions, e.exitX, e.exitY, t, "exit") })
             ] })
           ] }),
-          e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx("img", { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
+          e.exitScreenshots?.length > 0 && /* @__PURE__ */ jsx("div", { className: "flex gap-2 hscroll pb-1 mb-2", children: e.exitScreenshots.map((src, i) => /* @__PURE__ */ jsx(ScreenshotImage, { src, alt: `\u0421\u043A\u0440\u0438\u043D\u0448\u043E\u0442 \u0432\u044B\u0445\u043E\u0434\u0430 ${i + 1}`, className: "w-24 h-24 object-cover rounded-lg shrink-0", style: { border: `1px solid ${BASE.line}` } }, i)) }),
           /* @__PURE__ */ jsxs("p", { children: [
             /* @__PURE__ */ jsx("span", { style: { color: BASE.inkFaint }, children: "\u0412 \u0441\u043B\u0435\u0434\u0443\u044E\u0449\u0438\u0439 \u0440\u0430\u0437 \u2014 " }),
             e.lesson
@@ -7071,7 +7218,7 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
         /* @__PURE__ */ jsx(L, { children: isEn ? "Entry screenshots" : "Скриншоты входа" }),
         /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
           screenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
-            /* @__PURE__ */ jsx("img", { src, className: "w-full h-full object-cover", alt: `strategy ${i + 1}` }),
+            /* @__PURE__ */ jsx(ScreenshotImage, { src, className: "w-full h-full object-cover", alt: `strategy ${i + 1}` }),
             /* @__PURE__ */ jsx("button", { onClick: () => setScreenshots((prev) => prev.filter((_, idx) => idx !== i)), className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center", style: { background: "rgba(0,0,0,.65)" }, children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" }) })
           ] }, i)),
           screenshots.length < MAX_SHOTS && /* @__PURE__ */ jsx("button", { onClick: () => fileRef.current?.click(), className: "w-20 h-20 rounded-xl flex items-center justify-center", style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 }) })
@@ -7101,6 +7248,7 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
   const [rulesFollowed, setRulesFollowed] = useState(null);
   const [rulesNote, setRulesNote] = useState("");
   const [exitScreenshots, setExitScreenshots] = useState([]);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
   const hasPlan = trade && typeof trade.entryPrice === "number" && typeof trade.stopLoss === "number" && typeof trade.takeProfit === "number";
   const effectiveExit = hasPlan ? closeType === "tp" ? trade.takeProfit : closeType === "sl" ? trade.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
@@ -7114,6 +7262,26 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
       if (file.size > 15 * 1024 * 1024) return notify?.(isEn ? "Image is too large" : "Скриншот слишком большой");
       compressImageFile(file).then((dataUrl) => setExitScreenshots((prev) => prev.length < 4 ? [...prev, dataUrl] : prev)).catch(() => notify?.(isEn ? "Could not process image" : "Не удалось обработать скриншот"));
     });
+  };
+  const handleSubmit = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      await onSave({
+        status: "closed",
+        closeType: hasPlan ? closeType : "manual",
+        exitPrice: effectiveExit,
+        realizedRR,
+        r: resultNum,
+        outcome: resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven",
+        exitDate: /* @__PURE__ */ new Date(),
+        rulesFollowed,
+        rulesNote: rulesNote.trim(),
+        exitScreenshots
+      });
+    } finally {
+      setSaving(false);
+    }
   };
   if (!trade) return null;
   return /* @__PURE__ */ jsxs("div", { children: [
@@ -7141,7 +7309,7 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
       /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Exit screenshots" : "Скриншоты выхода" }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
         exitScreenshots.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
-          /* @__PURE__ */ jsx("img", { src, className: "w-full h-full object-cover", alt: `exit ${i + 1}` }),
+          /* @__PURE__ */ jsx(ScreenshotImage, { src, className: "w-full h-full object-cover", alt: `exit ${i + 1}` }),
           /* @__PURE__ */ jsx("button", { onClick: () => setExitScreenshots((prev) => prev.filter((_, idx) => idx !== i)), className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center", style: { background: "rgba(0,0,0,.65)" }, children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" }) })
         ] }, i)),
         exitScreenshots.length < 4 && /* @__PURE__ */ jsx("button", { onClick: () => fileRef.current?.click(), className: "w-20 h-20 rounded-xl flex items-center justify-center", style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 }) }),
@@ -7150,18 +7318,13 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
       /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
-      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({
-        status: "closed",
-        closeType: hasPlan ? closeType : "manual",
-        exitPrice: effectiveExit,
-        realizedRR,
-        r: resultNum,
-        outcome: resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven",
-        exitDate: /* @__PURE__ */ new Date(),
-        rulesFollowed,
-        rulesNote: rulesNote.trim(),
-        exitScreenshots
-      }), className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: isEn ? "Close trade" : "Закрыть сделку" })
+      /* @__PURE__ */ jsx("button", {
+        disabled: !canSave || saving,
+        onClick: handleSubmit,
+        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
+        children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Close trade" : "Закрыть сделку"
+      })
     ] })
   ] });
 }
@@ -7209,6 +7372,7 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
         setSelectedTradeId(null);
         setMode("detail");
       }
+      return ok;
     } });
   }
   if (mode === "detail" && selected && stats) {
@@ -7287,7 +7451,7 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
               !closed && /* @__PURE__ */ jsx("span", { style: { color: accent }, children: isEn ? "OPEN" : "ОТКРЫТА" }),
               typeof trade.rulesFollowed === "boolean" && /* @__PURE__ */ jsx("span", { style: { color: trade.rulesFollowed ? WIN : LOSS }, children: trade.rulesFollowed ? isEn ? "rules ✓" : "по правилам ✓" : isEn ? "rules broken" : "нарушение правил" })
             ] }),
-            (trade.screenshots?.length > 0 || trade.exitScreenshots?.length > 0) && /* @__PURE__ */ jsx("div", { className: "flex gap-2 mt-3 hscroll", children: [...(trade.screenshots || []), ...(trade.exitScreenshots || [])].slice(0, 6).map((src, i) => /* @__PURE__ */ jsx("img", { src, className: "w-16 h-16 rounded-xl object-cover shrink-0", style: { border: `1px solid ${BASE.line}` }, alt: `strategy shot ${i + 1}` }, i)) }),
+            (trade.screenshots?.length > 0 || trade.exitScreenshots?.length > 0) && /* @__PURE__ */ jsx("div", { className: "flex gap-2 mt-3 hscroll", children: [...(trade.screenshots || []), ...(trade.exitScreenshots || [])].slice(0, 6).map((src, i) => /* @__PURE__ */ jsx(ScreenshotImage, { src, className: "w-16 h-16 rounded-xl object-cover shrink-0", style: { border: `1px solid ${BASE.line}` }, alt: `strategy shot ${i + 1}` }, i)) }),
             trade.__source === "strategy" && !closed && /* @__PURE__ */ jsx("button", { onClick: () => {
               setSelectedTradeId(trade.id);
               setMode("closeTrade");
@@ -10399,6 +10563,25 @@ var MEDIA_KEY = "mind-exe-journal-media";
 var PROFILE_SHADOW_KEY = "mind-exe-cloud-shadow";
 var ANON_ID_KEY = "mind-exe-anon-id";
 var __lastProfileRecoverySource = null;
+function directShadowKey(userId) {
+  return `${PROFILE_SHADOW_KEY}:${userId}`;
+}
+function readDirectProfileShadow(userId) {
+  try {
+    const value = window.localStorage?.getItem(directShadowKey(userId));
+    if (!value) return null;
+    return { key: directShadowKey(userId), profile: parseStoredProfileValue(value), local: true };
+  } catch (_) {
+    return null;
+  }
+}
+function writeDirectProfileShadow(userId, profile) {
+  if (!userId || !profile) return;
+  try {
+    window.localStorage?.setItem(directShadowKey(userId), JSON.stringify({ ...profile, version: SCHEMA_VERSION }));
+  } catch (_) {
+  }
+}
 function getOrCreateAnonId() {
   try {
     let id = window.localStorage?.getItem(ANON_ID_KEY);
@@ -10572,6 +10755,8 @@ async function readProfileCandidateCloud(key) {
   }
 }
 async function readProfileShadow(userId) {
+  const direct = readDirectProfileShadow(userId);
+  if (direct) return direct;
   try {
     const res = await legacyStorageGet(`${PROFILE_SHADOW_KEY}:${userId}`, false);
     if (!res?.value) return null;
@@ -10584,6 +10769,7 @@ async function saveProfile(userId, profile) {
   assertProfileAuthUser(userId);
   const normalized = { ...profile, version: SCHEMA_VERSION };
   await storageSet(profileKey(userId), JSON.stringify(normalized), false);
+  writeDirectProfileShadow(userId, normalized);
   try {
     await legacyStorageSet(`${PROFILE_SHADOW_KEY}:${userId}`, JSON.stringify(normalized), false);
   } catch (_) {
@@ -10615,6 +10801,10 @@ async function loadProfile(userId) {
   canonicalExists = !!primary?.value;
   if (primary?.value) canonical = parseStoredProfileValue(primary.value);
 
+  if (!canonicalExists && __freshAccountUids.has(userId)) {
+    __freshAccountUids.delete(userId);
+    return null;
+  }
   const intentionalFullReset = canonical?.meta?.intentionalFullReset === true;
   const shouldRecover = !canonicalExists || (profileIsEffectivelyBlank(canonical) && !intentionalFullReset);
   if (!shouldRecover) return canonical;
@@ -10825,6 +11015,9 @@ async function saveStrategyIndex(userId, strategies) {
 async function saveStrategyTradeRecord(userId, trade, options = {}) {
   if (!fbAuth.currentUser || !userId || !trade?.id) return { mediaErrors: [] };
   const cleanupStale = options.cleanupStale !== false;
+  const mediaPhases = Array.isArray(options.mediaPhases) && options.mediaPhases.length
+    ? new Set(options.mediaPhases)
+    : new Set(["entry", "exit"]);
   const clean = { ...trade };
   const entryShots = Array.isArray(clean.screenshots) ? clean.screenshots.slice(0, 4) : [];
   const exitShots = Array.isArray(clean.exitScreenshots) ? clean.exitScreenshots.slice(0, 4) : [];
@@ -10864,32 +11057,28 @@ async function saveStrategyTradeRecord(userId, trade, options = {}) {
     }
     await Promise.all([...writes, ...cleanup]);
   };
-  await Promise.all([
-    savePhase("entry", entryShots),
-    savePhase("exit", exitShots)
-  ]);
+  const phaseJobs = [];
+  if (mediaPhases.has("entry")) phaseJobs.push(savePhase("entry", entryShots));
+  if (mediaPhases.has("exit")) phaseJobs.push(savePhase("exit", exitShots));
+  await Promise.all(phaseJobs);
   return { mediaErrors };
 }
 async function deleteStrategyTradeRecord(userId, tradeId) {
   if (!fbAuth.currentUser || !userId || !tradeId) return;
-  try {
-    await storageDelete(strategyTradeKey(userId, tradeId), false);
-  } catch (_) {
-  }
+  const jobs = [storageDelete(strategyTradeKey(userId, tradeId), false)];
   for (const phase of ["entry", "exit"]) {
     for (let i = 0; i < 4; i++) {
-      try {
-        await storageDelete(strategyMediaKey(userId, tradeId, phase, i), false);
-      } catch (_) {
-      }
+      jobs.push(storageDelete(strategyMediaKey(userId, tradeId, phase, i), false));
     }
   }
+  await Promise.allSettled(jobs);
 }
 
 var AUTH_USERS_KEY = "mind-exe-auth-users";
 var LEGACY_CLAIMED_KEY = "mind-exe-legacy-claimed";
 var LOCAL_MIGRATED_KEY = "mind-exe-local-migrated";
 var USERNAME_RE = /^[a-z0-9_.-]{3,32}$/;
+var __freshAccountUids = /* @__PURE__ */ new Set();
 function usernameToEmail(username) {
   return `${username.trim().toLowerCase()}@mindexe.local`;
 }
@@ -10957,18 +11146,21 @@ async function mergeLegacyIntoCloud(userId, legacyProfileRaw, legacyMediaRaw) {
 }
 async function migrateLocalAccountIfNeeded(uid, username) {
   try {
-    const already = await storageGet(LOCAL_MIGRATED_KEY, false);
-    if (already?.value) return;
+    // Local lookup first: the normal/new-account path now avoids a Firestore read entirely.
     const legacyUser = await findLegacyLocalUser(username);
-    if (!legacyUser) return;
+    if (!legacyUser) return "none";
+    const already = await storageGet(LOCAL_MIGRATED_KEY, false);
+    if (already?.value) return "done";
     const [legacyProfile, legacyMedia] = await Promise.all([
       legacyStorageGet(profileKey(legacyUser.id), false).catch(() => null),
       legacyStorageGet(mediaKey(legacyUser.id), false).catch(() => null)
     ]);
     await mergeLegacyIntoCloud(uid, legacyProfile?.value || null, legacyMedia?.value || null);
     await storageSet(LOCAL_MIGRATED_KEY, "1", false);
+    return "done";
   } catch (e) {
     console.warn("mind.exe: local\u2192Firebase account migration skipped", e);
+    return "error";
   }
 }
 function createFirebaseAuthProvider() {
@@ -10983,7 +11175,8 @@ function createFirebaseAuthProvider() {
       }
       const cred = await createUserWithEmailAndPassword(fbAuth, usernameToEmail(uname), password);
       await firebaseUpdateProfile(cred.user, { displayName: uname });
-      await migrateLocalAccountIfNeeded(cred.user.uid, uname);
+      const migration = await migrateLocalAccountIfNeeded(cred.user.uid, uname);
+      if (migration === "none") __freshAccountUids.add(cred.user.uid);
       return { id: cred.user.uid, username: uname };
     },
     async login(username, password) {
@@ -11361,11 +11554,11 @@ function BootIntro({ accent, name, lang, onDone }) {
   ];
   const [fading, setFading] = useState(false);
   useEffect(() => {
-    const lineDelay = 420;
-    const holdAfter = 600;
+    const lineDelay = 220;
+    const holdAfter = 260;
     const totalTypeTime = lines.length * lineDelay + holdAfter;
     const fadeTimer = setTimeout(() => setFading(true), totalTypeTime);
-    const doneTimer = setTimeout(() => onDone(), totalTypeTime + 480);
+    const doneTimer = setTimeout(() => onDone(), totalTypeTime + 300);
     return () => {
       clearTimeout(fadeTimer);
       clearTimeout(doneTimer);
@@ -11381,7 +11574,7 @@ function BootIntro({ accent, name, lang, onDone }) {
         {
           className: "text-sm mb-2",
           style: {
-            color: i === lines.length - 1 ? accent : BASE.inkDim,
+            color: i === lines.length - 1 ? BASE.ink : BASE.inkDim,
             fontFamily: "var(--font-mono)",
             opacity: 0,
             animation: `riseIn 0.4s ease ${i * 0.42}s forwards`
@@ -11425,14 +11618,39 @@ function DesktopSidebar({ nav, tab, setTab, accent, mindCoins, onWalletClick }) 
     }
   );
 }
+class AppErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+  componentDidCatch(error, info) {
+    console.error("mind.exe: render crash", error, info);
+  }
+  render() {
+    if (!this.state.error) return this.props.children;
+    return /* @__PURE__ */ jsx("div", {
+      className: "fixed inset-0 z-[100] flex items-center justify-center px-7",
+      style: { background: "#000", color: BASE.ink, fontFamily: "var(--font-display)" },
+      children: /* @__PURE__ */ jsxs("div", { className: "w-full max-w-sm text-center", children: [
+        /* @__PURE__ */ jsx(LogoMark, { size: 34, color: BASE.ink }),
+        /* @__PURE__ */ jsx("h1", { className: "text-lg mt-5 mb-2", children: "mind.exe" }),
+        /* @__PURE__ */ jsx("p", { className: "text-xs leading-relaxed mb-5", style: { color: BASE.inkDim }, children: "Интерфейс столкнулся с ошибкой. Сохранённые данные не сбрасываются. Перезапусти приложение." }),
+        /* @__PURE__ */ jsx("button", { onClick: () => window.location.reload(), className: "w-full py-3 rounded-full text-sm", style: { background: BASE.ink, color: "#000", fontWeight: 600 }, children: "Перезапустить" })
+      ] })
+    });
+  }
+}
 function MindExe() {
   const [entries, setEntries] = useState(() => seedEntries.map(migrateEntry));
   const [tab, setTab] = useState("home");
   const [closingId, setClosingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
-  // V3.0 — по умолчанию терминальный зелёный вместо космического белого. Сохранённый
-  // accentIndex по-прежнему перекрывает это значение при загрузке профиля.
-  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.value === "#31E98F") || ACCENTS[0]);
+  // Startup must be neutral. Saved accentIndex replaces this after Firebase profile load.
+  // Using terminal green here caused a visible green flash in logo/text before the profile arrived.
+  const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
   const [name, setName] = useState("");
   const [toast, setToast] = useState(null);
   const [soundOn, setSoundOn] = useState(true);
@@ -11468,6 +11686,7 @@ function MindExe() {
   const firstDailyRewardRef = useRef(true);
   const canPersistRef = useRef(false);
   const profilePersistChainRef = useRef(Promise.resolve(true));
+  const authLegacyGateRef = useRef(false);
   const strategyCanPersistRef = useRef(false);
   const strategyRawIndexRef = useRef(null);
   const strategyBackupPendingRef = useRef(false);
@@ -11490,6 +11709,7 @@ function MindExe() {
     setAccentPreset(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
     setSoundOn(true);
     setWeeklyGoal(7);
+    setLang("ru");
     setMeasureMode("R");
     setCurrency("USD");
     setTradingAsset(null);
@@ -11509,25 +11729,41 @@ function MindExe() {
     setLastDailyReward(null);
   };
   const handleRegister = async (username, password) => {
-    const newUser = await authRegister(username, password);
     const hasLegacy = await checkLegacyDataAvailable();
-    if (hasLegacy) setMigrateFor(newUser.id);
+    authLegacyGateRef.current = hasLegacy;
+    try {
+      const newUser = await authRegister(username, password);
+      if (hasLegacy) setMigrateFor(newUser.id);
+      return newUser;
+    } catch (e) {
+      authLegacyGateRef.current = false;
+      throw e;
+    }
   };
   const handleLogin = async (username, password) => {
     await authLogin(username, password);
   };
   const handleGoogleLogin = async () => {
-    const newUser = await authLoginWithGoogle();
     const hasLegacy = await checkLegacyDataAvailable();
-    if (hasLegacy) setMigrateFor(newUser.id);
+    authLegacyGateRef.current = hasLegacy;
+    try {
+      const newUser = await authLoginWithGoogle();
+      if (hasLegacy) setMigrateFor(newUser.id);
+      return newUser;
+    } catch (e) {
+      authLegacyGateRef.current = false;
+      throw e;
+    }
   };
   const handleMigrate = async () => {
     if (!migrateFor) return;
     await claimLegacyData(migrateFor);
+    authLegacyGateRef.current = false;
     setMigrateFor(null);
   };
   const handleSkipMigrate = async () => {
     await skipLegacyData();
+    authLegacyGateRef.current = false;
     setMigrateFor(null);
   };
   const handleLogout = async () => {
@@ -11567,7 +11803,7 @@ function MindExe() {
     };
   }, []);
   useEffect(() => {
-    if (authStatus !== "authenticated" || !userId || migrateFor) return;
+    if (authStatus !== "authenticated" || !userId || migrateFor || authLegacyGateRef.current) return;
     let cancelled = false;
     setLoaded(false);
     canPersistRef.current = false;
@@ -11692,7 +11928,7 @@ function MindExe() {
   // journal, and — just like canPersistRef for the profile — strategyCanPersistRef stays false so an
   // empty in-memory Strategy Lab can never overwrite an existing cloud index after a failed read.
   useEffect(() => {
-    if (authStatus !== "authenticated" || !userId || migrateFor) return;
+    if (authStatus !== "authenticated" || !userId || migrateFor || authLegacyGateRef.current) return;
     let cancelled = false;
     setStrategyLoaded(false);
     strategyCanPersistRef.current = false;
@@ -11775,6 +12011,7 @@ function MindExe() {
     // Capture this render's state before it enters the async queue.
     const capturedPayload = buildPayload(overrides);
     const capturedEntries = overrides.entries ?? entries;
+    if (canPersistRef.current && fbAuth.currentUser && userId) writeDirectProfileShadow(userId, capturedPayload);
 
     const run = async () => {
       if (!canPersistRef.current || !fbAuth.currentUser || !userId) return false;
@@ -11920,7 +12157,7 @@ function MindExe() {
     try {
       // Write the trade first. If the index write then fails, remove the orphan so the cloud
       // cannot contain an invisible trade that the user has no way to reach.
-      const saveResult = await saveStrategyTradeRecord(userId, trade, { cleanupStale: false });
+      const saveResult = await caWithTimeout(saveStrategyTradeRecord(userId, trade, { cleanupStale: false, mediaPhases: ["entry"] }), 15e3, "strategy_trade_save_timeout");
       const indexOk = await persistStrategyIndexNow(nextStrategies);
       if (!indexOk) {
         await deleteStrategyTradeRecord(userId, trade.id);
@@ -11945,7 +12182,7 @@ function MindExe() {
     if (!current || !strategyCanPersistRef.current || !userId) return false;
     const nextTrade = migrateStrategyTrade({ ...current, ...patch });
     try {
-      const saveResult = await saveStrategyTradeRecord(userId, nextTrade);
+      const saveResult = await caWithTimeout(saveStrategyTradeRecord(userId, nextTrade, { mediaPhases: ["exit"] }), 15e3, "strategy_close_save_timeout");
       setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? nextTrade : t));
       if (saveResult?.mediaErrors?.length) {
         showToast(lang === "en" ? "Trade closed, but one or more screenshots did not upload" : "Сделка закрыта, но часть скриншотов не загрузилась");
@@ -12134,7 +12371,7 @@ function MindExe() {
           lang: settings.lang ?? lang,
           measureMode: settings.measureMode ?? measureMode,
           currency: settings.currency ?? currency,
-          tradingAsset: settings.tradingAsset ?? tradingAsset,
+          tradingAsset: Object.prototype.hasOwnProperty.call(settings, "tradingAsset") ? settings.tradingAsset : tradingAsset,
           strategyNote: settings.strategyNote ?? strategyNote,
           startingCapital: settings.startingCapital ?? startingCapital,
           customInstruments: settings.customInstruments ?? customInstruments,
@@ -12548,6 +12785,7 @@ function MindExe() {
         /* @__PURE__ */ jsx("div", { className: "cosmic-vignette" })
       ] }),
       /* @__PURE__ */ jsx(Toast, { text: toast }),
+      /* @__PURE__ */ jsx(ScreenshotPreviewHost, {}),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
       /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-24 md:pb-16 relative`, children: [
@@ -12745,4 +12983,4 @@ function MindExe() {
 
 // entry.jsx
 import { jsx as jsx2 } from "react/jsx-runtime";
-createRoot(document.getElementById("root")).render(/* @__PURE__ */ jsx2(MindExe, {}));
+createRoot(document.getElementById("root")).render(/* @__PURE__ */ jsx2(AppErrorBoundary, { children: /* @__PURE__ */ jsx2(MindExe, {}) }));

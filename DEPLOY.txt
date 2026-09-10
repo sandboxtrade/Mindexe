@@ -1,15 +1,8 @@
-Заменить в корне репозитория:
+MIND.EXE v4.4.2
+
+Replace in repository root:
 - app.js
 - index.html
-- manifest.json
-- splash.mp4 (если нужен этот файл)
 
-НЕ удалять существующие root-файлы:
-- icon-16.png
-- icon-32.png
-- icon-180.png
-- icon-192.png
-- icon-512.png
-
-После выкладки на iPhone удали старую иконку mind.exe с Home Screen и добавь сайт заново.
-iOS часто сохраняет старый apple-touch-icon в отдельном кэше.
+No Firebase/Firestore migration is required.
+Existing screenshot documents are not modified.
