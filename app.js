@@ -9,6 +9,12 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.1
+//
+// V4.1 — кнопка настроек вынесена из нижней навигации в правую часть верхней шапки
+//        и переименована в «Профиль». Это только навигационный/UI-апдейт:
+//        storage / Firestore / journal / media / strategy persistence не менялись.
+//
 // mind.exe — V3.4
 //
 // V3.4 — системный polish UI без изменения логики хранения данных.
@@ -499,7 +505,7 @@ var OUTCOME_LABEL = { Win: "\u041F\u0440\u0438\u0431\u044B\u043B\u044C", Loss: "
 var DIRECTION_LABEL = { Long: "\u041B\u043E\u043D\u0433", Short: "\u0428\u043E\u0440\u0442" };
 var STRINGS = {
   ru: {
-    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0417\u0430\u043F\u0438\u0441\u044C", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", strategies: "\u0421\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438" },
+    nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0417\u0430\u043F\u0438\u0441\u044C", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", strategies: "\u0421\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438", simulator: "\u0418\u0433\u0440\u0430", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C" },
     coach: {
       title: "\u0418\u0418-\u0430\u043D\u0430\u043B\u0438\u0437",
       subtitle: "\u0422\u0432\u043E\u0439 \u043B\u0438\u0447\u043D\u044B\u0439 \u0430\u043D\u0430\u043B\u0438\u0442\u0438\u043A. \u041F\u043E\u043D\u0438\u043C\u0430\u0435\u0442 \u0442\u0432\u043E\u0439 \u0441\u0442\u0438\u043B\u044C \u0442\u043E\u0440\u0433\u043E\u0432\u043B\u0438.",
@@ -682,7 +688,7 @@ var STRINGS = {
       colResult: "\u0420\u0435\u0437\u0443\u043B\u044C\u0442\u0430\u0442"
     },
     settings: {
-      title: "\u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+      title: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C",
       language: "\u042F\u0437\u044B\u043A \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
       languageNote: "\u041C\u0435\u043D\u044F\u0435\u0442 \u044F\u0437\u044B\u043A \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430. \u0417\u0430\u043F\u0438\u0441\u0438 \u0432 \u0436\u0443\u0440\u043D\u0430\u043B\u0435 \u043E\u0441\u0442\u0430\u043D\u0443\u0442\u0441\u044F \u0442\u0430\u043A\u0438\u043C\u0438, \u043A\u0430\u043A \u0442\u044B \u0438\u0445 \u043D\u0430\u043F\u0438\u0441\u0430\u043B.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
@@ -843,7 +849,7 @@ var STRINGS = {
     }
   },
   en: {
-    nav: { home: "Home", new: "Entry", log: "Journal", patterns: "Analytics", strategies: "Strategies", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Settings" },
+    nav: { home: "Home", new: "Entry", log: "Journal", patterns: "Analytics", strategies: "Strategies", simulator: "Game", challenge: "Challenge", coach: "Analysis", settings: "Profile" },
     coach: {
       title: "AI Analysis",
       subtitle: "Your personal analyst. Understands your trading style.",
@@ -1009,7 +1015,7 @@ var STRINGS = {
       colResult: "Result"
     },
     settings: {
-      title: "Settings",
+      title: "Profile",
       language: "App language",
       languageNote: "Changes the interface language. Your journal entries stay exactly as you wrote them.",
       russian: "\u0420\u0443\u0441\u0441\u043A\u0438\u0439",
@@ -4133,6 +4139,23 @@ function WalletBadge({ balance, accent, onClick }) {
         /* @__PURE__ */ jsx(Coins, { size: 13, style: { color: accent } }),
         /* @__PURE__ */ jsx("span", { className: "text-[12px] leading-none", style: { fontFamily: "var(--font-mono)", color: BASE.ink, fontWeight: 500 }, children: groupThousands(balance) })
       ]
+    }
+  );
+}
+function ProfileBadge({ onClick, label }) {
+  return /* @__PURE__ */ jsx(
+    "button",
+    {
+      onClick,
+      "aria-label": label,
+      title: label,
+      className: "w-10 h-10 rounded-full flex items-center justify-center transition-all duration-150 active:scale-[0.98]",
+      style: {
+        border: `1px solid ${BASE.line}`,
+        background: `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)`,
+        boxShadow: "0 10px 26px -18px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.04)"
+      },
+      children: /* @__PURE__ */ jsx(User, { size: 17, style: { color: BASE.ink } })
     }
   );
 }
@@ -11841,8 +11864,9 @@ function MindExe() {
     { id: "new", label: t.nav.new, icon: BookOpen, primary: true },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "coach", label: t.nav.coach, icon: Bot },
-    { id: "settings", label: t.nav.settings, icon: SettingsIcon }
+    { id: "settings", label: t.nav.settings, icon: User }
   ];
+  const mobileNav = nav.filter((n) => n.id !== "settings");
   const wideTab = ["home", "log", "patterns", "strategies"].includes(tab);
   const formTab = ["new", "edit", "close"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
@@ -12177,7 +12201,10 @@ function MindExe() {
                   /* @__PURE__ */ jsx(LogoMark, { size: 28, accent }),
                   /* @__PURE__ */ jsx(Wordmark, { accent })
                 ] }),
-                /* @__PURE__ */ jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) }) })
+                /* @__PURE__ */ jsxs("div", { className: "flex items-center justify-end gap-2", children: [
+                  /* @__PURE__ */ jsx(ProfileBadge, { label: t.nav.settings, onClick: () => setTab("settings") }),
+                  /* @__PURE__ */ jsx(WalletBadge, { balance: mindCoins, accent, onClick: () => setWalletOpen(true) })
+                ] })
               ] })
             ]
           }
@@ -12334,7 +12361,7 @@ function MindExe() {
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
       /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(0,0,0,0.88)", backdropFilter: "blur(18px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "0 -10px 28px rgba(0,0,0,0.35)", paddingBottom: "max(env(safe-area-inset-bottom), 10px)" }, children: /* @__PURE__ */ jsx("div", { className: "grid grid-cols-8 items-center px-1 pt-2.5", children:
-        nav.map((n) => {
+        mobileNav.map((n) => {
           const active = tab === n.id;
           if (n.primary) {
             return /* @__PURE__ */ jsx("button", { onClick: () => setTab(n.id), "aria-label": n.label, className: "relative z-10 flex flex-col items-center justify-center pb-2 min-w-0 transition-transform duration-150 active:scale-[0.96]", children:
