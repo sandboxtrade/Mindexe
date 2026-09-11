@@ -9,6 +9,16 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.6
+//
+// V4.6 — Strategy Lab result semantics + global visual polish / QA.
+//        - SL result always becomes negative automatically; TP always positive;
+//        - Manual close preserves the user-entered sign;
+//        - closed direct Strategy trades can edit close reason + result amount;
+//        - legacy direct SL/TP trades are normalized in memory on read (no auto-write migration);
+//        - visual system tightened: calmer surfaces, smaller radii/shadows, better iOS controls;
+//        - canonical Firestore keys, SCHEMA_VERSION and journal persistence are unchanged.
+//
 // mind.exe — V4.5
 //
 // V4.5 — Strategy Lab: редактирование direct-сделок + точные итоговые суммы;
@@ -564,12 +574,12 @@ import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 // один экран. Теперь разделение делается только сдвигом яркости поверхности.
 var BASE = {
   bg: "#000000",
-  surface: "#09090A",
-  surface2: "#101012",
-  line: "#1D1D22",
+  surface: "#080809",
+  surface2: "#0E0E10",
+  line: "#19191E",
   ink: "#FCFCFD",
-  inkDim: "#9A9AA2",
-  inkFaint: "#62626A"
+  inkDim: "#95959D",
+  inkFaint: "#5F5F68"
 };
 var WIN = "#31E98F";
 var LOSS = "#FF625C";
@@ -4191,12 +4201,12 @@ function Pill({ active, children, onClick, accent }) {
     "button",
     {
       onClick,
-      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-all duration-200 active:scale-[0.98] whitespace-nowrap shrink-0",
+      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-[background,color,border,transform] duration-200 active:scale-[0.98] whitespace-nowrap shrink-0",
       style: {
-        background: active ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : "transparent",
+        background: active ? BASE.surface2 : "transparent",
         color: active ? BASE.ink : BASE.inkDim,
         border: active ? `1px solid ${BASE.line}` : "1px solid transparent",
-        boxShadow: active ? "0 10px 22px -14px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.04)" : "none"
+        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.025)" : "none"
       },
       children
     }
@@ -4206,11 +4216,11 @@ function Card({ children, className = "", glowing = false, accent, style = {} })
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: `rounded-[24px] p-4 transition-colors duration-300 break-inside-avoid ${className}`,
+      className: `rounded-[21px] p-4 transition-colors duration-250 break-inside-avoid ${className}`,
       style: {
-        background: glowing ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`,
+        background: glowing ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : BASE.surface,
         border: `1px solid ${BASE.line}`,
-        boxShadow: glowing ? `0 18px 40px -22px ${accent || BASE.ink}33, inset 0 1px 0 rgba(255,255,255,0.05)` : "0 14px 34px -24px rgba(0,0,0,0.95), inset 0 1px 0 rgba(255,255,255,0.03)",
+        boxShadow: glowing ? `0 14px 34px -24px ${accent || BASE.ink}28, inset 0 1px 0 rgba(255,255,255,0.035)` : "inset 0 1px 0 rgba(255,255,255,0.018)",
         ...style
       },
       children
@@ -4222,8 +4232,8 @@ function Toast({ text }) {
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: "fixed top-5 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full text-xs toast-in",
-      style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.ink, boxShadow: "0 10px 30px rgba(0,0,0,0.5)" },
+      className: "fixed left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full text-xs toast-in",
+      style: { top: "calc(env(safe-area-inset-top, 0px) + 12px)", background: "rgba(14,14,16,.96)", border: `1px solid ${BASE.line}`, color: BASE.ink, boxShadow: "0 10px 28px rgba(0,0,0,0.42)", backdropFilter: "blur(14px)" },
       children: text
     }
   );
@@ -6592,9 +6602,9 @@ function EmptyState({ icon: Icon, title, hint, actionLabel, onAction, accent, co
   );
 }
 function StatCard({ label, value, accent }) {
-  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-[18px] px-3.5 py-3.5 min-w-0", style: { border: `1px solid ${BASE.line}`, background: `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)" }, children: [
-    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-1.5 truncate", style: { color: BASE.inkFaint }, children: label }),
-    /* @__PURE__ */ jsx("div", { className: "text-[28px] leading-none truncate", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
+  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-[16px] px-3.5 py-3.5 min-w-0", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.018)" }, children: [
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.13em] mb-2 truncate", style: { color: BASE.inkFaint }, children: label }),
+    /* @__PURE__ */ jsx("div", { className: "text-[25px] leading-none truncate", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
   ] });
 }
 function TagBars({ data, measureMode, currency }) {
@@ -7028,6 +7038,15 @@ function Patterns({ entries, accent, measureMode, currency, analytics, t, lang }
   ] });
 }
 
+function normalizeStrategyResultByCloseType(closeType, value) {
+  if (typeof value !== "number" || !isFinite(value)) return value;
+  if (closeType === "sl") return value === 0 ? 0 : -Math.abs(value);
+  if (closeType === "tp") return value === 0 ? 0 : Math.abs(value);
+  return value;
+}
+function strategyResultOutcome(value) {
+  return value > 0 ? "Win" : value < 0 ? "Loss" : "Breakeven";
+}
 function strategyAllTrades(strategyId, strategyTrades, journalEntries) {
   const direct = (strategyTrades || []).filter((t) => t.strategyId === strategyId).map((t) => ({ ...t, __source: "strategy" }));
   const linked = (journalEntries || []).filter((e) => e.strategyId === strategyId).map((e) => ({ ...e, __source: "journal" }));
@@ -7338,8 +7357,14 @@ function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency,
   const [takeProfit, setTakeProfit] = useState(trade?.takeProfit == null ? "" : String(trade.takeProfit));
   const [note, setNote] = useState(trade?.note || "");
   const [screenshots, setScreenshots] = useState(Array.isArray(trade?.screenshots) ? trade.screenshots : []);
+  const initialCloseType = ["tp", "sl", "manual"].includes(trade?.closeType) ? trade.closeType : "manual";
+  const [closeType, setCloseType] = useState(initialCloseType);
   const [exitPrice, setExitPrice] = useState(trade?.exitPrice == null ? "" : String(trade.exitPrice));
-  const [result, setResult] = useState(trade?.r == null ? "" : String(trade.r));
+  const [result, setResult] = useState(
+    trade?.r == null
+      ? ""
+      : String(initialCloseType === "sl" || initialCloseType === "tp" ? Math.abs(trade.r) : trade.r)
+  );
   const [rulesFollowed, setRulesFollowed] = useState(typeof trade?.rulesFollowed === "boolean" ? trade.rulesFollowed : null);
   const [rulesNote, setRulesNote] = useState(trade?.rulesNote || "");
   const [exitScreenshots, setExitScreenshots] = useState(Array.isArray(trade?.exitScreenshots) ? trade.exitScreenshots : []);
@@ -7359,12 +7384,23 @@ function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency,
     return computePlannedRR(direction, en, sl, tp);
   }, [direction, entryPrice, stopLoss, takeProfit]);
 
-  const exitNum = exitPrice === "" ? null : parseFloat(exitPrice);
+  const hasPlan = rr.ok;
+  const manualExitNum = exitPrice === "" ? null : parseFloat(exitPrice);
+  const effectiveExit = closed && hasPlan
+    ? closeType === "tp"
+      ? parseFloat(takeProfit)
+      : closeType === "sl"
+        ? parseFloat(stopLoss)
+        : manualExitNum
+    : manualExitNum;
   const resultNum = result === "" ? null : parseFloat(result);
-  const realizedRR = closed && rr.ok && exitNum != null && !isNaN(exitNum)
-    ? computeRealizedRR(direction, parseFloat(entryPrice), parseFloat(stopLoss), exitNum)
+  const normalizedResult = resultNum == null || isNaN(resultNum)
+    ? null
+    : normalizeStrategyResultByCloseType(hasPlan ? closeType : "manual", resultNum);
+  const realizedRR = closed && hasPlan && effectiveExit != null && !isNaN(effectiveExit)
+    ? computeRealizedRR(direction, parseFloat(entryPrice), parseFloat(stopLoss), effectiveExit)
     : trade?.realizedRR ?? null;
-  const canSave = !!instrument.trim() && rr.ok && (!closed || resultNum != null && !isNaN(resultNum));
+  const canSave = !!instrument.trim() && rr.ok && (!closed || normalizedResult != null && !isNaN(normalizedResult));
 
   const addFiles = (phase, e) => {
     const files = Array.from(e.target.files || []);
@@ -7425,10 +7461,11 @@ function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency,
         screenshots
       };
       if (closed) {
-        patch.exitPrice = exitNum != null && !isNaN(exitNum) ? exitNum : null;
+        patch.closeType = hasPlan ? closeType : "manual";
+        patch.exitPrice = effectiveExit != null && !isNaN(effectiveExit) ? effectiveExit : null;
         patch.realizedRR = realizedRR;
-        patch.r = resultNum;
-        patch.outcome = resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven";
+        patch.r = normalizedResult;
+        patch.outcome = strategyResultOutcome(normalizedResult);
         patch.rulesFollowed = rulesFollowed;
         patch.rulesNote = rulesNote.trim();
         patch.exitScreenshots = exitScreenshots;
@@ -7482,17 +7519,57 @@ function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency,
       /* @__PURE__ */ jsx("textarea", { value: note, onChange: (e) => setNote(e.target.value), rows: 3, className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none mb-5", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } }),
       closed && /* @__PURE__ */ jsxs(Fragment, { children: [
         /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-3 mt-1", style: { color: BASE.inkFaint }, children: isEn ? "CLOSED TRADE RESULT" : "РЕЗУЛЬТАТ ЗАКРЫТОЙ СДЕЛКИ" }),
-        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
+        hasPlan && /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+          /* @__PURE__ */ jsx(L, { children: isEn ? "Close reason" : "Как закрылась" }),
+          /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2", children: [
+            { id: "tp", label: "TP" },
+            { id: "sl", label: "SL" },
+            { id: "manual", label: isEn ? "Manual" : "Вручную" }
+          ].map((o) => /* @__PURE__ */ jsx("button", {
+            type: "button",
+            onClick: () => setCloseType(o.id),
+            className: "py-2.5 rounded-full text-xs transition-colors",
+            style: {
+              border: `1px solid ${closeType === o.id ? accent + "55" : BASE.line}`,
+              color: closeType === o.id ? BASE.ink : BASE.inkDim,
+              background: closeType === o.id ? BASE.surface2 : "transparent"
+            },
+            children: o.label
+          }, o.id)) })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-2", children: [
           /* @__PURE__ */ jsxs("div", { children: [
             /* @__PURE__ */ jsx(L, { children: isEn ? "Exit price" : "Цена выхода" }),
-            /* @__PURE__ */ jsx("input", { value: exitPrice, onChange: (e) => setExitPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+            hasPlan && closeType !== "manual"
+              ? /* @__PURE__ */ jsx("div", { className: "py-2.5 border-b text-sm", style: { borderColor: BASE.line, color: BASE.inkDim, fontFamily: "var(--font-mono)" }, children: String(effectiveExit ?? "—") })
+              : /* @__PURE__ */ jsx("input", { value: exitPrice, onChange: (e) => setExitPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
           ] }),
           /* @__PURE__ */ jsxs("div", { children: [
-            /* @__PURE__ */ jsx(L, { children: `${isEn ? "Result" : "Результат"} (${unitSymbol(measureMode, currency)})` }),
-            /* @__PURE__ */ jsx("input", { value: result, onChange: (e) => setResult(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+            /* @__PURE__ */ jsx(L, { children: `${isEn ? "Result amount" : "Сумма результата"} (${unitSymbol(measureMode, currency)})` }),
+            /* @__PURE__ */ jsx("input", {
+              value: result,
+              onChange: (e) => setResult(e.target.value),
+              type: "number",
+              step: "any",
+              inputMode: "decimal",
+              placeholder: closeType === "manual" ? "30 / -30" : "30",
+              className: "w-full bg-transparent border-b outline-none py-2 text-sm",
+              style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
+            })
           ] })
         ] }),
-        /* @__PURE__ */ jsx("div", { className: "text-xs mb-4", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `Realized ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR —" }),
+        /* @__PURE__ */ jsx("div", {
+          className: "text-[11px] mb-4",
+          style: { color: normalizedResult == null ? BASE.inkFaint : normalizedResult < 0 ? LOSS : normalizedResult > 0 ? WIN : BASE.inkDim, fontFamily: "var(--font-mono)" },
+          children: normalizedResult == null
+            ? isEn ? "Enter the final amount" : "Укажи итоговую сумму"
+            : closeType === "sl"
+              ? `${isEn ? "SL → saved as" : "SL → будет сохранено как"} ${formatStrategyTotal(normalizedResult, measureMode, currency)}`
+              : closeType === "tp"
+                ? `${isEn ? "TP → saved as" : "TP → будет сохранено как"} ${formatStrategyTotal(normalizedResult, measureMode, currency)}`
+                : `${isEn ? "Manual → saved as entered:" : "Вручную → знак сохраняется как введён:"} ${formatStrategyTotal(normalizedResult, measureMode, currency)}`
+        }),
+        /* @__PURE__ */ jsx("div", { className: "text-xs mb-4", style: { color: realizedRR != null ? BASE.inkDim : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `Realized ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR —" }),
         /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Were the strategy rules followed?" : "Правила стратегии соблюдены?" }),
         /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
           { v: true, label: isEn ? "Yes" : "Да" },
@@ -7529,7 +7606,10 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
   const effectiveExit = hasPlan ? closeType === "tp" ? trade.takeProfit : closeType === "sl" ? trade.stopLoss : manualExit === "" ? null : parseFloat(manualExit) : manualExit === "" ? null : parseFloat(manualExit);
   const realizedRR = hasPlan && effectiveExit != null && !isNaN(effectiveExit) ? computeRealizedRR(trade.direction, trade.entryPrice, trade.stopLoss, effectiveExit) : null;
   const resultNum = result === "" ? null : parseFloat(result);
-  const canSave = resultNum != null && !isNaN(resultNum);
+  const normalizedResult = resultNum == null || isNaN(resultNum)
+    ? null
+    : normalizeStrategyResultByCloseType(hasPlan ? closeType : "manual", resultNum);
+  const canSave = normalizedResult != null && !isNaN(normalizedResult);
   const handleFiles = (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
@@ -7547,8 +7627,8 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
         closeType: hasPlan ? closeType : "manual",
         exitPrice: effectiveExit,
         realizedRR,
-        r: resultNum,
-        outcome: resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven",
+        r: normalizedResult,
+        outcome: strategyResultOutcome(normalizedResult),
         exitDate: /* @__PURE__ */ new Date(),
         rulesFollowed,
         rulesNote: rulesNote.trim(),
@@ -7574,8 +7654,28 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
       ] }),
       (!hasPlan || closeType === "manual") && /* @__PURE__ */ jsx("input", { value: manualExit, onChange: (e) => setManualExit(e.target.value), type: "number", step: "any", inputMode: "decimal", placeholder: "Exit price", className: "w-full bg-transparent border-b outline-none py-2.5 text-sm mb-4", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
       hasPlan && /* @__PURE__ */ jsx("div", { className: "text-xs mb-4", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `Realized ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR —" }),
-      /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children: `${isEn ? "Result" : "Результат"} (${unitSymbol(measureMode, currency)})` }),
-      /* @__PURE__ */ jsx("input", { value: result, onChange: (e) => setResult(e.target.value), type: "number", step: "0.1", placeholder: measureMode === "R" ? "1.5 / -1" : "150 / -80", className: "w-full bg-transparent border-b outline-none py-2.5 text-sm mb-5", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
+      /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-1.5", style: { color: BASE.inkFaint }, children: `${isEn ? "Result amount" : "Сумма результата"} (${unitSymbol(measureMode, currency)})` }),
+      /* @__PURE__ */ jsx("input", {
+        value: result,
+        onChange: (e) => setResult(e.target.value),
+        type: "number",
+        step: "0.1",
+        inputMode: "decimal",
+        placeholder: closeType === "manual" ? (measureMode === "R" ? "1.5 / -1" : "150 / -80") : (measureMode === "R" ? "1" : "30"),
+        className: "w-full bg-transparent border-b outline-none py-2.5 text-sm mb-2",
+        style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" }
+      }),
+      /* @__PURE__ */ jsx("div", {
+        className: "text-[11px] mb-5",
+        style: { color: normalizedResult == null ? BASE.inkFaint : normalizedResult < 0 ? LOSS : normalizedResult > 0 ? WIN : BASE.inkDim, fontFamily: "var(--font-mono)" },
+        children: normalizedResult == null
+          ? isEn ? "Enter the final amount" : "Укажи итоговую сумму"
+          : closeType === "sl"
+            ? `${isEn ? "SL → saved as" : "SL → будет сохранено как"} ${formatStrategyTotal(normalizedResult, measureMode, currency)}`
+            : closeType === "tp"
+              ? `${isEn ? "TP → saved as" : "TP → будет сохранено как"} ${formatStrategyTotal(normalizedResult, measureMode, currency)}`
+              : isEn ? "Manual close keeps the sign you enter" : "При ручном закрытии знак задаёшь сам"
+      }),
       /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Were the strategy rules followed?" : "Правила стратегии соблюдены?" }),
       /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
         { v: true, label: isEn ? "Yes" : "Да" }, { v: false, label: isEn ? "No" : "Нет" }, { v: null, label: isEn ? "Skip" : "Не указывать" }
@@ -7851,7 +7951,7 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
     ] }),
     activeStrategies.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Target, title: isEn ? "Create your first strategy" : "Создай первую стратегию", hint: isEn ? "Describe the rules, add technical trades, and mind.exe will calculate the sample separately." : "Опиши правила, добавляй технические сделки, а mind.exe будет отдельно считать эффективность выборки.", actionLabel: isEn ? "New strategy" : "Новая стратегия", onAction: () => setMode("create"), accent }) : /* @__PURE__ */ jsx("div", { className: "space-y-3", children: activeStrategies.map((s) => {
       const st = calculateStrategyStats(s.id, strategyTrades, journalEntries);
-      return /* @__PURE__ */ jsx("button", { onClick: () => openStrategy(s.id), className: "w-full text-left rounded-[24px] p-4 active:scale-[0.995] transition-transform", style: { background: `linear-gradient(180deg, ${BASE.surface} 0%, #070708 100%)`, border: `1px solid ${BASE.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.03)" }, children: /* @__PURE__ */ jsxs("div", { children: [
+      return /* @__PURE__ */ jsx("button", { onClick: () => openStrategy(s.id), className: "w-full text-left rounded-[20px] p-4 active:scale-[0.995] transition-transform", style: { background: BASE.surface, border: `1px solid ${BASE.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.018)" }, children: /* @__PURE__ */ jsxs("div", { children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-4", children: [
           /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
             /* @__PURE__ */ jsx("div", { className: "text-[17px] truncate", style: { color: BASE.ink, fontWeight: 500 }, children: s.name }),
@@ -11267,9 +11367,16 @@ function normalizeStrategy(raw) {
 }
 function migrateStrategyTrade(raw) {
   if (!raw || typeof raw !== "object" || !raw.id || !raw.strategyId) return null;
+  const status = raw.status === "closed" ? "closed" : "open";
+  const closeType = ["tp", "sl", "manual"].includes(raw.closeType) ? raw.closeType : null;
+  const rawResult = typeof raw.r === "number" && isFinite(raw.r) ? raw.r : null;
+  const normalizedResult = status === "closed" && rawResult != null
+    ? normalizeStrategyResultByCloseType(closeType, rawResult)
+    : rawResult;
   return {
     ...raw,
-    status: raw.status === "closed" ? "closed" : "open",
+    status,
+    closeType,
     date: raw.date instanceof Date ? raw.date : new Date(raw.date || Date.now()),
     exitDate: raw.exitDate ? raw.exitDate instanceof Date ? raw.exitDate : new Date(raw.exitDate) : null,
     screenshots: Array.isArray(raw.screenshots) ? raw.screenshots : [],
@@ -11280,7 +11387,8 @@ function migrateStrategyTrade(raw) {
     plannedRR: typeof raw.plannedRR === "number" && isFinite(raw.plannedRR) ? raw.plannedRR : null,
     exitPrice: typeof raw.exitPrice === "number" && isFinite(raw.exitPrice) ? raw.exitPrice : null,
     realizedRR: typeof raw.realizedRR === "number" && isFinite(raw.realizedRR) ? raw.realizedRR : null,
-    r: typeof raw.r === "number" && isFinite(raw.r) ? raw.r : null,
+    r: normalizedResult,
+    outcome: normalizedResult == null ? raw.outcome || null : strategyResultOutcome(normalizedResult),
     rulesFollowed: typeof raw.rulesFollowed === "boolean" ? raw.rulesFollowed : null,
     rulesNote: typeof raw.rulesNote === "string" ? raw.rulesNote : ""
   };
@@ -12858,10 +12966,16 @@ function MindExe() {
           text-rendering: optimizeLegibility;
         }
         input, textarea, select, button { font: inherit; }
-        ::selection { background: rgba(255,255,255,0.16); color: #fff; }
-        /* Референсные микроподписи: 9\u201110px, верхний регистр, широкий трекинг. */
-        .sec-cap { text-transform: uppercase; letter-spacing: 0.18em; }
-        .btn-cap { text-transform: uppercase; letter-spacing: 0.14em; }
+        * { -webkit-tap-highlight-color: transparent; }
+        button { touch-action: manipulation; }
+        input, textarea { caret-color: ${BASE.ink}; }
+        ::selection { background: rgba(255,255,255,0.14); color: #fff; }
+        /* Compact labels: technical, but without excessive dashboard-like spacing. */
+        .sec-cap { text-transform: uppercase; letter-spacing: 0.15em; }
+        .btn-cap { text-transform: uppercase; letter-spacing: 0.12em; }
+        @media (max-width: 767px) {
+          input, textarea, select { font-size: 16px !important; }
+        }
         /* Sora runs a touch wider than Space Grotesk at the same size; a small negative tracking on
            headings and figures keeps existing layouts from re-wrapping. */
         h1, h2, h3 { letter-spacing: -0.02em; }
