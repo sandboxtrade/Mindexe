@@ -9,6 +9,15 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.5
+//
+// V4.5 — Strategy Lab: редактирование direct-сделок + точные итоговые суммы;
+//        Screenshot Viewer: кнопка скачивания изображения.
+//        - существующий Strategy Trade редактируется по тому же id, без создания копии;
+//        - linked journal trades остаются source-of-truth в обычном журнале;
+//        - RESULT QUALITY: Long total / Short total / gross profit / gross loss вместо средних;
+//        - Firestore keys/schema и старые journal/media документы не менялись.
+//
 // mind.exe — V4.4.2
 //
 // V4.4.2 — полноэкранный просмотр сохранённых скриншотов.
@@ -1333,6 +1342,16 @@ function formatResult(value, measureMode, currencyCode) {
   const sign = v > 0 ? "+" : v < 0 ? "-" : "";
   const abs = groupThousands(Math.abs(v));
   return cur.prefix ? `${sign}${cur.symbol}${abs}` : `${sign}${abs} ${cur.symbol}`;
+}
+function formatStrategyTotal(value, measureMode, currencyCode) {
+  if (value === null || value === void 0 || !isFinite(value)) return "—";
+  const rounded = Math.round(value * 100) / 100;
+  const sign = rounded > 0 ? "+" : rounded < 0 ? "-" : "";
+  const abs = Math.abs(rounded);
+  const amount = abs.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  if (measureMode === "R") return `${sign}${amount}R`;
+  const cur = findCurrency(currencyCode);
+  return cur.prefix ? `${sign}${cur.symbol}${amount}` : `${sign}${amount} ${cur.symbol}`;
 }
 function formatPriceValue(v) {
   if (v == null || isNaN(v)) return "\u2014";
@@ -4213,6 +4232,43 @@ function openScreenshotPreview(src, alt = "") {
   if (!src || typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent("mindexe:preview-screenshot", { detail: { src, alt } }));
 }
+async function downloadScreenshotFile(src, alt = "mind-exe-screenshot") {
+  if (!src || typeof document === "undefined") return;
+  const safeName = String(alt || "mind-exe-screenshot")
+    .replace(/[^\w\u0400-\u04FF.-]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80) || "mind-exe-screenshot";
+  let href = src;
+  let revoke = null;
+  let ext = "png";
+  try {
+    const match = /^data:image\/([a-zA-Z0-9.+-]+);/.exec(src);
+    if (match?.[1]) {
+      const type = match[1].toLowerCase();
+      ext = type === "jpeg" ? "jpg" : type === "svg+xml" ? "svg" : type;
+    }
+    const response = await fetch(src);
+    const blob = await response.blob();
+    if (blob?.type?.startsWith("image/")) {
+      const type = blob.type.split("/")[1]?.toLowerCase();
+      if (type) ext = type === "jpeg" ? "jpg" : type === "svg+xml" ? "svg" : type;
+      href = URL.createObjectURL(blob);
+      revoke = href;
+    }
+  } catch (_) {
+  }
+  try {
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = `${safeName}.${ext}`;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } finally {
+    if (revoke) setTimeout(() => URL.revokeObjectURL(revoke), 1500);
+  }
+}
 function ScreenshotPreviewHost() {
   const [preview, setPreview] = useState(null);
 
@@ -4265,21 +4321,39 @@ function ScreenshotPreviewHost() {
               style: { color: BASE.inkFaint },
               children: preview.alt || "Screenshot"
             }),
-            /* @__PURE__ */ jsx("button", {
-              type: "button",
-              onClick: (e) => {
-                e.stopPropagation();
-                setPreview(null);
-              },
-              "aria-label": "Закрыть",
-              className: "w-10 h-10 rounded-full flex items-center justify-center shrink-0 active:scale-[0.96]",
-              style: {
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.06)",
-                color: BASE.ink
-              },
-              children: /* @__PURE__ */ jsx(XIcon, { size: 19 })
-            })
+            /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
+              /* @__PURE__ */ jsx("button", {
+                type: "button",
+                onClick: async (e) => {
+                  e.stopPropagation();
+                  await downloadScreenshotFile(preview.src, preview.alt || "mind-exe-screenshot");
+                },
+                "aria-label": "Скачать",
+                title: "Скачать",
+                className: "w-10 h-10 rounded-full flex items-center justify-center active:scale-[0.96]",
+                style: {
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: BASE.ink
+                },
+                children: /* @__PURE__ */ jsx(Download, { size: 18 })
+              }),
+              /* @__PURE__ */ jsx("button", {
+                type: "button",
+                onClick: (e) => {
+                  e.stopPropagation();
+                  setPreview(null);
+                },
+                "aria-label": "Закрыть",
+                className: "w-10 h-10 rounded-full flex items-center justify-center active:scale-[0.96]",
+                style: {
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: BASE.ink
+                },
+                children: /* @__PURE__ */ jsx(XIcon, { size: 19 })
+              })
+            ] })
           ]
         }),
         /* @__PURE__ */ jsx("div", {
@@ -6990,6 +7064,9 @@ function calculateStrategyStats(strategyId, strategyTrades, journalEntries) {
   });
   const longClosed = closed.filter((t) => t.direction === "Long");
   const shortClosed = closed.filter((t) => t.direction === "Short");
+  const longTotal = longClosed.reduce((s, t) => s + t.r, 0);
+  const shortTotal = shortClosed.reduce((s, t) => s + t.r, 0);
+  const grossLossSigned = losses.reduce((s, t) => s + t.r, 0);
   const avgGroup = (arr) => arr.length ? arr.reduce((s, t) => s + t.r, 0) / arr.length : null;
   const rulesKnown = closed.filter((t) => typeof t.rulesFollowed === "boolean");
   const followed = rulesKnown.filter((t) => t.rulesFollowed);
@@ -7008,10 +7085,20 @@ function calculateStrategyStats(strategyId, strategyTrades, journalEntries) {
     avgR: avgR == null ? null : Math.round(avgR * 100) / 100,
     avgWin: avgWin == null ? null : Math.round(avgWin * 100) / 100,
     avgLoss: avgLoss == null ? null : Math.round(avgLoss * 100) / 100,
+    grossProfit: Math.round(grossProfit * 100) / 100,
+    grossLoss: Math.round(grossLossSigned * 100) / 100,
     profitFactor: profitFactor === Infinity ? "Infinity" : profitFactor == null ? null : Math.round(profitFactor * 100) / 100,
     maxDrawdown: Math.round(maxDrawdown * 100) / 100,
-    long: { count: longClosed.length, avgR: avgGroup(longClosed) == null ? null : Math.round(avgGroup(longClosed) * 100) / 100 },
-    short: { count: shortClosed.length, avgR: avgGroup(shortClosed) == null ? null : Math.round(avgGroup(shortClosed) * 100) / 100 },
+    long: {
+      count: longClosed.length,
+      totalR: Math.round(longTotal * 100) / 100,
+      avgR: avgGroup(longClosed) == null ? null : Math.round(avgGroup(longClosed) * 100) / 100
+    },
+    short: {
+      count: shortClosed.length,
+      totalR: Math.round(shortTotal * 100) / 100,
+      avgR: avgGroup(shortClosed) == null ? null : Math.round(avgGroup(shortClosed) * 100) / 100
+    },
     rules: {
       known: rulesKnown.length,
       followed: followed.length,
@@ -7240,6 +7327,194 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
     ] })
   ] });
 }
+function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCancel, onSave }) {
+  const isEn = lang === "en";
+  const closed = !!trade && isEntryClosed(trade);
+  const [instrument, setInstrument] = useState(trade?.instrument || "");
+  const [direction, setDirection] = useState(trade?.direction === "Short" ? "Short" : "Long");
+  const [timeframe, setTimeframe] = useState(trade?.timeframe || "");
+  const [entryPrice, setEntryPrice] = useState(trade?.entryPrice == null ? "" : String(trade.entryPrice));
+  const [stopLoss, setStopLoss] = useState(trade?.stopLoss == null ? "" : String(trade.stopLoss));
+  const [takeProfit, setTakeProfit] = useState(trade?.takeProfit == null ? "" : String(trade.takeProfit));
+  const [note, setNote] = useState(trade?.note || "");
+  const [screenshots, setScreenshots] = useState(Array.isArray(trade?.screenshots) ? trade.screenshots : []);
+  const [exitPrice, setExitPrice] = useState(trade?.exitPrice == null ? "" : String(trade.exitPrice));
+  const [result, setResult] = useState(trade?.r == null ? "" : String(trade.r));
+  const [rulesFollowed, setRulesFollowed] = useState(typeof trade?.rulesFollowed === "boolean" ? trade.rulesFollowed : null);
+  const [rulesNote, setRulesNote] = useState(trade?.rulesNote || "");
+  const [exitScreenshots, setExitScreenshots] = useState(Array.isArray(trade?.exitScreenshots) ? trade.exitScreenshots : []);
+  const [saving, setSaving] = useState(false);
+  const entryFileRef = useRef(null);
+  const exitFileRef = useRef(null);
+  const MAX_SHOTS = 4;
+
+  const instrumentOptions = useMemo(
+    () => customInstruments.length ? [{ category: isEn ? "Custom" : "Свои", items: customInstruments }, ...INSTRUMENTS] : INSTRUMENTS,
+    [customInstruments, isEn]
+  );
+
+  const rr = useMemo(() => {
+    const en = parseFloat(entryPrice), sl = parseFloat(stopLoss), tp = parseFloat(takeProfit);
+    if ([en, sl, tp].some((v) => isNaN(v))) return { ok: false, error: null };
+    return computePlannedRR(direction, en, sl, tp);
+  }, [direction, entryPrice, stopLoss, takeProfit]);
+
+  const exitNum = exitPrice === "" ? null : parseFloat(exitPrice);
+  const resultNum = result === "" ? null : parseFloat(result);
+  const realizedRR = closed && rr.ok && exitNum != null && !isNaN(exitNum)
+    ? computeRealizedRR(direction, parseFloat(entryPrice), parseFloat(stopLoss), exitNum)
+    : trade?.realizedRR ?? null;
+  const canSave = !!instrument.trim() && rr.ok && (!closed || resultNum != null && !isNaN(resultNum));
+
+  const addFiles = (phase, e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    const current = phase === "entry" ? screenshots : exitScreenshots;
+    const setter = phase === "entry" ? setScreenshots : setExitScreenshots;
+    files.slice(0, Math.max(0, MAX_SHOTS - current.length)).forEach((file) => {
+      if (file.size > 15 * 1024 * 1024) {
+        notify?.(isEn ? "Image is too large" : "Скриншот слишком большой");
+        return;
+      }
+      compressImageFile(file)
+        .then((dataUrl) => setter((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev))
+        .catch(() => notify?.(isEn ? "Could not process image" : "Не удалось обработать изображение"));
+    });
+  };
+
+  const ShotEditor = ({ title, items, setItems, inputRef, phase }) => /* @__PURE__ */ jsxs("div", { className: "mb-5", children: [
+    /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: title }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [
+      items.map((src, i) => /* @__PURE__ */ jsxs("div", { className: "relative w-20 h-20 rounded-xl overflow-hidden", style: { border: `1px solid ${BASE.line}` }, children: [
+        /* @__PURE__ */ jsx(ScreenshotImage, { src, className: "w-full h-full object-cover", alt: `${phase} ${i + 1}` }),
+        /* @__PURE__ */ jsx("button", {
+          type: "button",
+          onClick: (e) => {
+            e.stopPropagation();
+            setItems((prev) => prev.filter((_, idx) => idx !== i));
+          },
+          className: "absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center",
+          style: { background: "rgba(0,0,0,.72)" },
+          children: /* @__PURE__ */ jsx(XIcon, { size: 11, color: "#fff" })
+        })
+      ] }, `${phase}_${i}`)),
+      items.length < MAX_SHOTS && /* @__PURE__ */ jsx("button", {
+        type: "button",
+        onClick: () => inputRef.current?.click(),
+        className: "w-20 h-20 rounded-xl flex items-center justify-center",
+        style: { border: `1px dashed ${BASE.line}`, color: BASE.inkDim },
+        children: /* @__PURE__ */ jsx(ImagePlus, { size: 18 })
+      }),
+      /* @__PURE__ */ jsx("input", { ref: inputRef, type: "file", accept: "image/*", multiple: true, className: "hidden", onChange: (e) => addFiles(phase, e) })
+    ] })
+  ] });
+
+  const handleSubmit = async () => {
+    if (!canSave || saving) return;
+    setSaving(true);
+    try {
+      const patch = {
+        instrument: instrument.trim(),
+        direction,
+        timeframe: timeframe.trim() || null,
+        entryPrice: parseFloat(entryPrice),
+        stopLoss: parseFloat(stopLoss),
+        takeProfit: parseFloat(takeProfit),
+        plannedRR: rr.rr,
+        note: note.trim(),
+        screenshots
+      };
+      if (closed) {
+        patch.exitPrice = exitNum != null && !isNaN(exitNum) ? exitNum : null;
+        patch.realizedRR = realizedRR;
+        patch.r = resultNum;
+        patch.outcome = resultNum > 0 ? "Win" : resultNum < 0 ? "Loss" : "Breakeven";
+        patch.rulesFollowed = rulesFollowed;
+        patch.rulesNote = rulesNote.trim();
+        patch.exitScreenshots = exitScreenshots;
+      }
+      await onSave(patch);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const L = ({ children }) => /* @__PURE__ */ jsx("label", {
+    className: "block text-[10px] uppercase tracking-[0.14em] mb-1.5",
+    style: { color: BASE.inkFaint },
+    children
+  });
+
+  if (!trade) return null;
+
+  return /* @__PURE__ */ jsxs("div", { children: [
+    /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 mb-1", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "w-9 h-9 rounded-full flex items-center justify-center", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: /* @__PURE__ */ jsx(ChevronLeft, { size: 16 }) }),
+      /* @__PURE__ */ jsx("h2", { className: "sec-cap text-[10px]", style: { color: BASE.inkDim }, children: isEn ? "EDIT STRATEGY TRADE" : "РЕДАКТИРОВАНИЕ СДЕЛКИ" })
+    ] }),
+    /* @__PURE__ */ jsx("p", { className: "text-xs mb-5 pl-11", style: { color: BASE.inkFaint }, children: strategy?.name || "" }),
+    /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
+      /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx(L, { children: isEn ? "Instrument" : "Инструмент" }),
+          /* @__PURE__ */ jsx(PickerField, { value: instrument, onChange: setInstrument, options: instrumentOptions, placeholder: isEn ? "Select" : "Выбрать", accent, allowCustom: true, mono: true, onCustomAdd: onAddCustomInstrument })
+        ] }),
+        /* @__PURE__ */ jsxs("div", { children: [
+          /* @__PURE__ */ jsx(L, { children: isEn ? "Timeframe" : "Таймфрейм" }),
+          /* @__PURE__ */ jsx("input", { value: timeframe, onChange: (e) => setTimeframe(e.target.value), placeholder: "M15", maxLength: 12, className: "w-full bg-transparent border-b outline-none py-2.5 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxs("div", { className: "mb-4", children: [
+        /* @__PURE__ */ jsx(L, { children: isEn ? "Direction" : "Направление" }),
+        /* @__PURE__ */ jsx("div", { className: "flex gap-2", children: ["Long", "Short"].map((d) => /* @__PURE__ */ jsx("button", { type: "button", onClick: () => setDirection(d), className: "flex-1 py-2 rounded-full text-sm", style: { border: `1px solid ${direction === d ? accent + "60" : BASE.line}`, background: direction === d ? `${accent}12` : "transparent", color: direction === d ? accent : BASE.inkDim }, children: d }, d)) })
+      ] }),
+      /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-3 mb-2", children: [
+        ["Entry", entryPrice, setEntryPrice],
+        ["SL", stopLoss, setStopLoss],
+        ["TP", takeProfit, setTakeProfit]
+      ].map(([label, value, setter]) => /* @__PURE__ */ jsxs("div", { children: [
+        /* @__PURE__ */ jsx(L, { children: label }),
+        /* @__PURE__ */ jsx("input", { value, onChange: (e) => setter(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+      ] }, label)) }),
+      /* @__PURE__ */ jsx("div", { className: "text-xs mb-5", style: { color: rr.ok ? accent : rr.error ? LOSS : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: rr.ok ? `Planned RR 1:${rr.rr.toFixed(2)}` : rr.error || (isEn ? "Entry, SL and TP are required" : "Укажи Entry, SL и TP") }),
+      /* @__PURE__ */ jsx(ShotEditor, { title: isEn ? "Entry screenshots" : "Скриншоты входа", items: screenshots, setItems: setScreenshots, inputRef: entryFileRef, phase: "entry" }),
+      /* @__PURE__ */ jsx(L, { children: isEn ? "Technical note (optional)" : "Технический комментарий (необязательно)" }),
+      /* @__PURE__ */ jsx("textarea", { value: note, onChange: (e) => setNote(e.target.value), rows: 3, className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none mb-5", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } }),
+      closed && /* @__PURE__ */ jsxs(Fragment, { children: [
+        /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-3 mt-1", style: { color: BASE.inkFaint }, children: isEn ? "CLOSED TRADE RESULT" : "РЕЗУЛЬТАТ ЗАКРЫТОЙ СДЕЛКИ" }),
+        /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-2 gap-3 mb-4", children: [
+          /* @__PURE__ */ jsxs("div", { children: [
+            /* @__PURE__ */ jsx(L, { children: isEn ? "Exit price" : "Цена выхода" }),
+            /* @__PURE__ */ jsx("input", { value: exitPrice, onChange: (e) => setExitPrice(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+          ] }),
+          /* @__PURE__ */ jsxs("div", { children: [
+            /* @__PURE__ */ jsx(L, { children: `${isEn ? "Result" : "Результат"} (${unitSymbol(measureMode, currency)})` }),
+            /* @__PURE__ */ jsx("input", { value: result, onChange: (e) => setResult(e.target.value), type: "number", step: "any", inputMode: "decimal", className: "w-full bg-transparent border-b outline-none py-2 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } })
+          ] })
+        ] }),
+        /* @__PURE__ */ jsx("div", { className: "text-xs mb-4", style: { color: realizedRR != null ? accent : BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: realizedRR != null ? `Realized ${realizedRR >= 0 ? "+" : ""}${realizedRR.toFixed(2)}R` : "Realized RR —" }),
+        /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-2", style: { color: BASE.inkFaint }, children: isEn ? "Were the strategy rules followed?" : "Правила стратегии соблюдены?" }),
+        /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 gap-2 mb-4", children: [
+          { v: true, label: isEn ? "Yes" : "Да" },
+          { v: false, label: isEn ? "No" : "Нет" },
+          { v: null, label: isEn ? "Skip" : "Не указывать" }
+        ].map((o, i) => /* @__PURE__ */ jsx("button", { type: "button", onClick: () => setRulesFollowed(o.v), className: "py-2 rounded-full text-xs", style: { border: `1px solid ${rulesFollowed === o.v ? accent + "60" : BASE.line}`, color: rulesFollowed === o.v ? accent : BASE.inkDim, background: rulesFollowed === o.v ? `${accent}10` : "transparent" }, children: o.label }, i)) }),
+        rulesFollowed === false && /* @__PURE__ */ jsx("textarea", { value: rulesNote, onChange: (e) => setRulesNote(e.target.value), rows: 2, placeholder: isEn ? "What exactly was broken?" : "Что именно было нарушено?", className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none mb-4", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } }),
+        /* @__PURE__ */ jsx(ShotEditor, { title: isEn ? "Exit screenshots" : "Скриншоты выхода", items: exitScreenshots, setItems: setExitScreenshots, inputRef: exitFileRef, phase: "exit" })
+      ] })
+    ] }) }),
+    /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", {
+        disabled: !canSave || saving,
+        onClick: handleSubmit,
+        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
+        children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Save changes" : "Сохранить изменения"
+      })
+    ] })
+  ] });
+}
 function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang, onCancel, onSave }) {
   const isEn = lang === "en";
   const [closeType, setCloseType] = useState("manual");
@@ -7328,7 +7603,7 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
     ] })
   ] });
 }
-function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCreateStrategy, onUpdateStrategy, onDeleteStrategy, onCreateTrade, onCloseTrade }) {
+function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accent, measureMode, currency, customInstruments, onAddCustomInstrument, notify, lang, onCreateStrategy, onUpdateStrategy, onDeleteStrategy, onCreateTrade, onUpdateTrade, onCloseTrade }) {
   const isEn = lang === "en";
   const [mode, setMode] = useState("list");
   const [selectedId, setSelectedId] = useState(null);
@@ -7364,6 +7639,32 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
     const ok = await onCreateTrade(trade);
     if (ok) setMode("detail");
   } });
+  if (mode === "editTrade" && selected) {
+    const trade = strategyTrades.find((t) => t.id === selectedTradeId) || null;
+    return /* @__PURE__ */ jsx(StrategyTradeEditForm, {
+      trade,
+      strategy: selected,
+      accent,
+      measureMode,
+      currency,
+      customInstruments,
+      onAddCustomInstrument,
+      notify,
+      lang,
+      onCancel: () => {
+        setSelectedTradeId(null);
+        setMode("detail");
+      },
+      onSave: async (patch) => {
+        const ok = await onUpdateTrade(selectedTradeId, patch);
+        if (ok) {
+          setSelectedTradeId(null);
+          setMode("detail");
+        }
+        return ok;
+      }
+    });
+  }
   if (mode === "closeTrade" && selected) {
     const trade = strategyTrades.find((t) => t.id === selectedTradeId) || null;
     return /* @__PURE__ */ jsx(StrategyCloseTrade, { trade, accent, measureMode, currency, notify, lang, onCancel: () => setMode("detail"), onSave: async (patch) => {
@@ -7452,10 +7753,29 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
               typeof trade.rulesFollowed === "boolean" && /* @__PURE__ */ jsx("span", { style: { color: trade.rulesFollowed ? WIN : LOSS }, children: trade.rulesFollowed ? isEn ? "rules ✓" : "по правилам ✓" : isEn ? "rules broken" : "нарушение правил" })
             ] }),
             (trade.screenshots?.length > 0 || trade.exitScreenshots?.length > 0) && /* @__PURE__ */ jsx("div", { className: "flex gap-2 mt-3 hscroll", children: [...(trade.screenshots || []), ...(trade.exitScreenshots || [])].slice(0, 6).map((src, i) => /* @__PURE__ */ jsx(ScreenshotImage, { src, className: "w-16 h-16 rounded-xl object-cover shrink-0", style: { border: `1px solid ${BASE.line}` }, alt: `strategy shot ${i + 1}` }, i)) }),
-            trade.__source === "strategy" && !closed && /* @__PURE__ */ jsx("button", { onClick: () => {
-              setSelectedTradeId(trade.id);
-              setMode("closeTrade");
-            }, className: "mt-3 w-full py-2 rounded-full text-xs", style: { border: `1px solid ${accent}55`, color: accent, background: `${accent}0B` }, children: isEn ? "Close trade" : "Закрыть сделку" })
+            trade.__source === "strategy" && /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-3", children: [
+              /* @__PURE__ */ jsxs("button", {
+                onClick: () => {
+                  setSelectedTradeId(trade.id);
+                  setMode("editTrade");
+                },
+                className: "flex-1 py-2 rounded-full text-xs flex items-center justify-center gap-1.5",
+                style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, background: BASE.surface2 },
+                children: [
+                  /* @__PURE__ */ jsx(PenLine, { size: 12 }),
+                  isEn ? "Edit" : "Редактировать"
+                ]
+              }),
+              !closed && /* @__PURE__ */ jsx("button", {
+                onClick: () => {
+                  setSelectedTradeId(trade.id);
+                  setMode("closeTrade");
+                },
+                className: "flex-1 py-2 rounded-full text-xs",
+                style: { border: `1px solid ${accent}55`, color: accent, background: `${accent}0B` },
+                children: isEn ? "Close trade" : "Закрыть сделку"
+              })
+            ] })
           ] }, `${trade.__source}_${trade.id}`);
         }) })
       ] }),
@@ -7464,11 +7784,11 @@ function StrategyLab({ strategies, strategyTrades, journalEntries, loaded, accen
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.14em] mb-3", style: { color: BASE.inkFaint }, children: isEn ? "RESULT QUALITY" : "КАЧЕСТВО РЕЗУЛЬТАТА" }),
           /* @__PURE__ */ jsx("div", { className: "grid grid-cols-2 gap-y-3 gap-x-5 text-sm", children: [
             [isEn ? "Closed trades" : "Закрытых", stats.closedTrades],
-            [isEn ? "Total result" : "Общий результат", formatResult(stats.totalR, measureMode, currency)],
-            [isEn ? "Average win" : "Средний плюс", stats.avgWin == null ? "—" : formatResult(stats.avgWin, measureMode, currency)],
-            [isEn ? "Average loss" : "Средний минус", stats.avgLoss == null ? "—" : formatResult(stats.avgLoss, measureMode, currency)],
-            [isEn ? "Long avg" : "Long среднее", stats.long.avgR == null ? "—" : formatResult(stats.long.avgR, measureMode, currency)],
-            [isEn ? "Short avg" : "Short среднее", stats.short.avgR == null ? "—" : formatResult(stats.short.avgR, measureMode, currency)]
+            [isEn ? "Total result" : "Общий результат", formatStrategyTotal(stats.totalR, measureMode, currency)],
+            [isEn ? "Total profit" : "Общая прибыль", formatStrategyTotal(stats.grossProfit, measureMode, currency)],
+            [isEn ? "Total loss" : "Общий убыток", formatStrategyTotal(stats.grossLoss, measureMode, currency)],
+            [isEn ? "Long total" : "Long итог", formatStrategyTotal(stats.long.totalR, measureMode, currency)],
+            [isEn ? "Short total" : "Short итог", formatStrategyTotal(stats.short.totalR, measureMode, currency)]
           ].map(([label, value]) => /* @__PURE__ */ jsxs("div", { children: [
             /* @__PURE__ */ jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: label }),
             /* @__PURE__ */ jsx("div", { style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: value })
@@ -12177,6 +12497,31 @@ function MindExe() {
       return false;
     }
   };
+  const handleUpdateStrategyTrade = async (tradeId, patch) => {
+    const current = strategyTrades.find((t) => t.id === tradeId);
+    if (!current || !strategyCanPersistRef.current || !userId) return false;
+    const nextTrade = migrateStrategyTrade({ ...current, ...patch, id: current.id, strategyId: current.strategyId, source: current.source || "strategy" });
+    if (!nextTrade) return false;
+    const phases = nextTrade.status === "closed" ? ["entry", "exit"] : ["entry"];
+    try {
+      const saveResult = await caWithTimeout(
+        saveStrategyTradeRecord(userId, nextTrade, { mediaPhases: phases }),
+        15e3,
+        "strategy_trade_update_timeout"
+      );
+      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? nextTrade : t));
+      if (saveResult?.mediaErrors?.length) {
+        showToast(lang === "en" ? "Trade updated, but one or more screenshots did not upload" : "Сделка обновлена, но часть скриншотов не загрузилась");
+      } else {
+        showToast(lang === "en" ? "Strategy trade updated" : "Тестовая сделка обновлена");
+      }
+      return true;
+    } catch (e) {
+      console.error("mind.exe: strategy trade update failed", e);
+      showToast(lang === "en" ? "Could not update strategy trade" : "Не удалось обновить тестовую сделку");
+      return false;
+    }
+  };
   const handleCloseStrategyTrade = async (tradeId, patch) => {
     const current = strategyTrades.find((t) => t.id === tradeId);
     if (!current || !strategyCanPersistRef.current || !userId) return false;
@@ -12917,6 +13262,7 @@ function MindExe() {
             onUpdateStrategy: handleUpdateStrategy,
             onDeleteStrategy: handleDeleteStrategy,
             onCreateTrade: handleCreateStrategyTrade,
+            onUpdateTrade: handleUpdateStrategyTrade,
             onCloseTrade: handleCloseStrategyTrade
           }),
           tab === "calibration" && /* @__PURE__ */ jsx(Calibration, { accent, onComplete: setLastCalibration, lang, t, entries, analytics, userId, strategyNote }),
