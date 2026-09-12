@@ -1,6 +1,6 @@
 # MIND.EXE — handoff to next chat
 
-Current release: **v4.8.3.1**
+Current release: **v4.8.5**
 
 ## Current architecture
 
@@ -12,7 +12,7 @@ Current release: **v4.8.3.1**
 - Journal screenshots use split per-image documents with manifest-last activation.
 - Strategy Lab index uses revisioned Strategy Store with CAS.
 - Direct Strategy Lab trades use per-trade CAS revisions.
-- 62 zero-dependency Node regression checks.
+- 67 zero-dependency Node regression checks.
 
 ## Core modules
 
@@ -38,6 +38,9 @@ Current release: **v4.8.3.1**
 - `features/settings/settings-ui.js`
 - `features/coach/coach-ui.js`
 - `features/calibration/calibration-ui.js`
+- `features/dashboard/dashboard-ui.js`
+- `features/auth/auth-ui.js`
+- `ui/app-shell.js`
 
 ## Data-safety invariants
 
@@ -55,6 +58,38 @@ Do not casually change:
 Always run `npm test` before release.
 
 
+
+
+
+## What v4.8.5 changed
+
+Auth hardening after the v4.8.4 modular build passed the real two-device scenario. No profile/Strategy persistence schema or key changed.
+
+- `useAuth()` now keeps a long-lived Firebase `onAuthStateChanged` subscription instead of relying on a mostly one-shot session lookup.
+- Google auth stays popup-first in normal browsers; installed PWAs use redirect and popup-blocked/unsupported environments fall back to redirect.
+- `getRedirectResult()` is consumed on startup so the returning OAuth flow is finalized explicitly.
+- A pending legacy-local-data migration gate is stored in `sessionStorage` before Google redirect and restored before profile loading, preventing a redirect from bypassing the existing migration prompt.
+- Registration no longer reports failure solely because `updateProfile(displayName)` failed after Firebase already created/authenticated the account; username fallback remains deterministic from the synthetic email.
+- New pure `core/auth-runtime.js` contains environment/normalization/session helpers.
+- Regression suite: **67 checks pass**.
+- `index.html` app cache-buster is `?v=4.8.5`.
+
+Real-device follow-up: smoke-test Google sign-in once in desktop browser and once from installed iPhone PWA. Firebase OAuth redirect behavior cannot be fully proven by the Node suite.
+
+## What v4.8.4 changed
+
+Continued modularization after real two-device smoke testing passed on v4.8.3.1. This stage intentionally did **not** alter profile persistence, Strategy persistence, CAS/recovery, auth service semantics or Firestore keys.
+
+- Home, Patterns/Dynamics and Challenge UI moved to `features/dashboard/dashboard-ui.js`.
+- Dashboard-owned Home advice/market cache helpers moved with the UI and receive the existing Firestore key/value adapter through `configureDashboardData({ storageGet, storageSet })`.
+- Login/register/Google button UI, legacy-migration prompt and boot intro moved to `features/auth/auth-ui.js`; `authService`, Firebase provider creation and `useAuth()` remain in `app.js` unchanged.
+- Splash, blocking profile-load/conflict screen, mobile/desktop navigation, wallet sheet and React ErrorBoundary moved to `ui/app-shell.js`.
+- `app.js` dropped from about 5,381 to **3,470 lines**.
+- Critical profile/Strategy persistence + auth-service section was compared against v4.8.3.1 and remains byte-for-byte unchanged.
+- `npm test`: **64 checks pass**. New checks guard stage 9–11 module boundaries and required runtime dependencies.
+- `index.html` app cache-buster is `?v=4.8.4`.
+
+The next refactor should not chase a lower line count mechanically. The remaining `app.js` is now mostly `MindExe` orchestration, persistence/recovery/backup wiring and auth session logic. Prefer real browser/Firebase E2E coverage before splitting those pieces.
 
 ## What v4.8.3.1 fixed
 

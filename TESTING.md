@@ -1,4 +1,4 @@
-# MIND.EXE regression tests — v4.8.3.1
+# MIND.EXE regression tests — v4.8.5
 
 Перед крупными правками запускай:
 
@@ -21,7 +21,7 @@ npm test
 - passive second device не подменяет сохранённый cloud `anonId` своим локальным ID и не создаёт ложную profile revision;
 - desktop route новой сделки подписан явно как `Добавить сделку` / `Add trade`.
 
-Текущий suite: **62 regression checks**.
+Текущий suite: **67 regression checks**.
 
 
 
@@ -107,3 +107,32 @@ Persistence/Auth/CAS semantics этим этапом не менялись.
 Перед релизом дополнительно выполнен статический TypeScript-аудит JavaScript-кода на несуществующие идентификаторы (`TS2304` / `TS2552`): ошибок нет. Это отдельная release-проверка; основной `npm test` остаётся zero-dependency.
 
 Для изменённых модулей увеличены `?v=` cache-busters. Это критично для iOS/Safari после v4.8.3, потому что иначе браузер может продолжать использовать старые сломанные тела модулей даже после замены файлов на сервере.
+
+
+## Modular refactor — v4.8.4
+
+Этапы 9–11 вынесли из `app.js` только presentation/runtime UI, не меняя persistence/auth semantics:
+
+- Home + Dynamics/Patterns + Challenge → `features/dashboard/dashboard-ui.js`;
+- Auth/Login/legacy prompt/boot intro UI → `features/auth/auth-ui.js`;
+- splash, mobile/desktop navigation, wallet sheet, blocking load-error screen и React ErrorBoundary → `ui/app-shell.js`;
+- dashboard получает `storageGet/storageSet` через явный `configureDashboardData(...)`;
+- `app.js` уменьшен примерно с 5,381 до 3,470 строк;
+- критический блок profile/Strategy persistence + auth service/useAuth проверен побайтовым сравнением с v4.8.3.1 и не менялся;
+- regression suite расширен до **64 checks** и отдельно охраняет новые границы модулей и их runtime-зависимости.
+
+`SCHEMA_VERSION`, canonical keys, CAS/revision logic и Firestore path shape не менялись.
+
+
+## Auth hardening — v4.8.5
+
+Добавлены проверки, что:
+
+- `useAuth()` использует долгоживущий Firebase `onAuthStateChanged`, а не только one-shot чтение сессии;
+- auth observer корректно отписывается при unmount;
+- Google popup остаётся основным desktop-путём, а установленный PWA и popup-blocked окружение переходят на redirect;
+- redirect result явно завершается через Firebase после возврата в приложение;
+- legacy migration gate переживает redirect и не позволяет profile loader стартовать раньше времени;
+- transient `updateProfile(displayName)` после уже успешного `createUser` больше не превращает регистрацию в ложную ошибку.
+
+Перед релизом Google redirect всё равно требует реального smoke-test на iPhone/PWA: Node-suite проверяет wiring и инварианты, но не может эмулировать браузерный Firebase OAuth redirect.

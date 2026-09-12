@@ -14,6 +14,7 @@ const firestoreStoragePath = path.join(root, "core", "firestore-storage.js");
 const journalMediaPath = path.join(root, "core", "journal-media.js");
 const profileStorePath = path.join(root, "core", "profile-store.js");
 const strategyStorePath = path.join(root, "core", "strategy-store.js");
+const authRuntimePath = path.join(root, "core", "auth-runtime.js");
 const appConfigPath = path.join(root, "config", "app-config.js");
 const stringsPath = path.join(root, "i18n", "strings.js");
 const traderAnalyticsPath = path.join(root, "analytics", "trader-analytics.js");
@@ -29,6 +30,9 @@ const brandUiPath = path.join(root, "ui", "brand.js");
 const settingsUiPath = path.join(root, "features", "settings", "settings-ui.js");
 const coachUiPath = path.join(root, "features", "coach", "coach-ui.js");
 const calibrationUiPath = path.join(root, "features", "calibration", "calibration-ui.js");
+const dashboardUiPath = path.join(root, "features", "dashboard", "dashboard-ui.js");
+const authUiPath = path.join(root, "features", "auth", "auth-ui.js");
+const appShellPath = path.join(root, "ui", "app-shell.js");
 const appSource = fs.readFileSync(appPath, "utf8");
 const tradeMathSource = fs.readFileSync(tradeMathPath, "utf8");
 const statsSource = fs.readFileSync(statsPath, "utf8");
@@ -37,6 +41,7 @@ const firestoreStorageSource = fs.readFileSync(firestoreStoragePath, "utf8");
 const journalMediaSource = fs.readFileSync(journalMediaPath, "utf8");
 const profileStoreSource = fs.readFileSync(profileStorePath, "utf8");
 const strategyStoreSource = fs.readFileSync(strategyStorePath, "utf8");
+const authRuntimeSource = fs.readFileSync(authRuntimePath, "utf8");
 const appConfigSource = fs.readFileSync(appConfigPath, "utf8");
 const stringsSource = fs.readFileSync(stringsPath, "utf8");
 const traderAnalyticsSource = fs.readFileSync(traderAnalyticsPath, "utf8");
@@ -52,7 +57,10 @@ const brandUiSource = fs.readFileSync(brandUiPath, "utf8");
 const settingsUiSource = fs.readFileSync(settingsUiPath, "utf8");
 const coachUiSource = fs.readFileSync(coachUiPath, "utf8");
 const calibrationUiSource = fs.readFileSync(calibrationUiPath, "utf8");
-const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}`;
+const dashboardUiSource = fs.readFileSync(dashboardUiPath, "utf8");
+const authUiSource = fs.readFileSync(authUiPath, "utf8");
+const appShellSource = fs.readFileSync(appShellPath, "utf8");
+const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${authRuntimeSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}\n${dashboardUiSource}\n${authUiSource}\n${appShellSource}`;
 
 let passed = 0;
 const failures = [];
@@ -293,8 +301,88 @@ await test("modular extraction keeps every moved runtime dependency local or imp
   ok(aiContext.includes("entriesWithRealizedRR") && aiContext.includes("st_median"), "AI context imports are incomplete");
   ok(review.includes("function emotionImpactStats") && review.includes("const EMOTION_IMPACT_HIGH"), "review module lost emotion-impact helpers");
   ok(strings.includes("function pluralRu"), "localized formatter dependency missing");
-  ok(appSource.includes("async function getHomeAdvice") && appSource.includes("async function getMarketSnapshot"), "Home cache helpers disappeared from app orchestration");
+  ok(dashboardUiSource.includes("async function getHomeAdvice") && dashboardUiSource.includes("async function getMarketSnapshot") && dashboardUiSource.includes("export function configureDashboardData"), "dashboard module lost Home cache helpers/storage adapter");
   ok(appSource.includes("journalMediaStore.keys.entry(userId, id)"), "legacy media migration bypasses journal-media key adapter");
+});
+
+await test("stage 9-11 dashboard/auth/shell UI stays extracted from app.js", () => {
+  for (const token of [
+    "function Home(", "function Patterns(", "function Challenge(",
+    "function AuthScreen(", "function LegacyMigratePrompt(", "function BootIntro(",
+    "function BootLoading(", "function ProfileLoadErrorScreen(", "function DesktopSidebar(",
+    "class AppErrorBoundary extends Component"
+  ]) ok(!appSource.includes(token), `stage 9-11 implementation drifted back into app.js: ${token}`);
+
+  for (const token of [
+    'from "./features/dashboard/dashboard-ui.js?v=1"',
+    'from "./features/auth/auth-ui.js?v=1"',
+    'from "./ui/app-shell.js?v=1"'
+  ]) ok(appSource.includes(token), `stage 9-11 module import missing: ${token}`);
+
+  ok(appSource.includes("configureDashboardData({ storageGet, storageSet });"), "dashboard storage adapter is not configured");
+});
+
+await test("stage 9-11 moved modules keep their runtime dependencies explicit", () => {
+  for (const token of [
+    'import { useState, useMemo, useEffect, useRef } from "react"',
+    'from "../../core/trade-math.js?v=1"',
+    'from "../../core/journal-model.js?v=2"',
+    'from "../../analytics/trader-analytics.js?v=3"',
+    'from "../../ai/ai-service.js?v=1"',
+    'from "../../ai/context.js?v=2"',
+    'from "../journal/journal-ui.js?v=2"',
+    "function calculateCalendarStats",
+    "function useAnimatedNumber",
+    "const outcomeColor",
+    "const pluralRu"
+  ]) ok(dashboardUiSource.includes(token), `dashboard dependency missing: ${token}`);
+
+  for (const token of [
+    'import { Component, useState, useRef, useEffect } from "react"',
+    'from "../core/trade-math.js?v=1"',
+    'from "./brand.js?v=1"',
+    'from "./primitives.js?v=2"',
+    "const relTime",
+    "var SPLASH_POSTER_IMG",
+    "function WalletSheet",
+    "class AppErrorBoundary extends Component"
+  ]) ok(appShellSource.includes(token), `app-shell dependency missing: ${token}`);
+
+  for (const token of [
+    'import { useState, useEffect } from "react"',
+    'from "../../ui/brand.js?v=1"',
+    "function AuthScreen",
+    "function LegacyMigratePrompt",
+    "function BootIntro"
+  ]) ok(authUiSource.includes(token), `auth-ui dependency missing: ${token}`);
+});
+
+await test("auth runtime helpers cover PWA redirect and popup fallback decisions", async () => {
+  const authRuntime = await import("../core/auth-runtime.js");
+  eq(authRuntime.normalizeFirebaseUser({ uid: "u1", displayName: "Trader", email: "x@example.com" }).username, "Trader", "displayName normalization changed");
+  eq(authRuntime.normalizeFirebaseUser({ uid: "u2", displayName: "", email: "fallback@mindexe.local" }).username, "fallback", "email username fallback changed");
+  ok(authRuntime.shouldPreferGoogleRedirect({ navigatorObj: { standalone: true }, windowObj: {} }), "installed iOS PWA should prefer redirect auth");
+  ok(authRuntime.shouldPreferGoogleRedirect({ navigatorObj: {}, windowObj: { matchMedia: () => ({ matches: true }) } }), "standalone display mode should prefer redirect auth");
+  ok(!authRuntime.shouldPreferGoogleRedirect({ navigatorObj: {}, windowObj: { matchMedia: () => ({ matches: false }) } }), "normal browser should keep popup-first auth");
+  ok(authRuntime.isGooglePopupFallbackError({ code: "auth/popup-blocked" }), "popup-blocked no longer falls back to redirect");
+  ok(!authRuntime.isGooglePopupFallbackError({ code: "auth/popup-closed-by-user" }), "user-cancelled popup must not silently redirect");
+});
+
+await test("auth session is now observed continuously instead of one-shot only", () => {
+  const block = appSource.slice(appSource.indexOf("function useAuth() {"), appSource.indexOf("function MindExe() {"));
+  ok(block.includes("authService.subscribe("), "useAuth lost long-lived auth observer");
+  ok(block.includes("completeRedirectLogin"), "redirect completion is not consumed on startup");
+  ok(block.includes('return () => {') && block.includes('unsubscribe()'), "auth observer is not unsubscribed on unmount");
+  ok(!block.includes("authService.getCurrentUser().then"), "useAuth regressed to one-shot session lookup");
+});
+
+await test("Google auth hardening preserves legacy-data gate across redirect", () => {
+  ok(appSource.includes("signInWithRedirect"), "Google redirect fallback import missing");
+  ok(appSource.includes("isGooglePopupFallbackError(e)"), "popup failure does not trigger redirect fallback");
+  ok(appSource.includes("safeSessionSet(GOOGLE_REDIRECT_LEGACY_KEY"), "legacy migration gate is not persisted before redirect");
+  ok(appSource.includes('useRef(safeSessionGet(GOOGLE_REDIRECT_LEGACY_KEY) === "1")'), "redirect legacy gate is not restored before profile load");
+  ok(appSource.includes("setProfileLoadRetryNonce((n) => n + 1)"), "profile load does not resume after redirect gate release");
+  ok(appSource.includes('console.warn("mind.exe: Firebase displayName update deferred"'), "registration still risks reporting failure after account creation solely on updateProfile");
 });
 
 await test("shared emotion-conflict logic is pure and reusable", async () => {
@@ -1278,6 +1366,7 @@ await test("journal/full reset handlers are cloud-first and full reset clears au
 
 await test("app routes Strategy index and direct-trade writes through revisioned Strategy store", () => {
   ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/auth-runtime.js?v=1"'), "auth-runtime import missing");
   const loadStart = appSource.indexOf("async function loadStrategyLabState");
   const loadEnd = appSource.indexOf("async function saveStrategyTradeRecord", loadStart);
   const block = appSource.slice(loadStart, loadEnd);
@@ -1342,7 +1431,7 @@ await test("passive second device does not rewrite cloud profile just because it
 await test("trade-entry navigation is explicit on desktop", () => {
   ok(stringsSource.includes('new: "\\u0414\\u043E\\u0431\\u0430\\u0432\\u0438\\u0442\\u044C \\u0441\\u0434\\u0435\\u043B\\u043A\\u0443"'), "Russian nav label is not \"Добавить сделку\"");
   ok(stringsSource.includes('new: "Add trade"'), "English nav label is not explicit");
-  const sidebar = section("function DesktopSidebar", "class AppErrorBoundary");
+  const sidebar = appShellSource.slice(appShellSource.indexOf("function DesktopSidebar"), appShellSource.indexOf("class AppErrorBoundary"));
   ok(sidebar.includes("nav.map"), "desktop sidebar no longer renders the shared navigation list");
 });
 
@@ -1358,7 +1447,7 @@ await test("profile revision conflict freezes cloud writes and requires reload",
 await test("profile load failure remains blocking instead of showing an empty journal", () => {
   ok(source.includes('setProfileDataError({ kind: "load"'), "load error state missing");
   ok(source.includes("!profileDataError && introResolved && !showBootIntro"), "main app not guarded");
-  ok(source.includes("function ProfileLoadErrorScreen"), "load-error screen missing");
+  ok(appShellSource.includes("function ProfileLoadErrorScreen"), "load-error screen missing");
 });
 
 await test("uncertain cloud write still freezes newer writes in the session", () => {
@@ -1382,7 +1471,7 @@ await test("R-specific analytics contain no direct generic trade.r access", () =
 });
 
 await test("critical runtime safety markers from previous fixes remain present", () => {
-  ok(source.includes("class AppErrorBoundary extends Component"), "AppErrorBoundary removed");
+  ok(appShellSource.includes("class AppErrorBoundary extends Component"), "AppErrorBoundary removed");
   ok(source.includes("profilePersistChainRef"), "profile save serialization removed");
   ok(source.includes('var PROFILE_SHADOW_KEY = "mind-exe-cloud-shadow";'), "emergency profile shadow removed");
   ok(source.includes("intentionalFullReset"), "intentional reset marker removed");
@@ -1414,6 +1503,7 @@ await test("core logic stays extracted instead of drifting back into app.js", ()
   ok(appSource.includes('from "./core/journal-media.js?v=1"'), "journal-media import missing");
   ok(appSource.includes('from "./core/profile-store.js?v=2"'), "profile-store import missing");
   ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/auth-runtime.js?v=1"'), "auth-runtime import missing");
   ok(!appSource.includes("async function loadMedia("), "journal media loader drifted back into app.js");
   ok(!appSource.includes("async function saveMedia("), "journal media writer drifted back into app.js");
   ok(!/^(?!\s*\/\/).*__mediaReadyIds/m.test(appSource), "journal media private cache leaked back into app.js");
