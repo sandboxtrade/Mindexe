@@ -4,19 +4,19 @@
 import { useEffect, useState } from "react";
 import { Download, X as XIcon } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE } from "../config/app-config.js?v=1";
+import { BASE } from "../config/app-config.js?v=4.9.0";
 
 export function Pill({ active, children, onClick, accent }) {
   return /* @__PURE__ */ jsx(
     "button",
     {
       onClick,
-      className: "px-3.5 py-1.5 rounded-full text-[12px] transition-[background,color,border,transform] duration-200 active:scale-[0.98] whitespace-nowrap shrink-0",
+      className: "px-3.5 py-2 rounded-[10px] text-[12px] font-medium transition-[background,color,border,transform] duration-150 active:scale-[0.98] whitespace-nowrap shrink-0",
       style: {
         background: active ? BASE.surface2 : "transparent",
         color: active ? BASE.ink : BASE.inkDim,
-        border: active ? `1px solid ${BASE.line}` : "1px solid transparent",
-        boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.025)" : "none"
+        border: `1px solid ${active ? BASE.line : "transparent"}`,
+        boxShadow: "none"
       },
       children
     }
@@ -26,11 +26,11 @@ export function Card({ children, className = "", glowing = false, accent, style 
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: `rounded-[21px] p-4 transition-colors duration-250 break-inside-avoid ${className}`,
+      className: `rounded-[16px] p-4 transition-colors duration-200 break-inside-avoid ${className}`,
       style: {
-        background: glowing ? `linear-gradient(180deg, ${BASE.surface2} 0%, ${BASE.surface} 100%)` : BASE.surface,
-        border: `1px solid ${BASE.line}`,
-        boxShadow: glowing ? `0 14px 34px -24px ${accent || BASE.ink}28, inset 0 1px 0 rgba(255,255,255,0.035)` : "inset 0 1px 0 rgba(255,255,255,0.018)",
+        background: glowing ? BASE.surface2 : BASE.surface,
+        border: `1px solid ${glowing && accent ? accent + "2E" : BASE.line}`,
+        boxShadow: "none",
         ...style
       },
       children
@@ -42,8 +42,8 @@ export function Toast({ text }) {
   return /* @__PURE__ */ jsx(
     "div",
     {
-      className: "fixed left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full text-xs toast-in",
-      style: { top: "calc(env(safe-area-inset-top, 0px) + 12px)", background: "rgba(14,14,16,.96)", border: `1px solid ${BASE.line}`, color: BASE.ink, boxShadow: "0 10px 28px rgba(0,0,0,0.42)", backdropFilter: "blur(14px)" },
+      className: "fixed left-1/2 -translate-x-1/2 z-50 px-4 py-3 rounded-[12px] text-xs toast-in",
+      style: { top: "calc(env(safe-area-inset-top, 0px) + 12px)", background: "rgba(14,14,16,.96)", border: `1px solid ${BASE.line}`, color: BASE.ink, boxShadow: "0 10px 28px rgba(0,0,0,0.28)", backdropFilter: "blur(14px)" },
       children: text
     }
   );
@@ -265,7 +265,7 @@ export function EmptyState({ icon: Icon, title, hint, actionLabel, onAction, acc
   );
 }
 export function StatCard({ label, value, accent }) {
-  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-[16px] px-3.5 py-3.5 min-w-0", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.018)" }, children: [
+  return /* @__PURE__ */ jsxs("div", { className: "flex-1 rounded-[14px] px-3.5 py-3.5 min-w-0", style: { border: `1px solid ${BASE.line}`, background: BASE.surface, boxShadow: "none" }, children: [
     /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-[0.13em] mb-2 truncate", style: { color: BASE.inkFaint }, children: label }),
     /* @__PURE__ */ jsx("div", { className: "text-[25px] leading-none truncate", style: { color: accent, fontFamily: "var(--font-mono)", fontWeight: 500 }, children: value })
   ] });

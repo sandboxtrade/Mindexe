@@ -3,12 +3,12 @@
 
 export const BASE = {
   bg: "#000000",
-  surface: "#080809",
-  surface2: "#0E0E10",
-  line: "#19191E",
-  ink: "#FCFCFD",
-  inkDim: "#95959D",
-  inkFaint: "#5F5F68"
+  surface: "#09090A",
+  surface2: "#111113",
+  line: "#202026",
+  ink: "#F7F7F8",
+  inkDim: "#A0A0A8",
+  inkFaint: "#686871"
 };
 export const WIN = "#31E98F";
 export const LOSS = "#FF625C";

@@ -1,618 +1,10 @@
-// mind.exe — V4.0
-//
-// V4.0 — Strategy Lab: отдельный модуль тестирования технических торговых стратегий.
-//        - несколько стратегий с названием, описанием и версией;
-//        - отдельные strategy-trades без обязательной психологической части;
-//        - обычная запись журнала может ссылаться на strategyId и автоматически
-//          учитывается в статистике стратегии без физического дублирования сделки;
-//        - отдельные Firebase documents для strategy index / trades / media;
-//        - Gemini анализирует описание + рассчитанную приложением статистику;
-//        - существующие journal/profile/media keys и schema не менялись.
-//
-// mind.exe — V4.8.5.1
-//
-// V4.8.5.1 — startup rollback hotfix.
-//            - restores the proven v4.8.4 auth/session runtime after a v4.8.5 startup render regression;
-//            - no persistence/CAS/schema/key changes;
-//            - auth hardening will be reintroduced incrementally after browser-level coverage.
-//
-// mind.exe — V4.8.4
-//
-// V4.8.4 — modular refactor, stages 9–11.
-//          - Home / Analytics / Challenge presentation moved into dashboard feature module;
-//          - auth presentation moved out without changing auth/session behavior;
-//          - splash/navigation/error-boundary chrome moved into ui/app-shell;
-//          - profile persistence, CAS, recovery and Firestore schemas remain unchanged.
-//
-// mind.exe — V4.8.3.1
-//
-// V4.8.3.1 — modular startup hotfix.
-//            - restores dependencies accidentally left behind by stages 5–8 extraction;
-//            - fixes Home market/advice helpers, Journal/Strategy/Calibration module helpers;
-//            - keeps Profile/Strategy persistence schemas and keys unchanged;
-//            - bumps changed module URLs so iOS/Safari cannot reuse the broken v4.8.3 modules.
-//
-// mind.exe — V4.8.3
-//
-// V4.8.3 — modular refactor, stages 5–8.
-//          - Journal and Strategy Lab UI moved into feature modules;
-//          - Gemini context/network/trade tools split into dedicated ai modules;
-//          - Settings, Coach and Calibration/Journal Review moved into feature modules;
-//          - brand UI and browser media helpers moved out of app.js;
-//          - shared trader-level/emotion-conflict logic moved to pure reusable modules;
-//          - persistence, auth orchestration, CAS keys and Firestore schemas are unchanged.
-//
-// mind.exe — V4.8.2
-//
-// V4.8.2 — modular refactor, stages 1–4.
-//          - localized STRINGS moved to i18n/strings.js;
-//          - palette/instrument/setup constants moved to config/app-config.js;
-//          - behavioral analytics + Pattern Engine moved to analytics/trader-analytics.js;
-//          - shared Card/Pill/Toast + screenshot viewer moved to ui/primitives.js;
-//          - calibration + journal-review engine moved to analytics/calibration-review.js;
-//          - regression suite now syntax-checks every local JavaScript module.
-//          Persistence/auth/Firestore schemas and canonical keys are unchanged.
-//
-// V4.8.1 — production smoke-test fixes.
-//          - authenticated profile autosave preserves the existing cloud anonId, so simply opening
-//            the same account on a second device does not manufacture a new profile revision;
-//          - desktop navigation names the trade-entry action explicitly as “Добавить сделку”.
-//
-// V4.8.0 — Strategy Lab persistence hardening / final build of this chat.
-//          - Strategy index uses immutable revisions + transactional CAS + 5-revision history;
-//          - old Strategy index and backup are now real read fallbacks;
-//          - direct Strategy Lab trade records use per-trade CAS revisions;
-//          - stale device/tab writes are rejected instead of silently overwriting newer data;
-//          - Strategy deletion reports incomplete physical cleanup;
-//          - full reset clears the revisioned Strategy index as well as trade/media documents.
-//
-// mind.exe — V4.7.1
-//
-// V4.7.1 — Recovery / Backup / Reset semantics.
-//          - recovery prefers newest valid candidates instead of the fullest old snapshot;
-//          - durable journal/full reset tombstones prevent old backups from resurrecting deleted data;
-//          - journal reset and full reset are cloud-first;
-//          - full reset also clears Strategy Lab, AI Coach and calibration-history cloud data;
-//          - split profile revisions now carry savedAt/sequence metadata and retain 5 rollback revisions.
-//
-// mind.exe — V4.7.0
-//
-// V4.7.0 — Profile Persistence v2.
-//          - profile/journal data uses immutable split revisions instead of one growing Firestore JSON doc;
-//          - journal entries and coin ledger are chunked below Firestore document limits;
-//          - a tiny manifest is activated LAST through a Firestore transaction;
-//          - compare-and-swap revision checks prevent stale/late saves and cross-device overwrites;
-//          - legacy PROFILE_KEY documents/backups/device shadow remain readable recovery fallbacks;
-//          - public profile schema remains SCHEMA_VERSION=2.
-//
-// mind.exe — V4.6.13
-//
-// V4.6.13 — Splash background video replaced with the new uploaded clip.
-//           Logo, overlay animation and timing logic are preserved.
-//           Poster fallback updated to the first frame of the new video.
-//
-// mind.exe — V4.6.12
-//
-// V4.6.12 — Modularization / Approach 5C.4.
-//           Low-level Firestore storage and journal-media persistence moved behind explicit adapters.
-//           Profile recovery/auth/MindExe orchestration intentionally stay in app.js.
-//           Existing Firestore keys and document formats remain unchanged.
-//
-// mind.exe — V4.6.11
-//
-// V4.6.11 — Modularization / Approach 5C.3.
-//           Journal data migration + emotion normalization moved to core/journal-model.js.
-//           UI/auth/persistence behavior remains unchanged.
-//
-// mind.exe — V4.6.10
-//
-// V4.6.10 — Modularization / Approach 5C.2.
-//           Pure statistics + RR summary moved to core/stats.js.
-//           Runtime behavior and persistence formats are intentionally unchanged.
-//
-// mind.exe — V4.6.9
-//
-// V4.6.9 — Modularization / Approach 5C.1.
-//          Pure trade/result/RR math moved to core/trade-math.js.
-//          Runtime behavior and persistence formats are intentionally unchanged.
-//
-// mind.exe — V4.6.8
-//
-// V4.6.8 — Dead Code Cleanup / Approach 5B.
-//          Cleanup only; no persistence schema/key migrations.
-//
-// mind.exe — V4.6.7
-//
-// V4.6.7 — Regression Harness / Approach 5A.
-//          Runtime behavior intentionally unchanged from V4.6.6.
-//          Adds zero-dependency Node regression tests for syntax, migrations, result semantics,
-//          unit isolation, RR analytics, persistence guards and journal media safety.
-//
-// mind.exe — V4.6.6
-//
-// V4.6.6 — Progressive Journal Media / Approach 4B.
-//          - journal screenshots load with bounded concurrency (3 entries at once);
-//          - newest journal entries are checked first;
-//          - media is merged progressively in small batches instead of one huge Promise.all;
-//          - write-safety is tracked per entry, so a ready trade can be edited before the whole journal finishes;
-//          - failed/timed-out media entries remain write-protected and destructive cleanup stays disabled;
-//          - storage keys/formats from V4.6.5 remain unchanged.
-//
-// mind.exe — V4.6.5
-//
-// V4.6.5 — Journal Media Split / Approach 4A.
-//          - ordinary journal screenshots are stored one image per Firestore document;
-//          - a tiny manifest activates a new immutable media generation only after every image write succeeds;
-//          - old global MEDIA_KEY and per-entry media documents remain readable fallbacks;
-//          - old media is NOT auto-migrated merely by opening/saving unrelated settings;
-//          - existing-entry screenshot writes are blocked while its old media is still loading;
-//          - canonical profile/media key names and SCHEMA_VERSION remain unchanged.
-//
-// mind.exe — V4.6.4
-//
-// V4.6.4 — Analytics RR Guard / Approach 3B.
-//          - behavioral/risk analytics use realizedRR for true R-based calculations;
-//          - Pattern Engine no longer treats generic money result `r` as R;
-//          - pattern confidence is based on actual RR sample;
-//          - risk/streak/calibration/quiz AI metrics use realizedRR only;
-//          - persistence/auth/media/Firestore layout remain unchanged.
-//
-// mind.exe — V4.6.3
-//
-// V4.6.3 — Result Units / Approach 3A.
-//          - newly closed trades store resultMode + resultCurrency;
-//          - editing preserves the unit stored on the trade;
-//          - individual results use their stored unit, not the current global setting;
-//          - incompatible R / currencies are never added in the main aggregates;
-//          - legacy trades without metadata are not guessed or auto-rewritten;
-//          - Firestore keys/schema/document layout remain unchanged (additive fields only).
-//
-// mind.exe — V4.6.2
-//
-// V4.6.2 — Save/Auth Reliability / Approach 2.
-//          - journal mutations await confirmed cloud save before UI success;
-//          - add/edit/close/delete expose real saving states;
-//          - failed profile load is BLOCKING instead of rendering an empty journal;
-//          - retry profile load without logout;
-//          - uncertain/hung cloud write blocks further writes until reload, preventing stale overwrite races;
-//          - canonical Firestore keys/schema/media format remain unchanged.
-//
-// mind.exe — V4.6.1
-//
-// V4.6.1 — Correctness Guard / Approach 1.
-//          - one shared SL/TP/manual result semantic for journal + Strategy Lab;
-//          - old contradictory journal records are normalized in memory only;
-//          - RR/expectancy analytics now use realizedRR, never money PnL masquerading as R;
-//          - no auth/persistence/media/Firestore layout changes in this release.
-//
-// mind.exe — V4.6
-//
-// V4.6 — Strategy Lab result semantics + global visual polish / QA.
-//        - SL result always becomes negative automatically; TP always positive;
-//        - Manual close preserves the user-entered sign;
-//        - closed direct Strategy trades can edit close reason + result amount;
-//        - legacy direct SL/TP trades are normalized in memory on read (no auto-write migration);
-//        - visual system tightened: calmer surfaces, smaller radii/shadows, better iOS controls;
-//        - canonical Firestore keys, SCHEMA_VERSION and journal persistence are unchanged.
-//
-// mind.exe — V4.5
-//
-// V4.5 — Strategy Lab: редактирование direct-сделок + точные итоговые суммы;
-//        Screenshot Viewer: кнопка скачивания изображения.
-//        - существующий Strategy Trade редактируется по тому же id, без создания копии;
-//        - linked journal trades остаются source-of-truth в обычном журнале;
-//        - RESULT QUALITY: Long total / Short total / gross profit / gross loss вместо средних;
-//        - Firestore keys/schema и старые journal/media документы не менялись.
-//
-// mind.exe — V4.4.2
-//
-// V4.4.2 — полноэкранный просмотр сохранённых скриншотов.
-//          Тап по thumbnail открывает изображение поверх приложения; закрытие по X/фону/Escape.
-//          Формат screenshot data, Firestore keys/schema и persistence НЕ менялись.
-//
-// mind.exe — V4.4.1
-//
-// V4.4.1 — финальный QA guard: local shadow пишется только после разрешённой cloud-load gate,
-//          добавлен React Error Boundary вместо чёрного экрана при render crash.
-//
-// mind.exe — V4.4
-//
-// V4.4 — полный QA/stability pass.
-//        - Strategy close: single-submit + saving state + только exit-media при закрытии;
-//        - Strategy delete media cleanup параллельный;
-//        - регистрация нового аккаунта не делает лишний cloud migration-check;
-//        - fresh account пропускает аварийный recovery scan, если canonical профиля ещё нет;
-//        - BootIntro ускорен;
-//        - branding больше не вспыхивает старым зелёным до загрузки профиля;
-//        - direct local shadow сохраняет последний профиль перед cloud write как страховку.
-//        Canonical Firestore keys/schema и journal entry model не менялись.
-//
-// mind.exe — V4.3.1
-//
-// V4.3.1 — исправлен startup regression из v4.3.
-//          После handleLogout случайно оказался вложенный useEffect внутри useEffect,
-//          из-за чего React падал до splash screen. Persistence v4.3 не менялся.
-//
-// mind.exe — V4.3
-//
-// V4.3 — аварийный аудит сохранений + PWA.
-//        Сериализация cloud-save, flush перед logout, recovery из backup/legacy/shadow.
-//        Canonical Firestore keys и SCHEMA_VERSION не менялись.
-//
-// mind.exe — V4.2.4
-//
-// V4.2.4 — исправлен чёрный экран при открытии формы тестовой сделки.
-//          Причина: StrategyTradeForm использовал saving/setSaving, но локальный
-//          useState для них отсутствовал после предыдущего патча.
-//          Изменение только в локальном React-state формы; Firestore/persistence не менялись.
-//
-// mind.exe — V4.2.3
-//
-// V4.2.3 — в Strategy Lab добавлено безопасное удаление стратегии.
-//          - удаляется сама стратегия, её прямые Strategy Lab-сделки и их media;
-//          - обычные сделки журнала и их скриншоты НЕ удаляются;
-//          - перед удалением показывается отдельное подтверждение.
-//          Journal/Firestore schema и старые media keys не менялись.
-//
-// mind.exe — V4.2.2
-//
-// V4.2.2 — исправлено сохранение новых сделок Strategy Lab и уменьшена нижняя панель.
-//          - новая тестовая сделка больше не делает до 8 лишних deleteDoc для пустых media-слотов;
-//          - media-запросы выполняются параллельно, а не последовательно;
-//          - кнопка показывает состояние «Сохраняю…» и защищена от двойного нажатия;
-//          - нижний mobile nav приведён к стандартной компактной высоте iPhone.
-//          Схема Firestore, ключи документов и старый journal/media persistence не менялись.
-//
-// mind.exe — V4.2.1
-//
-// V4.2.1 — Gemini Vision распознавание добавлено в создание сделки Strategy Lab.
-//          Используется тот же aiRecognizeTradeFromImage(), что и в обычном журнале:
-//          скрин добавляется в сделку и заполняет instrument / direction / Entry / SL / TP.
-//          Firebase / journal / media / strategy persistence не менялись.
-//
-// mind.exe — V4.2
-//
-// V4.2 — полная полировка нижней мобильной навигации.
-//        Центральная кнопка теперь сидит в отдельном центральном слоте,
-//        боковые табы выровнены по одинаковым оптическим слотам, active-state
-//        стал чище, а сам бар собраннее и визуально дороже.
-//        Изменения только в mobile nav / UI, persistence не затрагивается.
-//
-// mind.exe — V4.1.1
-//
-// V4.1.1 — выравнивание нижней мобильной навигации: центральная кнопка теперь
-//          стоит ровно по центру, а остальные пункты симметрично распределены по бокам.
-//          Изменение только в mobile nav layout; persistence не затрагивается.
-//
-// mind.exe — V4.1
-//
-// V4.1 — кнопка настроек вынесена из нижней навигации в правую часть верхней шапки
-//        и переименована в «Профиль». Это только навигационный/UI-апдейт:
-//        storage / Firestore / journal / media / strategy persistence не менялись.
-//
-// mind.exe — V3.4
-//
-// V3.4 — системный polish UI без изменения логики хранения данных.
-//        Фокус: сделать интерфейс более собранным, тёмным и «доделанным», чтобы
-//        приложение выглядело как продукт, а не как сырая вайбкодерская сборка.
-//        Что обновлено:
-//        - подтянута базовая палитра: поверхности темнее и ближе друг к другу,
-//          вторичный текст чище, зелёный/красный читаются увереннее;
-//        - унифицированы Card / StatCard / Pill / mobile nav / badge styles;
-//        - уменьшена визуальная «коробочность», добавлены мягкие слои и тени;
-//        - уточнены микротипографика и трекинг служебных подписей.
-//        Storage / Firestore / media / journal persistence не менялись.
-//
-// mind.exe — V3.3
-//
-// V3.3 — переработан дизайн вкладки «Аналитика» → «Динамика».
-//        - кривая доходности теперь строится по дням, а не искусственно сглаженным
-//          точкам отдельных сделок, поэтому график выглядит спокойнее и чище;
-//        - график помещён в полноценную карточку с более аккуратной сеткой и tooltip;
-//        - блок «Результат по типу сетапа» переделан из тонких progress-баров в более
-//          плотные карточки с итогом, средним результатом и количеством сделок;
-//        - storage / Firestore / media / journal persistence не менялись.
-//
-// mind.exe — V3.2.1
-//
-// V3.2.1 — аудит надёжности после V3.2. Формат Firestore и ключи документов не менялись.
-//          Исправлено только поведение вокруг медиа и новый дефолт регулярности:
-//          - legacy-профиль без weeklyGoal теперь получает новый дефолт 7, а не старый 5;
-//          - новый аккаунт без записей помечает медиа как успешно загруженные, чтобы добавленный
-//            и затем удалённый в той же сессии скриншот не возвращался после перезапуска;
-//          - ошибка сохранения скриншота больше не проглатывается молча: persistNow получает
-//            ошибку, показывает тост и сможет повторить запись при следующем сохранении;
-//          - при неудачном удалении media-документа его hash остаётся в кэше, поэтому удаление
-//            повторится позже вместо того, чтобы старый скриншот внезапно вернулся.
-//
-// mind.exe — V3.2
-//
-// V3.2 — точечная правка главного экрана и настроек.
-//        - мини-график капитала закреплён рядом с числом, больше не висит отдельно в правом верхнем углу;
-//        - убран быстрый пункт «Игра» с главной (сама вкладка/симулятор не удалены);
-//        - из настроек убран выбор недельной цели регулярности; рабочая цель интерфейса = 7 дней;
-//        - у недельных отметок оставлены только кружки без подписей дней недели;
-//        - Firebase/Auth/Firestore/media/autosave/profile schema не менялись.
-//
-// mind.exe — V3.1
-//
-// V3.1 — стартовый splash переведён с чёрной дыры на пользовательскую анимацию глаза.
-//        Видео остаётся отдельным splash.mp4 для нормального браузерного кэша; первый кадр
-//        встроен в app.js как poster/fallback, чтобы на iOS не было вспышки старого splash.
-//        Логика Firebase, загрузки профиля, аналитики и Gemini не менялась.
-//
-// mind.exe — V3.0
-//
-// V3.0 — редизайн по референсам, этап 1: основание.
-//
-//        Изменены только центральные токены и примитивы — поэтому новый вид
-//        получают все экраны сразу, без правки каждого из них по отдельности.
-//
-//        ПАЛИТРА: фон #000 (был #0A0A0B), поверхность #0C0C0D, линия #1B1B1E.
-//        Линия теперь почти не читается глазом — это снимает рамки сразу в 41
-//        месте без правки этих мест. Прибыль/убыток переведены на чистые
-//        терминальные #22DD7F / #F0524D.
-//
-//        ШРИФТ: один моноширинный на всё (IBM Plex Mono). Смешение гротеска для
-//        текста и моноширинного для цифр было самым заметным признаком
-//        сборки из шаблонов. Sora больше не загружается.
-//
-//        ПРИМИТИВЫ: Card — без рамки, без внутреннего блика, радиус 22px;
-//        glowing больше не рисует свечение по периметру. Pill — без рамки.
-//
-//        НАВИГАЦИЯ: плавающая карточка с подписями заменена краем экрана:
-//        прозрачный фон, волосяная линия сверху, только иконки. Подписи при семи
-//        вкладках всё равно обрезались многоточием.
-//
-//        ГЛАВНАЯ: убраны приветствие и пояснительный подзаголовок; баланс поднят на
-//        их место и больше не лежит в карточке. Шапка выровнена по левому краю,
-//        декоративная градиентная черта под логотипом убрана.
-//
-//        Логика, расчёты, Firebase и Gemini не тронуты.
-//
-// mind.exe — V2.1
-//
-// V2.1 — дизайн-проход, этап 3 из 3: скелетоны и плавная загрузка.
-//
-//        Добавлены Skeleton и SkeletonLines: полосы с медленным бликом (1.6s — быстрый
-//        мигающий скелетон читается как ошибка, а не как ожидание). Блик идёт по градиенту
-//        фона, а не отдельным слоем, поэтому не добавляет элементов в разметку и не
-//        перехватывает нажатия. При prefers-reduced-motion анимации отключаются.
-//
-//        ГДЕ ПРИМЕНЕНО:
-//        - Блок совета на главной. Скелетон показывается ТОЛЬКО когда показать нечего:
-//          нет ни ответа Gemini, ни локального инсайта, ни записей. Если локальный инсайт
-//          посчитан, он выводится сразу — прятать готовую информацию ради анимации
-//          означало бы сделать приложение медленнее ради вида, что оно быстрое. Подмена
-//          локального текста ответом модели идёт через fade, а не скачком: смена ключа
-//          элемента перемонтирует его и запускает .content-in.
-//        - Список журнала. Карточки проявляются с шагом 60ms вместо одновременного
-//          возникновения. Класс .stagger уже был в бандле, но к журналу применён не был.
-//
-//        ГДЕ СОЗНАТЕЛЬНО НЕ ПРИМЕНЕНО:
-//        - Скриншоты в карточках сделок (догружаются фоном с V1.0). Скелетон там был бы
-//          враньём: приложение не знает заранее, есть ли у записи скриншот вообще, и
-//          показывало бы заглушку под картинку, которой нет.
-//        - BootLoading. Скелетон главной там неуместен: этот же экран показывается при
-//          проверке авторизации, когда следующим может быть логин, а не главная.
-//
-//        Логика и расчёты не тронуты.
-//
-// V2.0 — дизайн-проход, этап 2 из 3: пустые состояния.
-//
-//        Их не существовало как сущности. Там, где данных нет, стояла одинокая серая
-//        строка или не было ничего — а это ровно то, что видит новый пользователь в
-//        первую минуту. Хуже всего вела себя аналитика: без закрытых сделок она рисовала
-//        вкладки, нулевые метрики и пустые графики, то есть выглядела как сломанная,
-//        хотя данных просто ещё не было.
-//
-//        Добавлен компонент EmptyState: иконка в круге, заголовок, одно поясняющее
-//        предложение и опциональная кнопка. Тексты передаются вызывающим — компонент
-//        ничего не придумывает сам. Применён в трёх местах:
-//        - Журнал. Раньше на ДВА разных случая показывался один текст «Ничего не найдено,
-//          попробуй другой фильтр». Новому пользователю с пустым журналом он сообщал
-//          ерунду: фильтровать нечего. Теперь случаи разделены.
-//        - Аналитика. Ранний выход при отсутствии закрытых сделок, с разными текстами для
-//          «журнал пуст» и «сделки есть, но ни одна не закрыта» — второе неочевидно, все
-//          расчёты идут только по закрытым.
-//        - Кошелёк. Строка про начисления переехала в общую форму.
-//
-//        Логика и расчёты не тронуты: добавлены только ветки рендера при отсутствии
-//        данных и новые строки переводов.
-//
-// V1.9 — дизайн-проход, этап 1 из 3: типографика и скругления.
-//
-//        Было 18 разных размеров шрифта, включая дробные (8.5, 9.5, 10.5, 11.5, 12.5px) —
-//        размеры подбирались по месту, шкалы не существовало. Несогласованность такого
-//        рода читается глазом как самоделка даже тогда, когда её не могут назвать.
-//
-//        ШКАЛА ТИПОГРАФИКИ (девять ступеней, других быть не должно):
-//          9px   — микроподписи над значениями, uppercase + tracking
-//          10px  — подписи осей, счётчики, служебные пометки
-//          11px  — вторичный текст, пояснения под блоками
-//          12px  — подписи полей, элементы списков
-//          13px  — основной текст в карточках
-//          17px  — значения в карточках, подзаголовки
-//          24px  — заголовки экранов
-//          28px  — крупные числа на главной
-//          40px  — единственное главное число
-//        Дробные ступени сведены к ближайшей целой, 18->17, 22 и 26->24, 30->28.
-//
-//        СКРУГЛЕНИЯ: было 7 радиусов, включая два одноразовых (rounded-[22px] и
-//        rounded-[20px] из V1.0/V1.5 — мои же). Осталось четыре уровня:
-//          rounded-full — пилюли, кружки, полосы прогресса
-//          rounded-lg   — мелкие элементы: чипы, поля ввода
-//          rounded-xl   — кнопки, вложенные блоки
-//          rounded-2xl  — карточки и крупные контейнеры
-//        rounded-md убран, одноразовые пиксельные радиусы убраны.
-//
-//        Правка чисто визуальная: ни одна строка логики, расчётов или работы с данными
-//        не тронута. Следующие этапы — пустые состояния, затем скелетоны загрузки.
-//
-// V1.8 — блок «Как состояние влияет на результат» показывал «Нужно минимум 6 закрытых
-//        сделок... Сейчас 6» — сообщение противоречило само себе.
-//
-//        Причина: у emotionImpactStats ДВА разных условия недоступности, а текст был один.
-//        Первое — сделок меньше 6. Второе — сделок хватает, но ни по одной шкале не
-//        набралось по 3 сделки с высокой И с низкой эмоцией одновременно, и группы
-//        «смешанное/однозначное» тоже не разделились. Второй случай возвращал объект без
-//        поля needed, UI подставлял значение по умолчанию и печатал текст про нехватку
-//        сделок, хотя сделок хватало. Это и наблюдалось: все записи сделаны примерно в
-//        одном состоянии, разброса для сравнения нет.
-//
-//        Исправлено: stats несёт reason ("few_trades" / "no_groups"), и второй случай
-//        объясняется по-настоящему — сколько сделок попало в каждую группу по каждой
-//        шкале, почему середина 41-59% не считается и при каких данных блок заработает.
-//        Пороги не тронуты: занижать их — значит строить сравнение на двух сделках и
-//        выдавать шум за вывод.
-//
-// V1.7 — подпись под шкалами эмоций. Раньше она перечисляла проценты, которые и так видны
-//        на самих ползунках, и не давала никакой оценки: «Уверенность 75% · Напряжение 66%
-//        · Страх 61% — смешанное» ничего не сообщает сверх того, что уже на экране. Теперь
-//        правила читают проценты и называют состояние словами плюс что с ним делать:
-//        «Решение ведёт страх», «Сильный внутренний конфликт», «Уверенность без сомнений»
-//        и т.д. Порядок проверок — от самого тревожного к самому спокойному, поэтому
-//        сильный страх не может быть перекрыт формулировкой про ровное состояние. Пороги
-//        те же, что в аналитике (60 — выражено, 40 — слабо), чтобы подпись и статистика не
-//        противоречили друг другу. Рекомендации говорят только про проверку решения, не
-//        про рынок: приложение психологическое, а не торговый советник. В журнале
-//        показывается один вердикт без рекомендации — она уместна в момент заполнения.
-//
-// V1.6 — ИСПРАВЛЕНА ПОТЕРЯ СКРИНШОТОВ. Регрессия V1.0: там медиа перестали блокировать
-//        старт и стали грузиться фоном, но кэш хешей при этом заполнялся раньше, чем
-//        картинки попадали в entries.
-//
-//        Как терялось. loadMedia проставляла __mediaHashes[id] сразу при чтении документа.
-//        Вызывающий код обёрнут в caWithTimeout(20s): на медленной связи обёртка отклоняет
-//        промис, .then не выполняется, мержа в entries НЕ происходит — а сама загрузка
-//        дотекает следом и всё равно заполняет __mediaHashes. Получалось расхождение:
-//        в хешах id есть, в entries скриншотов нет. Дальше любой автосейв строил mediaMap
-//        из entries (пустой по картинкам), а цикл очистки в saveMedia проходил по
-//        __mediaHashes и удалял документы из Firestore как «лишние». Тот же результат
-//        давала гонка «хеши уже проставлены — мерж ещё не выполнен».
-//
-//        Исправлено в первопричине, а не защитным условием поверх:
-//        1) loadMedia больше не трогает __mediaHashes. Она возвращает { map, raw }, и хеши
-//           проставляет тот, кто фактически положил данные в state — одной операцией
-//           вместе с setEntries. Состояние кэша больше не может опережать состояние entries.
-//        2) Введён флаг __mediaLoaded. Пока медиа не доставлены в память, saveMedia не
-//           удаляет НИ ОДНОГО документа: отсутствие картинки в entries в этот момент
-//           означает «ещё не загрузили», а не «пользователь удалил». Запись при этом
-//           работает как раньше, так что новые скриншоты сохраняются и до загрузки старых.
-//
-// V1.5 — две правки.
-//  1) РЫНОЧНЫЙ БЛОК на главной. Три равные колонки не помещались на телефоне: «Волатильный»
-//     ломался посреди слова, пилюля с настроением уезжала в две строки. Значения там разной
-//     природы — число, число с текстовой меткой и слово — и узкие равные колонки им не
-//     подходят. Стал списком строк: слева иконка и подпись, справа значение. Данные и их
-//     источник прежние.
-//  2) «РАЗБОР». Что было не так: экран обещал «вопросы по тому, что уже видно в твоём
-//     журнале», но при малом числе сделок молча подставлял общие вопросы из зашитого
-//     списка — обещание расходилось с содержанием. Вопросы строились только на паттернах
-//     (которым нужно много сделок) и вообще не знали про процентные шкалы эмоций из V1.2.
-//     Сделано:
-//     - вопросы из эмоциональных шкал: сравнение среднего результата при эмоции от 60%
-//       против до 40% и отдельно смешанные состояния; порог 3 сделки на группу, поэтому
-//       они появляются намного раньше паттернов. Вопрос ставится только там, где эмоция
-//       связана с ХУДШИМ результатом — спрашивать про то, что и так работает, значит
-//       навязывать проблему;
-//     - интро называет состав честно: сколько вопросов из журнала, сколько общих;
-//     - вопросы из паттернов и из эмоций складываются, а не заменяют друг друга (раньше
-//       при недоступном движке паттернов эмоциональная часть терялась целиком);
-//     - подключён Gemini по схеме калибровки: приложение считает факты и хранит
-//       рекомендации, модель только переформулирует вопрос под конкретные числа и пишет
-//       финальный вывод по ответам. Числа ей не отдаются на генерацию — evidence всегда
-//       наш, а id, которых мы не отдавали, отбрасываются. Оба вызова необязательные:
-//       запрос на вопросы уходит фоном, пока читается интро, и не блокирует «Начать»;
-//       на экране результата сразу показывается локальный вывод, а версия от ИИ
-//       подменяет его по приходе. При таймауте или ошибке разбор работает как раньше.
-//
-// V1.4 — вкладка «Эмоции» в аналитике. Вместо скаттера (каждая сделка точкой в
-//        координатах страх→уверенность / нервы→спокойствие) теперь прямое сравнение
-//        среднего результата: сделки, где эмоция отмечена от 60%, против тех, где до 40%,
-//        по каждой из четырёх шкал плюс отдельная строка «смешанное состояние». Скаттер
-//        удалён потому, что из него не следовал никакой вывод: точки не подписаны, форма
-//        облака ничего не сообщает, а сами оси после V1.2 стали производной величиной, а
-//        не исходными данными. Записи, созданные до появления шкал, участвуют: их состояние
-//        восстанавливается из осей приблизительно, и их доля показывается под блоком.
-//        Строка метрик (осознанность / дисциплина / стабильность риска / рефлексия),
-//        которая на телефоне переносилась посреди подписи, стала сеткой 2x2 с полосой
-//        заполнения. Удалён ChartTooltip — он обслуживал только скаттер.
-//
-// V1.3 — вид ползунков шкал эмоций. В V1.2 дорожка рисовалась background-image на самом
-//        input: в WebKit нативный трек перекрывает фон элемента, поэтому на iOS вместо
-//        тонкой линии выводилась сплошная белая «таблетка» во всю высоту контрола.
-//        Дорожка, заполнение и бегунок теперь обычные div, а input лежит поверх полностью
-//        прозрачным — перетаскивание, шаг 1% и доступность остаются нативными. Ширина
-//        невидимого нативного бегунка приравнена к нарисованному, иначе кружок отстаёт
-//        от пальца у краёв. Логика состояния (V1.2) не менялась.
-//
-// V1.2 — исправлена ЛОГИКА, а не только оболочка. В V1.1 шкалы были новым интерфейсом
-//        поверх старой модели: четыре процента сводились в две оси x/y, и всё приложение
-//        читало только их. Из-за этого «уверенность 70% + страх 100%» превращалось в
-//        x=35, y=85 и подписывалось как «Спокойно и ровно» — прямо противоположное тому,
-//        что отметил трейдер. Теперь исходные данные — сами проценты:
-//        1) Подпись состояния (в форме и в журнале) собирается из процентов и называет
-//           конкретные эмоции с числами, а при одновременно набранных противоположных
-//           полюсах помечает состояние как смешанное (emotionValuesText / emotionConflict).
-//        2) Gemini получает проценты по каждой эмоции плюс conflict, а не две усреднённые
-//           оси; в системный промпт добавлено, что эмоции независимы и усреднять
-//           противоположные нельзя (aiEmotionState).
-//        3) Психологический движок: pd_confidenceTension, pd_fear и pd_tooCalm проверяют
-//           проценты напрямую. «Слишком спокойный» больше не срабатывает, если рядом
-//           высокий страх или напряжение.
-//        x/y сохраняются и считаются из процентов по-прежнему — на них построены зоны и
-//        скаттер паттернов, и на них же держатся все записи, созданные до появления шкал:
-//        у них процентов нет, и для них везде оставлен прежний путь через оси.
-//        Шаг ползунка 1% вместо 5%, дорожка показывает заполнение.
-//
-// V1.1 — карта эмоций при открытии и закрытии сделки переделана с квадрата (нужно было
-//        ставить точку) на набор процентных шкал: уверенность 70%, страх 10% и т.д.
-//        Модель данных НЕ менялась: x/y остаются двумя осями 0-100 и по-прежнему
-//        единственное, что читают аналитика, психологический движок и Gemini. Проценты
-//        сводятся в те же x/y (emotionsToPoint) и дополнительно сохраняются в
-//        entry.emotions / entry.exitEmotions — только чтобы редактирование записи
-//        открывалось с теми же ползунками. Записи, созданные раньше, читаются как есть:
-//        процентов у них нет, ползунки восстанавливаются из x/y приближённо
-//        (pointToEmotions), сама точка при этом не смещается.
-//
-// V1.0 — две правки:
-//  1) ДОЛГАЯ СТАРТОВАЯ ЗАГРУЗКА. tryLoad ждал loadMedia ДО setLoaded(true). loadMedia делает
-//     по одному getDoc на каждую запись журнала, и в каждом лежат base64-скриншоты
-//     (~150-300 КБ). При 20-30 записях это несколько мегабайт, которые на LTE качаются
-//     десятки секунд — всё это время висел BootLoading. Скриншоты не нужны для первого
-//     рендера: теперь профиль применяется сразу, setLoaded(true) вызывается без ожидания
-//     медиа, а сами скриншоты догружаются фоном и домерживаются в entries. Сохранение не
-//     страдает: saveMedia удаляет только те документы, чьи id уже есть в __mediaHashes,
-//     а он пуст до конца фоновой загрузки, поэтому ранний автосейв ничего не сотрёт.
-//  2) Рыночный блок на главной перерисован в отдельную карточку: круглая иконка + подпись +
-//     крупное значение, колонки разделены вертикальными линиями. У BTC.D — полоса прогресса
-//     по значению доминации, у F&G — пилюля с текстовой меткой настроения.
-//
-// V0.9 — чёрный экран после сплэша. Причин было две, обе исправлены:
-//  1) ГЛАВНАЯ: loadProfile/loadMedia идут через getDoc, у которого нет собственного таймаута.
-//     Если запрос повисает (типично для iOS PWA на плохой сети), промис не резолвится и не
-//     отклоняется — catch в tryLoad не срабатывает, setLoaded(true) не вызывается никогда,
-//     и приложение остаётся в состоянии «загружается» навсегда. Обе загрузки обёрнуты в
-//     caWithTimeout (15с профиль, 20с медиа): зависание превращается в обычную ошибку,
-//     срабатывает существующий retry, затем штатный путь с тостом и отключённым автосейвом
-//     (canPersistRef остаётся false, поэтому пустой стейт не перезапишет облако).
-//  2) Между «сплэш закончился» и «профиль загрузился» не рендерилось НИЧЕГО: при
-//     authStatus === "checking" и при authenticated с loaded === false ни одна ветка не
-//     подходила, экран был просто чёрным. Добавлен компонент BootLoading — теперь любое
-//     промежуточное состояние показывает индикатор, а не пустоту.
-//
-// V0.8: safe-area для шапки (регрессия V0.5); сетка рыночных метрик; сглаженный Sparkline
-//       с заливкой.
-// V0.7: таймауты на все вызовы Gemini (aiCallGemini 30с, vision 45с, polish 20с, market 30с).
-// V0.6: сохранение черновика стратегии при уходе с экрана; висящие запятые в children.
-// V0.5: прозрачная шапка; локализованы Stop Loss/Take Profit/ENTRY/EXIT/W-L-BE; настройки
-//       сгруппированы (Профиль / Торговля / Приложение / Данные и сброс).
-// V0.4: блок «Инсайт» — совет по собственному журналу; поле «Твоя стратегия» во всех
-//       AI-контекстах; правило «стиль торговли — не ошибка».
-// V0.3: промпт рыночной сводки требует конкретику, снапшот помечается grounded.
-// V0.2: скрыты полосы прокрутки; withR в Patterns; caWithTimeout в калибровке; 6 новых шкал.
-//
+// mind.exe — V4.9.0 FINAL
+// Final QA / visual consolidation release.
+// - runtime dependencies repaired after modular extraction;
+// - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;
+// - startup failure fallback and stricter static regression checks added;
+// - persistence/CAS schemas, Firestore keys and critical stores are unchanged.
+
 import { createRoot } from "react-dom/client";
 
 // firebase.js
@@ -769,14 +161,14 @@ import {
   resultEntriesForUnit,
   resultMatchesUnit,
   unitSymbol
-} from "./core/trade-math.js?v=1";
+} from "./core/trade-math.js?v=4.9.0";
 import {
   computeRRWinRateStats,
   st_mean,
   st_median,
   st_round2,
   st_stdev
-} from "./core/stats.js?v=1";
+} from "./core/stats.js?v=4.9.0";
 import {
   EMOTION_SCALE_KEYS,
   deriveEntryStatus,
@@ -786,45 +178,43 @@ import {
   isEntryClosed,
   migrateEntry,
   normalizeEmotions
-} from "./core/journal-model.js?v=2";
-import { createFirestoreStorage } from "./core/firestore-storage.js?v=2";
-import { createJournalMediaStore } from "./core/journal-media.js?v=1";
-import { createProfileStore } from "./core/profile-store.js?v=2";
-import { createStrategyStore } from "./core/strategy-store.js?v=1";
-import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js?v=1";
-import { STRINGS } from "./i18n/strings.js?v=2";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=3";
+} from "./core/journal-model.js?v=4.9.0";
+import { createFirestoreStorage } from "./core/firestore-storage.js?v=4.9.0";
+import { createJournalMediaStore } from "./core/journal-media.js?v=4.9.0";
+import { createProfileStore } from "./core/profile-store.js?v=4.9.0";
+import { createStrategyStore } from "./core/strategy-store.js?v=4.9.0";
+import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js?v=4.9.0";
+import { STRINGS } from "./i18n/strings.js?v=4.9.0";
+import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=4.9.0";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, CALIBRATION_SCALE_SETS, CALIBRATION_SCALE_TYPES,
   caWithTimeout, caScaleSet, scoreCalibrationDynamic, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview
-} from "./analytics/calibration-review.js?v=2";
-import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js?v=2";
-import { LogoMark, Wordmark } from "./ui/brand.js?v=1";
-import { configureTradeAi } from "./ai/trade-tools.js?v=1";
+} from "./analytics/calibration-review.js?v=4.9.0";
+import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js?v=4.9.0";
+import { LogoMark, Wordmark } from "./ui/brand.js?v=4.9.0";
+import { configureTradeAi } from "./ai/trade-tools.js?v=4.9.0";
 import {
   configureAiService, aiGetModel, aiGenerateInsight, aiChatReply, aiReviewQuestions,
   aiReviewSummary, aiFetchMarketSnapshot, aiGenerateHomeAdvice, aiGenerateCalibrationQuestions
-} from "./ai/ai-service.js?v=1";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js?v=2";
+} from "./ai/ai-service.js?v=4.9.0";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js?v=4.9.0";
 import {
   emotionStateText, emotionVerdict, emotionValuesText, emotionValuesColor,
   entryStateText, entryStateColor, EmotionScales,
   pointToEmotions, NewEntry, CloseTrade, EditTrade, Log
-} from "./features/journal/journal-ui.js?v=2";
-import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome, StrategyLab } from "./features/strategy/strategy-lab.js?v=2";
-import { Settings } from "./features/settings/settings-ui.js?v=1";
-import { Coach } from "./features/coach/coach-ui.js?v=1";
-import { Calibration, JournalReview } from "./features/calibration/calibration-ui.js?v=2";
-import { configureDashboardData, Home, Patterns, Challenge } from "./features/dashboard/dashboard-ui.js?v=1";
-import { AuthScreen, LegacyMigratePrompt, BootIntro } from "./features/auth/auth-ui.js?v=1";
-import { BootLoading, ProfileLoadErrorScreen, Splash, WalletBadge, ProfileBadge, MobileNavItem, MobileNavPrimaryButton, WalletSheet, DesktopSidebar, AppErrorBoundary } from "./ui/app-shell.js?v=1";
+} from "./features/journal/journal-ui.js?v=4.9.0";
+import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome, StrategyLab } from "./features/strategy/strategy-lab.js?v=4.9.0";
+import { Settings } from "./features/settings/settings-ui.js?v=4.9.0";
+import { Coach } from "./features/coach/coach-ui.js?v=4.9.0";
+import { Calibration, JournalReview } from "./features/calibration/calibration-ui.js?v=4.9.0";
+import { configureDashboardData, Home, Patterns, Challenge } from "./features/dashboard/dashboard-ui.js?v=4.9.0";
+import { AuthScreen, LegacyMigratePrompt, BootIntro } from "./features/auth/auth-ui.js?v=4.9.0";
+import { BootLoading, ProfileLoadErrorScreen, Splash, WalletBadge, ProfileBadge, MobileNavItem, MobileNavPrimaryButton, WalletSheet, DesktopSidebar, AppErrorBoundary } from "./ui/app-shell.js?v=4.9.0";
 // V3.0 — палитра переведена на референс: чистый чёрный фон, поверхности почти сливаются
 // с ним, линии существуют, но не читаются как рамки. Раньше фон был #0A0A0B, а карточка
 // #131315 с видимой границей #25252A — на OLED это выглядит как набор коробок, а не как
 // один экран. Теперь разделение делается только сдвигом яркости поверхности.
-var ring = (accent) => `0 0 0 1px ${accent}35`;
-var softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
 var isToday = (isoDate) => !!isoDate && new Date(isoDate).toDateString() === (/* @__PURE__ */ new Date()).toDateString();
 function calibHistoryKey(userId) {
   return `mind-exe-calib-history:${userId}`;
@@ -1874,6 +1264,7 @@ function MindExe() {
   // overwrite. Cheap insurance: even a catastrophic future bug leaves a recoverable copy in
   // users/{uid}/data/mind-exe-journal-state:backup.
   const backupPendingRef = useRef(false);
+  const audioContextRef = useRef(null);
   const { status: authStatus, user: authUser, register: authRegister, login: authLogin, loginWithGoogle: authLoginWithGoogle, logout: authLogout } = useAuth();
   const userId = authUser?.id || null;
   const [migrateFor, setMigrateFor] = useState(null);
@@ -2610,7 +2001,11 @@ function MindExe() {
   const playPing = () => {
     if (!soundOn) return;
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const AudioContextCtor = window.AudioContext || window["webkitAudioContext"];
+      if (!AudioContextCtor) return;
+      const ctx = audioContextRef.current || new AudioContextCtor();
+      audioContextRef.current = ctx;
+      if (ctx.state === "suspended") ctx.resume?.().catch?.(() => {});
       const o = ctx.createOscillator();
       const g = ctx.createGain();
       o.type = "sine";
@@ -2650,7 +2045,9 @@ function MindExe() {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const raw = JSON.parse(reader.result);
+        const rawText = typeof reader.result === "string" ? reader.result : "";
+        if (!rawText) throw new Error("empty import");
+        const raw = JSON.parse(rawText);
         if (!Array.isArray(raw)) throw new Error("not an array");
         const restored = raw.map(sanitizeImportedEntry).filter(Boolean);
         if (restored.length === 0 && raw.length > 0) throw new Error("nothing salvageable");
@@ -2698,7 +2095,9 @@ function MindExe() {
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        const raw = JSON.parse(reader.result);
+        const rawText = typeof reader.result === "string" ? reader.result : "";
+        if (!rawText) throw new Error("empty import");
+        const raw = JSON.parse(rawText);
         const profile = migrateProfile(raw);
         if (!profile) throw new Error("unrecognized backup format");
         const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
@@ -2956,50 +2355,36 @@ function MindExe() {
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "var(--font-display)" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
-        /* V5.1 typography. Everything in the app now points at two CSS variables instead of naming
-           families inline in 78 + 77 places, so a future type change is a one-line edit here.
-           Display: Sora \u2014 geometric grotesk with a slightly astronomical, engineered feel; tighter
-           apertures and a more distinctive lowercase g/a than Space Grotesk, which read generic at
-           small sizes. Mono: IBM Plex Mono for figures \u2014 the digits have real character (open 4,
-           flat-top 3, slashed 0 off by default) and it sits warmer against the dark UI than
-           JetBrains Mono without losing tabular alignment. Both are variable-weight on Google Fonts.
-           The <link> tags in index.html load these; this @import is the belt-and-braces fallback so
-           the bundle is self-sufficient if index.html is ever served stale. */
-        @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap');
-        /* V3.0 \u2014 моноширинный шрифт стал основным, а не только шрифтом цифр.
-           Смешение гротеска для текста и моноширинного для чисел \u2014 самый заметный
-           признак \"собрано из шаблонов\": два разных ритма букв на одном экране.
-           Один моноширинный шрифт на всё даёт терминальный вид референса и убирает
-           необходимость решать, что именно \"цифра\", а что \"текст\". IBM Plex Mono
-           покрывает кириллицу, поэтому русские экраны не деградируют в подстановочный
-           шрифт. --font-display и --font-mono теперь указывают на одно семейство:
-           так все 155 мест, где они названы инлайн, меняются одной правкой, а
-           различие display/mono остаётся доступным, если оно понадобится обратно. */
+        /* V4.9 final typography: strict grotesk for UI copy, mono only for figures and technical data. */
         :root {
-          --font-display: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
-          --font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+          --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, ui-monospace, monospace;
+          --ui-radius-sm: 10px;
+          --ui-radius: 14px;
+          --ui-radius-lg: 18px;
+          --ui-control-h: 44px;
         }
         body, #root {
           font-family: var(--font-display);
-          letter-spacing: -0.012em;
+          letter-spacing: -0.006em;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
           text-rendering: optimizeLegibility;
         }
         input, textarea, select, button { font: inherit; }
-        * { -webkit-tap-highlight-color: transparent; }
-        button { touch-action: manipulation; }
+        button, [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
+          outline: 2px solid rgba(255,255,255,0.30);
+          outline-offset: 2px;
+        }
         input, textarea { caret-color: ${BASE.ink}; }
         ::selection { background: rgba(255,255,255,0.14); color: #fff; }
-        /* Compact labels: technical, but without excessive dashboard-like spacing. */
-        .sec-cap { text-transform: uppercase; letter-spacing: 0.15em; }
-        .btn-cap { text-transform: uppercase; letter-spacing: 0.12em; }
+        .sec-cap { text-transform: uppercase; letter-spacing: 0.11em; font-weight: 600; }
+        .btn-cap { text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+        h1, h2, h3 { letter-spacing: -0.025em; }
         @media (max-width: 767px) {
           input, textarea, select { font-size: 16px !important; }
         }
-        /* Sora runs a touch wider than Space Grotesk at the same size; a small negative tracking on
-           headings and figures keeps existing layouts from re-wrapping. */
-        h1, h2, h3 { letter-spacing: -0.02em; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
         /* V2.1 — скелетоны. Блик идёт по градиенту фона, а не отдельным слоем: так он не
            создаёт нового элемента в разметке и не перехватывает нажатия. Пульсация
@@ -3029,24 +2414,7 @@ function MindExe() {
         @keyframes riseIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes flicker { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12); } }
 
-        /* ---------- Splash v3.1: swapped in the user's own black-hole-with-candlestick-chart photo
-           (portrait, full-bleed) in place of the earlier landscape stock photo \u2014 per explicit
-           instruction, the photo itself is used directly and unaltered, never redrawn or replaced.
-           "Alive" still comes from cheap compositing layers only, same approach as before: a slow Ken
-           Burns zoom (extra overscan margin so cover-cropping never shows a hard edge), and \u2014 the
-           actual motion \u2014 a shimmer sweep gated by the photo's own brightness (SPLASH_BLACKHOLE_MASK,
-           a luminance-derived alpha map computed from this exact image via PIL: grayscale, then a
-           gamma/threshold curve that keeps only strongly bright pixels, so it isolates both the
-           accretion disk ring AND the candlestick chart baked into the photo \u2014 the shimmer sweeps
-           across both together, reinforcing the "chart is part of this living scene" read). Object/
-           mask-position (47% 41%) was hand-measured against a 10% grid overlay on the source photo to
-           find the event horizon's actual center; the scene is now full-height (was 62%) since this
-           photo's own composition already carries the chart-flowing-into-the-hole story the full
-           height of a phone screen. Rotating the whole photo is still avoided (perspective/lensing
-           reasons carry over unchanged from the original photo). ---------- */
-        /* V1.3 — сам input полностью прозрачен и служит только зоной захвата: вид дают
-           div-ы под ним. Бегунок делается невидимым, но НЕ убирается — без него в
-           WebKit перетаскивание не работает. height на всю строку, чтобы попадать пальцем. */
+        /* Emotion range: transparent native input remains the touch target; visuals are drawn underneath. */
         .emotion-range {
           -webkit-appearance: none; appearance: none;
           background: transparent; margin: 0; height: 100%;
@@ -3054,8 +2422,6 @@ function MindExe() {
         }
         .emotion-range::-webkit-slider-runnable-track { height: 100%; background: transparent; border: none; }
         .emotion-range::-moz-range-track { height: 100%; background: transparent; border: none; }
-        /* Ширина невидимого бегунка ДОЛЖНА совпадать с нарисованным (18px): именно от неё
-           браузер считает ход ползунка, и при расхождении кружок отстаёт от пальца у краёв. */
         .emotion-range::-webkit-slider-thumb {
           -webkit-appearance: none; appearance: none;
           width: 18px; height: 18px; border-radius: 50%;
@@ -3066,74 +2432,16 @@ function MindExe() {
           background: transparent; border: none;
         }
         .emotion-range:focus { outline: none; }
+
+        /* Splash uses the current video directly. Legacy photo-mask/shimmer layers were removed because
+           they are no longer rendered and retaining their interpolations could crash the root render. */
         .splash2-root { background: #000; overflow: hidden; }
         @keyframes splash2RiseFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes splash2RingExpand { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
-        @keyframes splash2KenBurns { from { transform: scale(1.0); } to { transform: scale(1.022); } }
-        /* V4.8: the ring no longer just brightens \u2014 an offset conic sweep rotates *inside* a static
-           brightness mask, so the light travels around the accretion disk (matter in orbit) while the
-           mask keeps it pinned to the disk's real pixels. 46s per revolution: visible as motion, never
-           as spin. Plus a very slow counter-cycle on intensity so it breathes rather than blinks. */
-        @keyframes splash2HorizonSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes splash2SpinPulse { 0%, 100% { opacity: 0.30; } 50% { opacity: 0.62; } }
-        @keyframes splash2ShimmerPulse { 0%, 100% { opacity: 0.18; } 50% { opacity: 0.6; } }
-        @keyframes splash2Glow { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.85; } }
-
         .splash2-bh-scene { position: absolute; inset: 0; height: 100%; overflow: hidden; }
-        .splash2-bh-img {
-          width: 100%; height: 100%; object-fit: cover; object-position: 47% 41%; display: block;
-          animation: splash2KenBurns 12s cubic-bezier(0.45,0,0.55,1) infinite alternate;
-        }
-        /* v2: the moving diagonal light-bar (bg-position sweep) read as a cheap "shine" effect once
-           it was sped up to be visible \u2014 a recognizable CSS-shine cliche that clashed with the
-           photo's tone. Replaced with a still highlight (no travel) whose OPACITY breathes instead,
-           gated by the same brightness mask so it still only lights up the ring/candle pixels; the
-           motion now reads as the ring itself glowing brighter and dimmer, not a bar sliding over it.
-           Same Ken Burns transform as the photo keeps the mask in registration while zooming. */
-        .splash2-bh-shimmer {
-          position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
-          background: radial-gradient(ellipse 60% 60% at 47% 41%, rgba(255,246,224,0.9) 0%, rgba(255,238,208,0.5) 45%, transparent 75%);
-          -webkit-mask-image: url(${SPLASH_BLACKHOLE_MASK}); mask-image: url(${SPLASH_BLACKHOLE_MASK});
-          -webkit-mask-size: cover; mask-size: cover;
-          -webkit-mask-position: 47% 41%; mask-position: 47% 41%;
-          -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-          animation: splash2KenBurns 12s cubic-bezier(0.45,0,0.55,1) infinite alternate, splash2ShimmerPulse 4.5s ease-in-out infinite;
-        }
-        /* A second, slower, offset breathing cycle at the event horizon itself (measured center,
-           47%/41%) so the hole's own light doesn't pulse in lockstep with the ring highlight above \u2014
-           two overlapping slow cycles read as organic "alive" light rather than one obvious blink. */
-        .splash2-bh-glow {
-          position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
-          background: radial-gradient(circle at 47% 41%, rgba(255,232,190,0.55) 0%, rgba(255,214,150,0.28) 14%, transparent 30%);
-          animation: splash2KenBurns 12s cubic-bezier(0.45,0,0.55,1) infinite alternate, splash2Glow 6s ease-in-out infinite -1.5s;
-        }
-        /* single canvas: starfield + candlestick stream. Sits above the photo composite, below the
-           vignette, so the vignette still swallows its edges into the void. */
         .splash2-video {
-          width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; display: block;
-          background: #000;
+          width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; display: block; background: #000;
         }
-        .splash2-bh-spin {
-          position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; overflow: hidden;
-          -webkit-mask-image: url(${SPLASH_BLACKHOLE_MASK}); mask-image: url(${SPLASH_BLACKHOLE_MASK});
-          -webkit-mask-size: cover; mask-size: cover;
-          -webkit-mask-position: 47% 41%; mask-position: 47% 41%;
-          -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
-          animation: splash2SpinPulse 11s ease-in-out infinite -3s;
-        }
-        .splash2-bh-spin-inner {
-          position: absolute; inset: 0; transform-origin: 47% 41%;
-          background: conic-gradient(from 0deg at 47% 41%,
-            rgba(255,240,210,0.00) 0deg, rgba(255,240,210,0.55) 42deg, rgba(255,236,200,0.10) 105deg,
-            rgba(255,236,200,0.00) 170deg, rgba(255,232,195,0.34) 232deg, rgba(255,232,195,0.06) 292deg,
-            rgba(255,240,210,0.00) 360deg);
-          animation: splash2HorizonSpin 46s linear infinite;
-          will-change: transform;
-        }
-        /* final beat: as the last candles cross the horizon the surrounding light swells once, and the
-           whole layer cross-fades into the app \u2014 one continuous action, not a screen swap. */
-        .splash2-root.is-flare .splash2-bh-glow { opacity: 1; filter: brightness(1.5); transition: opacity 1.1s ease-out, filter 1.1s ease-out; }
-        .splash2-root.is-flare .splash2-bh-shimmer { filter: brightness(1.35); transition: filter 1.1s ease-out; }
         .splash2-root.is-flare .splash2-vignette { transition: opacity 1.1s ease-out; opacity: 0.82; }
         .splash2-vignette {
           position: absolute; inset: 0; pointer-events: none;
@@ -3141,7 +2449,6 @@ function MindExe() {
             linear-gradient(to right, rgba(0,0,0,0.22), transparent 10%, transparent 90%, rgba(0,0,0,0.22)),
             linear-gradient(to bottom, rgba(0,0,0,0.08) 0%, transparent 20%, transparent 68%, rgba(0,0,0,0.46) 86%, #000 100%);
         }
-
         .splash2-content { position: absolute; left: 0; right: 0; bottom: 15%; display: flex; flex-direction: column; align-items: center; gap: 16px; }
         .splash2-radar { position: relative; width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; }
         .splash2-ring { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.14); animation: splash2RingExpand 1.1s ease-out both; }
@@ -3463,7 +2770,7 @@ function MindExe() {
          подпись выводится лишь для неё, где на неё есть место.
          Подъём кнопки «Запись» и её свечение убраны: белый круг на чёрном сам по себе
          достаточный акцент, свечение было единственным местом в панели с тенью. */
-      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "linear-gradient(180deg, rgba(8,8,9,0.94) 0%, rgba(0,0,0,0.985) 100%)", backdropFilter: "blur(20px)", borderTop: "1px solid rgba(255,255,255,0.045)", boxShadow: "0 -10px 28px rgba(0,0,0,0.28)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }, children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-md px-3 pt-1.5 pb-1", children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-[1fr_auto_1fr] items-end gap-1", children: [
+      /* @__PURE__ */ jsx("div", { className: "fixed bottom-0 left-0 right-0 md:hidden", style: { background: "rgba(8,8,9,0.965)", backdropFilter: "blur(20px)", borderTop: `1px solid ${BASE.line}`, boxShadow: "none", paddingBottom: "env(safe-area-inset-bottom, 0px)" }, children: /* @__PURE__ */ jsx("div", { className: "mx-auto max-w-md px-3 pt-1.5 pb-1", children: /* @__PURE__ */ jsxs("div", { className: "grid grid-cols-[1fr_auto_1fr] items-end gap-1", children: [
         /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileLeftNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) }),
         /* @__PURE__ */ jsx("div", { className: "flex items-end justify-center px-1", children: mobilePrimaryNav && /* @__PURE__ */ jsx(MobileNavPrimaryButton, { item: mobilePrimaryNav, onClick: () => setTab(mobilePrimaryNav.id) }) }),
         /* @__PURE__ */ jsx("div", { className: "grid grid-cols-3 items-end justify-items-center", children: mobileRightNav.map((n) => /* @__PURE__ */ jsx(MobileNavItem, { item: n, active: tab === n.id, accent, onClick: () => setTab(n.id) }, n.id)) })
@@ -3474,4 +2781,7 @@ function MindExe() {
 
 // entry.jsx
 import { jsx as jsx2 } from "react/jsx-runtime";
+window.__mindExeStarted = true;
+if (window.__mindExeBootTimer) clearTimeout(window.__mindExeBootTimer);
+document.getElementById("boot-fallback")?.remove();
 createRoot(document.getElementById("root")).render(/* @__PURE__ */ jsx2(AppErrorBoundary, { children: /* @__PURE__ */ jsx2(MindExe, {}) }));

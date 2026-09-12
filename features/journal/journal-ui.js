@@ -12,19 +12,19 @@ import {
   formatPriceValue, formatResult, formatStoredResult,
   normalizeResultByCloseType, normalizeResultCurrency, normalizeResultMode,
   outcomeFromResult, resultEntriesForUnit, unitSymbol
-} from "../../core/trade-math.js?v=1";
+} from "../../core/trade-math.js?v=4.9.0";
 import {
   emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions
-} from "../../core/journal-model.js?v=2";
+} from "../../core/journal-model.js?v=4.9.0";
 import {
   BASE, WIN, LOSS, WARN, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL
-} from "../../config/app-config.js?v=1";
-import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=2";
-import { compressImageFile } from "../../ui/media-utils.js?v=1";
-import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=1";
+} from "../../config/app-config.js?v=4.9.0";
+import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=4.9.0";
+import { compressImageFile } from "../../ui/media-utils.js?v=4.9.0";
+import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=4.9.0";
 
 const ring = (accent) => `0 0 0 1px ${accent}35`;
-const softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
+const softLift = (accent) => `0 0 0 1px ${accent}30, 0 8px 22px rgba(0,0,0,0.28)`;
 function pluralRu(n, one, few, many) {
   const abs = Math.abs(Number(n) || 0) % 100;
   const last = abs % 10;
@@ -726,7 +726,7 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
       {
         onClick: submit,
         disabled: !canSave || saving,
-        className: "w-full mt-6 py-3 rounded-full text-sm transition-all active:scale-[0.98] lg:max-w-sm lg:mx-auto lg:block",
+        className: "w-full mt-6 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98] lg:max-w-sm lg:mx-auto lg:block",
         style: {
           background: accent,
           color: "#06120F",
@@ -743,6 +743,11 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
 }
 export function CloseTrade({ entry, onSave, onCancel, accent, measureMode, currency, notify, t }) {
   const hasPlan = entry && typeof entry.entryPrice === "number" && typeof entry.stopLoss === "number" && typeof entry.takeProfit === "number";
+  const planRR = hasPlan
+    ? (typeof entry.plannedRR === "number" && Number.isFinite(entry.plannedRR)
+      ? entry.plannedRR
+      : computePlannedRR(entry.direction, entry.entryPrice, entry.stopLoss, entry.takeProfit)?.rr ?? null)
+    : null;
   const [closeType, setCloseType] = useState("manual");
   const [manualExit, setManualExit] = useState("");
   const [resultR, setResultR] = useState("");
@@ -948,7 +953,7 @@ export function CloseTrade({ entry, onSave, onCancel, accent, measureMode, curre
         "button",
         {
           onClick: onCancel,
-          className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          className: "px-4 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "var(--font-display)" },
           children: "\u041E\u0442\u043C\u0435\u043D\u0430"
         }
@@ -958,7 +963,7 @@ export function CloseTrade({ entry, onSave, onCancel, accent, measureMode, curre
         {
           onClick: submit,
           disabled: !canSave || saving,
-          className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          className: "flex-1 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: {
             background: accent,
             color: "#06120F",
@@ -1240,13 +1245,13 @@ export function EditTrade({ entry, onSave, onCancel, accent, customInstruments, 
     ] })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "var(--font-display)" }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" }),
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, fontFamily: "var(--font-display)" }, children: "\u041E\u0442\u043C\u0435\u043D\u0430" }),
       /* @__PURE__ */ jsx(
         "button",
         {
           onClick: submit,
           disabled: !canSave || saving,
-          className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]",
+          className: "flex-1 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: { background: accent, color: "#06120F", opacity: canSave && !saving ? 1 : 0.45, cursor: canSave && !saving ? "pointer" : "not-allowed", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: canSave && !saving ? softLift(accent) : "none" },
           children: saving ? "\u0421\u043E\u0445\u0440\u0430\u043D\u044F\u044E\u2026" : "\u0421\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C"
         }

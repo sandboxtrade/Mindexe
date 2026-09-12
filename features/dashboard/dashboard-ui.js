@@ -9,19 +9,20 @@ import {
   ChevronLeft, Check, X as XIcon, CalendarCheck, ShieldCheck, PenLine, TrendingUp,
   Gauge, RotateCcw, Bitcoin, Activity
 } from "lucide-react";
-import { BASE, WIN, LOSS, FLAT, DIRECTION_LABEL } from "../../config/app-config.js?v=1";
+import { BASE, WIN, LOSS, FLAT, DIRECTION_LABEL } from "../../config/app-config.js?v=4.9.0";
 import {
   countExcludedResultEntries, formatBalance, formatResult, formatStoredResult, hasRealizedRR,
   resultEntriesForUnit, unitSymbol
-} from "../../core/trade-math.js?v=1";
-import { st_mean } from "../../core/stats.js?v=1";
-import { emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions } from "../../core/journal-model.js?v=2";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderLevel } from "../../analytics/trader-analytics.js?v=3";
-import { caWithTimeout } from "../../analytics/calibration-review.js?v=2";
-import { Card, Pill, SkeletonLines, EmptyState, StatCard } from "../../ui/primitives.js?v=2";
-import { aiGenerateHomeAdvice, aiFetchMarketSnapshot } from "../../ai/ai-service.js?v=1";
-import { aiBuildContext, aiHashContext } from "../../ai/context.js?v=2";
-import { pointToEmotions } from "../journal/journal-ui.js?v=2";
+} from "../../core/trade-math.js?v=4.9.0";
+import { st_mean } from "../../core/stats.js?v=4.9.0";
+import { emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions } from "../../core/journal-model.js?v=4.9.0";
+import { TREND_ARROW, analyzeTraderPatterns, calculateTraderLevel } from "../../analytics/trader-analytics.js?v=4.9.0";
+import { caWithTimeout } from "../../analytics/calibration-review.js?v=4.9.0";
+import { JournalReview } from "../calibration/calibration-ui.js?v=4.9.0";
+import { Card, Pill, SkeletonLines, EmptyState, StatCard } from "../../ui/primitives.js?v=4.9.0";
+import { aiGenerateHomeAdvice, aiFetchMarketSnapshot } from "../../ai/ai-service.js?v=4.9.0";
+import { aiBuildContext, aiHashContext } from "../../ai/context.js?v=4.9.0";
+import { pointToEmotions } from "../journal/journal-ui.js?v=4.9.0";
 
 let storageGet = null;
 let storageSet = null;

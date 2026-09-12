@@ -11,14 +11,14 @@ import {
   computePlannedRR, computeRealizedRR, formatResult, formatStoredResult,
   formatStrategyTotal, normalizeResultByCloseType, normalizeResultCurrency,
   normalizeResultMode, outcomeFromResult, resultEntriesForUnit, unitSymbol
-} from "../../core/trade-math.js?v=1";
-import { isEntryClosed } from "../../core/journal-model.js?v=1";
-import { BASE, WIN, LOSS, INSTRUMENTS } from "../../config/app-config.js?v=1";
-import { Card, Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=2";
-import { LogoSpinner } from "../../ui/brand.js?v=1";
-import { compressImageFile } from "../../ui/media-utils.js?v=1";
-import { PickerField } from "../journal/journal-ui.js?v=2";
-import { aiAnalyzeStrategy, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=1";
+} from "../../core/trade-math.js?v=4.9.0";
+import { isEntryClosed } from "../../core/journal-model.js?v=4.9.0";
+import { BASE, WIN, LOSS, INSTRUMENTS } from "../../config/app-config.js?v=4.9.0";
+import { Card, Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=4.9.0";
+import { LogoSpinner } from "../../ui/brand.js?v=4.9.0";
+import { compressImageFile } from "../../ui/media-utils.js?v=4.9.0";
+import { PickerField } from "../journal/journal-ui.js?v=4.9.0";
+import { aiAnalyzeStrategy, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=4.9.0";
 
 function pluralRu(n, one, few, many) {
   const abs = Math.abs(Number(n) || 0) % 100;
@@ -72,7 +72,7 @@ export function calculateStrategyStats(strategyId, strategyTrades, journalEntrie
   [...closed].sort((a, b) => {
     const da = a.exitDate || a.date;
     const db = b.exitDate || b.date;
-    return new Date(da || 0) - new Date(db || 0);
+    return new Date(da || 0).getTime() - new Date(db || 0).getTime();
   }).forEach((t) => {
     equity += t.r;
     peak = Math.max(peak, equity);
@@ -139,8 +139,8 @@ function StrategyEditor({ strategy, accent, lang, onCancel, onSave }) {
       /* @__PURE__ */ jsx("p", { className: "text-[10px] mt-2", style: { color: BASE.inkFaint }, children: isEn ? "Gemini will use this as the strategy's rulebook and compare it with your actual sample." : "Gemini будет воспринимать это описание как правила стратегии и сравнивать их с реальной выборкой сделок." })
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
-      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({ name: name.trim(), description: description.trim() }), className: "flex-1 py-3 rounded-full text-sm transition-all active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: strategy ? isEn ? "Save changes" : "Сохранить изменения" : isEn ? "Create strategy" : "Создать стратегию" })
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 h-11 rounded-[12px] text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { disabled: !canSave, onClick: () => onSave({ name: name.trim(), description: description.trim() }), className: "flex-1 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]", style: { background: accent, color: "#04120B", opacity: canSave ? 1 : 0.3, fontWeight: 600 }, children: strategy ? isEn ? "Save changes" : "Сохранить изменения" : isEn ? "Create strategy" : "Создать стратегию" })
     ] })
   ] });
 }
@@ -327,11 +327,11 @@ function StrategyTradeForm({ strategy, accent, customInstruments, onAddCustomIns
       /* @__PURE__ */ jsx("textarea", { value: note, onChange: (e) => setNote(e.target.value), rows: 3, placeholder: isEn ? "Why this setup meets the strategy rules..." : "Почему этот сетап соответствует правилам стратегии...", className: "w-full bg-transparent rounded-[16px] p-3 text-sm outline-none resize-none", style: { border: `1px solid ${BASE.line}`, color: BASE.ink } })
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 h-11 rounded-[12px] text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
       /* @__PURE__ */ jsx("button", {
         disabled: !canSave || saving,
         onClick: handleSubmit,
-        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        className: "flex-1 h-11 rounded-[12px] text-sm active:scale-[0.98] transition-all",
         style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
         children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Add trade" : "Добавить сделку"
       })
@@ -579,11 +579,11 @@ function StrategyTradeEditForm({ trade, strategy, accent, measureMode, currency,
       ] })
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 h-11 rounded-[12px] text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
       /* @__PURE__ */ jsx("button", {
         disabled: !canSave || saving,
         onClick: handleSubmit,
-        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        className: "flex-1 h-11 rounded-[12px] text-sm active:scale-[0.98] transition-all",
         style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
         children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Save changes" : "Сохранить изменения"
       })
@@ -692,11 +692,11 @@ function StrategyCloseTrade({ trade, accent, measureMode, currency, notify, lang
       ] })
     ] }) }),
     /* @__PURE__ */ jsxs("div", { className: "flex gap-2 mt-4", children: [
-      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 py-3 rounded-full text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
+      /* @__PURE__ */ jsx("button", { onClick: onCancel, className: "px-4 h-11 rounded-[12px] text-sm", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: isEn ? "Cancel" : "Отмена" }),
       /* @__PURE__ */ jsx("button", {
         disabled: !canSave || saving,
         onClick: handleSubmit,
-        className: "flex-1 py-3 rounded-full text-sm active:scale-[0.98] transition-all",
+        className: "flex-1 h-11 rounded-[12px] text-sm active:scale-[0.98] transition-all",
         style: { background: accent, color: "#04120B", opacity: canSave && !saving ? 1 : 0.45, fontWeight: 600 },
         children: saving ? isEn ? "Saving…" : "Сохраняю…" : isEn ? "Close trade" : "Закрыть сделку"
       })
@@ -777,7 +777,7 @@ export function StrategyLab({ strategies, strategyTrades, journalEntries, loaded
     } });
   }
   if (mode === "detail" && selected && stats) {
-    const pf = stats.profitFactor === "Infinity" ? "∞" : stats.profitFactor == null ? "—" : stats.profitFactor.toFixed(2);
+    const pf = stats.profitFactor === "Infinity" ? "∞" : typeof stats.profitFactor === "number" && Number.isFinite(stats.profitFactor) ? stats.profitFactor.toFixed(2) : "—";
     return /* @__PURE__ */ jsxs("div", { children: [
       /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-4", children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-start gap-2 min-w-0", children: [
@@ -839,13 +839,13 @@ export function StrategyLab({ strategies, strategyTrades, journalEntries, loaded
         /* @__PURE__ */ jsx(Pill, { active: detailTab === "ai", onClick: () => setDetailTab("ai"), accent, children: "Gemini" })
       ] }),
       detailTab === "trades" && /* @__PURE__ */ jsxs("div", { children: [
-        /* @__PURE__ */ jsx("button", { onClick: () => setMode("newTrade"), className: "w-full mb-4 py-3 rounded-[18px] flex items-center justify-center gap-2 text-sm active:scale-[0.99]", style: { background: BASE.ink, color: "#000", fontWeight: 600 }, children: [
+        /* @__PURE__ */ jsx("button", { onClick: () => setMode("newTrade"), className: "w-full mb-4 h-11 rounded-[12px] flex items-center justify-center gap-2 text-sm active:scale-[0.99]", style: { background: BASE.ink, color: "#000", fontWeight: 600 }, children: [
           /* @__PURE__ */ jsx(Plus, { size: 15 }),
           isEn ? "Add strategy trade" : "Добавить тестовую сделку"
         ] }),
         allSelectedTrades.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Target, title: isEn ? "No trades yet" : "Сделок пока нет", hint: isEn ? "Add a trade here or link a journal trade to this strategy." : "Добавь сделку здесь или привяжи обычную запись журнала к этой стратегии.", accent, compact: true }) : /* @__PURE__ */ jsx("div", { className: "space-y-2", children: [...allSelectedTrades].reverse().map((trade) => {
           const closed = isEntryClosed(trade);
-          return /* @__PURE__ */ jsxs("div", { className: "rounded-[18px] px-3.5 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
+          return /* @__PURE__ */ jsxs("div", { className: "rounded-[14px] px-3.5 py-3", style: { border: `1px solid ${BASE.line}`, background: BASE.surface }, children: [
             /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsx("span", { className: "w-1.5 h-1.5 rounded-full shrink-0", style: { background: closed ? outcomeColor(trade.outcome) : accent } }),
               /* @__PURE__ */ jsx("span", { className: "text-sm", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: trade.instrument }),
@@ -938,7 +938,7 @@ export function StrategyLab({ strategies, strategyTrades, journalEntries, loaded
             } finally {
               setAiBusy(false);
             }
-          }, className: "w-full py-2.5 rounded-full text-sm", style: { background: accent, color: "#04120B", opacity: aiBusy ? 0.55 : 1, fontWeight: 600 }, children: aiBusy ? isEn ? "Analyzing..." : "Анализирую..." : selected.aiReview ? isEn ? "Refresh review" : "Обновить разбор" : isEn ? "Analyze strategy" : "Разобрать стратегию" })
+          }, className: "w-full h-11 rounded-[12px] text-sm", style: { background: accent, color: "#04120B", opacity: aiBusy ? 0.55 : 1, fontWeight: 600 }, children: aiBusy ? isEn ? "Analyzing..." : "Анализирую..." : selected.aiReview ? isEn ? "Refresh review" : "Обновить разбор" : isEn ? "Analyze strategy" : "Разобрать стратегию" })
         ] }) }),
         selected.aiReview ? /* @__PURE__ */ jsx(Card, { children: /* @__PURE__ */ jsxs("div", { children: [
           selected.aiReviewedAt && /* @__PURE__ */ jsx("div", { className: "text-[10px] mb-3", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: new Date(selected.aiReviewedAt).toLocaleString(isEn ? "en-US" : "ru-RU") }),
@@ -958,7 +958,7 @@ export function StrategyLab({ strategies, strategyTrades, journalEntries, loaded
     ] }),
     activeStrategies.length === 0 ? /* @__PURE__ */ jsx(EmptyState, { icon: Target, title: isEn ? "Create your first strategy" : "Создай первую стратегию", hint: isEn ? "Describe the rules, add technical trades, and mind.exe will calculate the sample separately." : "Опиши правила, добавляй технические сделки, а mind.exe будет отдельно считать эффективность выборки.", actionLabel: isEn ? "New strategy" : "Новая стратегия", onAction: () => setMode("create"), accent }) : /* @__PURE__ */ jsx("div", { className: "space-y-3", children: activeStrategies.map((s) => {
       const st = calculateStrategyStats(s.id, strategyTrades, journalEntries, measureMode, currency);
-      return /* @__PURE__ */ jsx("button", { onClick: () => openStrategy(s.id), className: "w-full text-left rounded-[20px] p-4 active:scale-[0.995] transition-transform", style: { background: BASE.surface, border: `1px solid ${BASE.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.018)" }, children: /* @__PURE__ */ jsxs("div", { children: [
+      return /* @__PURE__ */ jsx("button", { onClick: () => openStrategy(s.id), className: "w-full text-left rounded-[16px] p-4 active:scale-[0.995] transition-transform", style: { background: BASE.surface, border: `1px solid ${BASE.line}`, boxShadow: "inset 0 1px 0 rgba(255,255,255,.018)" }, children: /* @__PURE__ */ jsxs("div", { children: [
         /* @__PURE__ */ jsxs("div", { className: "flex items-start justify-between gap-3 mb-4", children: [
           /* @__PURE__ */ jsxs("div", { className: "min-w-0", children: [
             /* @__PURE__ */ jsx("div", { className: "text-[17px] truncate", style: { color: BASE.ink, fontWeight: 500 }, children: s.name }),

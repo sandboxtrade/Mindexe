@@ -2,39 +2,35 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#000000" />
   <title>mind.exe</title>
   <link rel="icon" href="./icon-32.png" sizes="32x32" type="image/png" />
   <link rel="icon" href="./icon-16.png" sizes="16x16" type="image/png" />
   <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
   <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./icon-180.png" />
-  <link rel="manifest" href="./manifest.json?v=4.3" />
+  <link rel="manifest" href="./manifest.json?v=4.9.0" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="mind.exe" />
-  <!-- V5.3 fix: the V5.1 index.html was rebuilt from the OTHER project's file by mistake, which has no
-       importmap entries for recharts or firebase/* — those bare imports then failed to resolve and the
-       page stayed black. This file is the original mind.exe index.html with only the font change
-       applied; the importmap at the bottom of head is the part that must never be dropped.
-       V3.0 typography: моноширинный шрифт стал основным для всего приложения, а не только для
-       цифр. Sora больше не загружается — она не используется ни в одном месте бандла.
-       IBM Plex Mono покрывает кириллицу, поэтому русские экраны не деградируют. -->
+  <!-- Keep the importmap below: the app uses bare React/Recharts/Firebase module specifiers. -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <!-- The app is built entirely with Tailwind utility classes (flex, rounded-xl, text-[24px], etc.)
        — inside Claude's artifact preview Tailwind is provided automatically, but a plain static site
        needs it loaded explicitly. Without this script every className does nothing and the app falls
        back to unstyled browser-default form controls. -->
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    /* V3.0: фон чистый чёрный, как в теме приложения (был #040405). */
+    /* Final shell uses the same black surface and type stack as the React UI. */
     html, body { margin: 0; padding: 0; background: #000000; overscroll-behavior: none; }
-    /* Базовый шрифт до загрузки бандла — тот же моноширинный, что и внутри приложения,
-       иначе первый кадр рисуется системным гротеском и подменяется на глазах. */
-    body { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-weight: 400; }
-    #root { min-height: 100vh; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; color-scheme: dark; }
+    #root { min-height: 100dvh; }
+    #boot-fallback { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; color: #6f7078; font: 500 12px/1.4 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .14em; }
+    #boot-fallback[hidden] { display: none; }
+    #boot-fallback::before { content: ""; width: 24px; height: 24px; margin-right: 12px; border: 2px solid #202027; border-top-color: #f4f4f6; border-radius: 50%; animation: bootSpin .9s linear infinite; }
+    @keyframes bootSpin { to { transform: rotate(360deg); } }
   </style>
 
   <script>
@@ -98,13 +94,19 @@
   </script>
 </head>
 <body>
+  <div id="boot-fallback" role="status" aria-live="polite">MIND.EXE</div>
   <div id="root"></div>
-  <!-- V5.8: added a ?v= cache-buster. Without it, a browser (especially an iOS PWA added to the
-       home screen) can keep serving a previously cached app.js indefinitely after a new version is
-       uploaded to the same path — every fix in a release can be silently invisible even though the
-       file on the server is correct. Bump this number on every new app.js version; the query string
-       is otherwise ignored by the server, it only exists to change the URL so the browser treats it
-       as a different resource and re-fetches. -->
-  <script type="module" src="./app.js?v=4.8.5.1"></script>
+  <!-- Cache-bust the entry module on each release; nested local modules use the final generation too. -->
+  <script>
+    // If the module graph/CDN fails before React starts, do not leave a silent black screen.
+    window.__mindExeBootTimer = setTimeout(function () {
+      var el = document.getElementById("boot-fallback");
+      if (el && !window.__mindExeStarted) {
+        el.textContent = "MIND.EXE · НЕ УДАЛОСЬ ЗАПУСТИТЬ";
+        el.style.color = "#95959D";
+      }
+    }, 9000);
+  </script>
+  <script type="module" src="./app.js?v=4.9.0-final"></script>
 </body>
 </html>

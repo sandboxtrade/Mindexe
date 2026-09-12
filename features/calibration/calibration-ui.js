@@ -4,19 +4,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, Check, AlertTriangle, Gauge } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, WIN, LOSS, WARN } from "../../config/app-config.js?v=1";
-import { Card } from "../../ui/primitives.js?v=2";
-import { LogoSpinner } from "../../ui/brand.js?v=1";
+import { BASE, WIN, LOSS, WARN } from "../../config/app-config.js?v=4.9.0";
+import { Card } from "../../ui/primitives.js?v=4.9.0";
+import { LogoSpinner } from "../../ui/brand.js?v=4.9.0";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview, caScaleSet, scoreCalibrationDynamic, caWithTimeout
-} from "../../analytics/calibration-review.js?v=2";
-import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js?v=2";
+} from "../../analytics/calibration-review.js?v=4.9.0";
+import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js?v=4.9.0";
 import {
   aiGenerateCalibrationQuestions, aiReviewQuestions, aiReviewSummary
-} from "../../ai/ai-service.js?v=1";
+} from "../../ai/ai-service.js?v=4.9.0";
 
-const softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
+const softLift = (accent) => `0 0 0 1px ${accent}30, 0 8px 22px rgba(0,0,0,0.28)`;
 
 function useAnimatedNumber(target, duration = 600) {
   const [display, setDisplay] = useState(target);
@@ -176,7 +176,7 @@ export function Calibration({ accent, onComplete, lang, t, entries, analytics, u
         "button",
         {
           onClick: prepareAndStart,
-          className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
+          className: "px-10 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.calibration.start
         }
@@ -307,7 +307,7 @@ export function JournalReview({ entries, accent, onClose, t, lang }) {
         "button",
         {
           onClick: onClose,
-          className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
+          className: "px-10 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.review.back
         }
@@ -324,7 +324,7 @@ export function JournalReview({ entries, accent, onClose, t, lang }) {
         "button",
         {
           onClick: () => setStage("quiz"),
-          className: "px-10 py-3 rounded-full text-sm transition-all active:scale-95",
+          className: "px-10 h-11 rounded-[12px] text-sm transition-all active:scale-[0.98]",
           style: { background: accent, color: "#06120F", fontFamily: "var(--font-display)", fontWeight: 600, boxShadow: softLift(accent) },
           children: t.calibration.start
         }

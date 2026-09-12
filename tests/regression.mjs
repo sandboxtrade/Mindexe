@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "..");
 const appPath = path.join(root, "app.js");
+const indexPath = path.join(root, "index.html");
 const tradeMathPath = path.join(root, "core", "trade-math.js");
 const statsPath = path.join(root, "core", "stats.js");
 const journalModelPath = path.join(root, "core", "journal-model.js");
@@ -33,6 +34,7 @@ const dashboardUiPath = path.join(root, "features", "dashboard", "dashboard-ui.j
 const authUiPath = path.join(root, "features", "auth", "auth-ui.js");
 const appShellPath = path.join(root, "ui", "app-shell.js");
 const appSource = fs.readFileSync(appPath, "utf8");
+const indexSource = fs.readFileSync(indexPath, "utf8");
 const tradeMathSource = fs.readFileSync(tradeMathPath, "utf8");
 const statsSource = fs.readFileSync(statsPath, "utf8");
 const journalModelSource = fs.readFileSync(journalModelPath, "utf8");
@@ -182,6 +184,29 @@ await test("all local JavaScript modules pass Node syntax check", () => {
   }
 });
 
+await test("TypeScript static audit finds no unresolved runtime identifiers when tsc is available", () => {
+  const probe = spawnSync("tsc", ["--version"], { encoding: "utf8" });
+  if (probe.error?.code === "ENOENT") return;
+  ok(probe.status === 0, probe.stderr || probe.stdout || "tsc probe failed");
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name.startsWith(".") || entry.name === "tests") continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith(".js")) files.push(full);
+    }
+  };
+  walk(root);
+  const r = spawnSync("tsc", [
+    "--allowJs", "--checkJs", "--noEmit", "--target", "ES2022", "--module", "ESNext",
+    "--moduleResolution", "Bundler", "--skipLibCheck", "--lib", "ES2022,DOM", ...files
+  ], { encoding: "utf8", cwd: root, maxBuffer: 8 * 1024 * 1024 });
+  const output = `${r.stdout || ""}\n${r.stderr || ""}`;
+  const unresolved = output.split(/\r?\n/).filter((line) => /error TS(?:2304|2552):/.test(line));
+  ok(unresolved.length === 0, `unresolved runtime identifiers:\n${unresolved.join("\n")}`);
+});
+
 await test("all relative JavaScript imports resolve to local files", () => {
   const files = [];
   const walk = (dir) => {
@@ -256,11 +281,11 @@ await test("stage 5-7 feature modules stay extracted from app.js", () => {
   ]) ok(!appSource.includes(token), `feature implementation drifted back into app.js: ${token}`);
 
   for (const token of [
-    'from "./features/journal/journal-ui.js?v=2"',
-    'from "./features/strategy/strategy-lab.js?v=2"',
-    'from "./ai/context.js?v=2"',
-    'from "./ai/ai-service.js?v=1"',
-    'from "./ai/trade-tools.js?v=1"'
+    'from "./features/journal/journal-ui.js?v=4.9.0"',
+    'from "./features/strategy/strategy-lab.js?v=4.9.0"',
+    'from "./ai/context.js?v=4.9.0"',
+    'from "./ai/ai-service.js?v=4.9.0"',
+    'from "./ai/trade-tools.js?v=4.9.0"'
   ]) ok(appSource.includes(token), `feature module import missing: ${token}`);
 });
 
@@ -275,10 +300,10 @@ await test("stage 8 feature UI stays extracted from app.js", () => {
   ]) ok(!appSource.includes(token), `stage 8 implementation drifted back into app.js: ${token}`);
 
   for (const token of [
-    'from "./ui/brand.js?v=1"',
-    'from "./features/settings/settings-ui.js?v=1"',
-    'from "./features/coach/coach-ui.js?v=1"',
-    'from "./features/calibration/calibration-ui.js?v=2"'
+    'from "./ui/brand.js?v=4.9.0"',
+    'from "./features/settings/settings-ui.js?v=4.9.0"',
+    'from "./features/coach/coach-ui.js?v=4.9.0"',
+    'from "./features/calibration/calibration-ui.js?v=4.9.0"'
   ]) ok(appSource.includes(token), `stage 8 module import missing: ${token}`);
 });
 
@@ -312,9 +337,9 @@ await test("stage 9-11 dashboard/auth/shell UI stays extracted from app.js", () 
   ]) ok(!appSource.includes(token), `stage 9-11 implementation drifted back into app.js: ${token}`);
 
   for (const token of [
-    'from "./features/dashboard/dashboard-ui.js?v=1"',
-    'from "./features/auth/auth-ui.js?v=1"',
-    'from "./ui/app-shell.js?v=1"'
+    'from "./features/dashboard/dashboard-ui.js?v=4.9.0"',
+    'from "./features/auth/auth-ui.js?v=4.9.0"',
+    'from "./ui/app-shell.js?v=4.9.0"'
   ]) ok(appSource.includes(token), `stage 9-11 module import missing: ${token}`);
 
   ok(appSource.includes("configureDashboardData({ storageGet, storageSet });"), "dashboard storage adapter is not configured");
@@ -323,12 +348,12 @@ await test("stage 9-11 dashboard/auth/shell UI stays extracted from app.js", () 
 await test("stage 9-11 moved modules keep their runtime dependencies explicit", () => {
   for (const token of [
     'import { useState, useMemo, useEffect, useRef } from "react"',
-    'from "../../core/trade-math.js?v=1"',
-    'from "../../core/journal-model.js?v=2"',
-    'from "../../analytics/trader-analytics.js?v=3"',
-    'from "../../ai/ai-service.js?v=1"',
-    'from "../../ai/context.js?v=2"',
-    'from "../journal/journal-ui.js?v=2"',
+    'from "../../core/trade-math.js?v=4.9.0"',
+    'from "../../core/journal-model.js?v=4.9.0"',
+    'from "../../analytics/trader-analytics.js?v=4.9.0"',
+    'from "../../ai/ai-service.js?v=4.9.0"',
+    'from "../../ai/context.js?v=4.9.0"',
+    'from "../journal/journal-ui.js?v=4.9.0"',
     "function calculateCalendarStats",
     "function useAnimatedNumber",
     "const outcomeColor",
@@ -337,9 +362,9 @@ await test("stage 9-11 moved modules keep their runtime dependencies explicit", 
 
   for (const token of [
     'import { Component, useState, useRef, useEffect } from "react"',
-    'from "../core/trade-math.js?v=1"',
-    'from "./brand.js?v=1"',
-    'from "./primitives.js?v=2"',
+    'from "../core/trade-math.js?v=4.9.0"',
+    'from "./brand.js?v=4.9.0"',
+    'from "./primitives.js?v=4.9.0"',
     "const relTime",
     "var SPLASH_POSTER_IMG",
     "function WalletSheet",
@@ -348,7 +373,7 @@ await test("stage 9-11 moved modules keep their runtime dependencies explicit", 
 
   for (const token of [
     'import { useState, useEffect } from "react"',
-    'from "../../ui/brand.js?v=1"',
+    'from "../../ui/brand.js?v=4.9.0"',
     "function AuthScreen",
     "function LegacyMigratePrompt",
     "function BootIntro"
@@ -1335,7 +1360,7 @@ await test("journal/full reset handlers are cloud-first and full reset clears au
 });
 
 await test("app routes Strategy index and direct-trade writes through revisioned Strategy store", () => {
-  ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/strategy-store.js?v=4.9.0"'), "strategy-store import missing");
   const loadStart = appSource.indexOf("async function loadStrategyLabState");
   const loadEnd = appSource.indexOf("async function saveStrategyTradeRecord", loadStart);
   const block = appSource.slice(loadStart, loadEnd);
@@ -1465,16 +1490,44 @@ await test("core logic stays extracted instead of drifting back into app.js", ()
     "function migrateEntry(",
     "function normalizeEmotions("
   ]) ok(!appSource.includes(token), `core implementation drifted back into app.js: ${token}`);
-  ok(appSource.includes('from "./core/trade-math.js?v=1"'), "trade-math import missing");
-  ok(appSource.includes('from "./core/stats.js?v=1"'), "stats import missing");
-  ok(appSource.includes('from "./core/journal-model.js?v=2"'), "journal-model import missing");
-  ok(appSource.includes('from "./core/firestore-storage.js?v=2"'), "firestore-storage import missing");
-  ok(appSource.includes('from "./core/journal-media.js?v=1"'), "journal-media import missing");
-  ok(appSource.includes('from "./core/profile-store.js?v=2"'), "profile-store import missing");
-  ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/trade-math.js?v=4.9.0"'), "trade-math import missing");
+  ok(appSource.includes('from "./core/stats.js?v=4.9.0"'), "stats import missing");
+  ok(appSource.includes('from "./core/journal-model.js?v=4.9.0"'), "journal-model import missing");
+  ok(appSource.includes('from "./core/firestore-storage.js?v=4.9.0"'), "firestore-storage import missing");
+  ok(appSource.includes('from "./core/journal-media.js?v=4.9.0"'), "journal-media import missing");
+  ok(appSource.includes('from "./core/profile-store.js?v=4.9.0"'), "profile-store import missing");
+  ok(appSource.includes('from "./core/strategy-store.js?v=4.9.0"'), "strategy-store import missing");
   ok(!appSource.includes("async function loadMedia("), "journal media loader drifted back into app.js");
   ok(!appSource.includes("async function saveMedia("), "journal media writer drifted back into app.js");
   ok(!/^(?!\s*\/\/).*__mediaReadyIds/m.test(appSource), "journal media private cache leaked back into app.js");
+});
+
+await test("final runtime extraction dependencies are explicit", () => {
+  ok(!appSource.includes("SPLASH_BLACKHOLE_MASK"), "dead splash mask reference returned to app.js");
+  ok(!appShellSource.includes("SPLASH_BLACKHOLE_MASK"), "dead splash mask payload returned to app shell");
+  ok(authUiSource.includes('import { Fragment, jsx, jsxs } from "react/jsx-runtime"'), "auth Fragment import missing");
+  ok(authUiSource.includes('import { Card } from "../../ui/primitives.js?v=4.9.0"'), "auth Card import missing");
+  ok(dashboardUiSource.includes('import { JournalReview } from "../calibration/calibration-ui.js?v=4.9.0"'), "dashboard JournalReview import missing");
+});
+
+await test("final typography and cache generation stay consolidated", () => {
+  ok(indexSource.includes("family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700"), "final font preload missing");
+  ok(appSource.includes("--font-display: 'Inter'"), "UI font is not Inter");
+  ok(appSource.includes("--font-mono: 'IBM Plex Mono'"), "numeric font is not IBM Plex Mono");
+  ok(indexSource.includes('./app.js?v=4.9.0-final'), "final app cache generation missing");
+  const localImports = source.match(/from ["'](?:\.\.?\/)[^"']+\.js(?:\?v=[^"']+)?["']/g) || [];
+  const stale = localImports.filter((spec) => !spec.includes("?v=4.9.0"));
+  ok(stale.length === 0, `local module cache generations are mixed: ${stale.slice(0, 8).join(", ")}`);
+});
+
+await test("final startup shell fails visibly and splash assets stay external", () => {
+  ok(indexSource.includes('id="boot-fallback"'), "pre-React boot fallback missing");
+  ok(indexSource.includes('__mindExeBootTimer'), "boot failure timer missing");
+  ok(appSource.includes('window.__mindExeStarted = true'), "React startup acknowledgement missing");
+  ok(indexSource.includes('./manifest.json?v=4.9.0'), "manifest cache generation not bumped");
+  ok(appShellSource.includes('var SPLASH_POSTER_IMG = "./splash-poster.jpg?v=4.9.0";'), "splash poster is not an external release asset");
+  ok(appShellSource.includes('var SPLASH_VIDEO_SRC = "./splash.mp4?v=4.9.0";'), "splash video cache generation is stale");
+  ok(!appShellSource.includes('data:image/jpeg;base64,'), "large splash poster drifted back into JavaScript");
 });
 
 console.log(`\n${passed} regression checks passed.`);

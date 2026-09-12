@@ -6,7 +6,7 @@ import {
   normalizeResultCurrency,
   normalizeResultMode,
   outcomeFromResult
-} from "./trade-math.js?v=1";
+} from "./trade-math.js?v=4.9.0";
 
 export const EMOTION_SCALE_KEYS = {
   entry: ["confidence", "fear", "calm", "tension"],

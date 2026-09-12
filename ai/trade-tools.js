@@ -2,9 +2,9 @@
 // Runtime is configured once by app.js so this module reuses the same Firebase AI client/model.
 
 import { getGenerativeModel } from "firebase/ai";
-import { caWithTimeout } from "../analytics/calibration-review.js?v=2";
-import { normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js?v=1";
-import { isEntryClosed } from "../core/journal-model.js?v=1";
+import { caWithTimeout } from "../analytics/calibration-review.js?v=4.9.0";
+import { normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js?v=4.9.0";
+import { isEntryClosed } from "../core/journal-model.js?v=4.9.0";
 
 let runtimeAiLogic = null;
 let runtimeModelName = null;

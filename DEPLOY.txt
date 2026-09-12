@@ -1,28 +1,39 @@
-MIND.EXE v4.8.0 — Final build from this chat
+MIND.EXE v4.9.0 FINAL QA
 
-IMPORTANT: upload app.js, index.html and the FULL core/ directory together.
+Upload the release while preserving the directory structure.
+Do NOT flatten ai/, analytics/, config/, core/, features/, i18n/ or ui/ into the repository root.
 
-Changed/new production files vs v4.7.1:
-- app.js
+Runtime files in this archive:
 - index.html
-- core/strategy-store.js   (NEW)
+- app.js
+- splash.mp4
+- splash-poster.jpg
+- ai/
+- analytics/
+- config/
+- core/
+- features/
+- i18n/
+- ui/
 
-Existing required core files remain:
-- core/trade-math.js
-- core/stats.js
-- core/journal-model.js
-- core/firestore-storage.js
-- core/journal-media.js
-- core/profile-store.js
+Keep the existing repository PWA assets that are not part of this archive (manifest.json and icon PNG files).
+The final index references manifest.json?v=4.9.0 and app.js?v=4.9.0-final.
+All local JS module imports use ?v=4.9.0.
 
-Recommended repository files:
+Recommended repository-only files:
 - package.json
-- tests/regression.mjs
+- tests/
 - TESTING.md
 - NEXT_CHAT_HANDOFF.md
 
-Before deploy: npm test
+Before deploy:
+  npm test
 
-No manual Firebase migration is required.
+Expected result:
+  68 regression checks passed.
+  MIND.EXE regression suite: OK
+
+No data migration is required.
 SCHEMA_VERSION remains 2.
-Canonical profile/media/strategy trade key names remain compatible.
+Canonical profile/media/Strategy keys and Firestore path shape are unchanged.
+Critical persistence stores are byte-for-byte unchanged from the tested v4.8.5.1 base.

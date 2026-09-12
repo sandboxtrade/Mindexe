@@ -7,11 +7,11 @@ import {
   TrendingDown, Target, RotateCcw, Zap, Info
 } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, WIN, LOSS } from "../../config/app-config.js?v=1";
-import { Card } from "../../ui/primitives.js?v=2";
-import { DecodeText, LogoSpinner } from "../../ui/brand.js?v=1";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js?v=2";
-import { aiGenerateInsight, aiChatReply } from "../../ai/ai-service.js?v=1";
+import { BASE, WIN, LOSS } from "../../config/app-config.js?v=4.9.0";
+import { Card } from "../../ui/primitives.js?v=4.9.0";
+import { DecodeText, LogoSpinner } from "../../ui/brand.js?v=4.9.0";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js?v=4.9.0";
+import { aiGenerateInsight, aiChatReply } from "../../ai/ai-service.js?v=4.9.0";
 
 const ring = (accent) => `0 0 0 1px ${accent}35`;
 
@@ -127,7 +127,7 @@ export function Coach({ entries, analytics, accent, userId, lang, t, strategyNot
           onClick: runAnalyze,
           disabled: analyzing || entries.length === 0,
           className: "w-full py-2.5 rounded-xl text-sm transition-all duration-200 active:scale-[0.98] disabled:opacity-40 flex items-center justify-center gap-2",
-          style: { border: `1px solid ${accent}40`, background: `linear-gradient(135deg, ${accent}30, ${accent}12)`, color: accent, fontFamily: "var(--font-display)" },
+          style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "var(--font-display)" },
           children: [
             /* @__PURE__ */ jsx(Sparkles, { size: 14 }),
             /* @__PURE__ */ jsx(DecodeText, { text: analyzing ? t.coach.analyzeBusy : t.coach.analyzeBtn })

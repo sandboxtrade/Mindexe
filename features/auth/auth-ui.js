@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { jsx, jsxs } from "react/jsx-runtime";
+import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { User, KeyRound, Eye, EyeOff } from "lucide-react";
-import { BASE, LOSS } from "../../config/app-config.js?v=1";
-import { LogoMark, Wordmark } from "../../ui/brand.js?v=1";
+import { BASE, LOSS } from "../../config/app-config.js?v=4.9.0";
+import { LogoMark, Wordmark } from "../../ui/brand.js?v=4.9.0";
+import { Card } from "../../ui/primitives.js?v=4.9.0";
 
 function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
   const [mode, setMode] = useState("login");
@@ -65,7 +66,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           "button",
           {
             onClick: () => switchMode("login"),
-            className: "px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+            className: "px-4 h-9 rounded-[10px] text-sm font-medium transition-all duration-150 active:scale-95",
             style: { background: mode === "login" ? `${accent}12` : "transparent", color: mode === "login" ? accent : BASE.inkDim, border: `1px solid ${mode === "login" ? accent + "40" : BASE.line}` },
             children: "\u0412\u043E\u0439\u0442\u0438"
           }
@@ -74,7 +75,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           "button",
           {
             onClick: () => switchMode("register"),
-            className: "px-4 py-1.5 rounded-full text-sm transition-all duration-200 active:scale-95",
+            className: "px-4 h-9 rounded-[10px] text-sm font-medium transition-all duration-150 active:scale-95",
             style: { background: mode === "register" ? `${accent}12` : "transparent", color: mode === "register" ? accent : BASE.inkDim, border: `1px solid ${mode === "register" ? accent + "40" : BASE.line}` },
             children: "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0430\u043A\u043A\u0430\u0443\u043D\u0442"
           }
@@ -142,7 +143,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
         {
           onClick: submit,
           disabled,
-          className: "w-full py-3 rounded-xl text-sm mb-3 transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
+          className: "w-full h-11 rounded-[12px] text-sm mb-3 font-semibold transition-all duration-150 active:scale-[0.98] disabled:opacity-40",
           style: { border: `1px solid ${accent}40`, background: `${accent}12`, color: accent, fontFamily: "var(--font-display)" },
           children: busy ? "\u2026" : mode === "register" ? "\u0421\u043E\u0437\u0434\u0430\u0442\u044C \u0430\u043A\u043A\u0430\u0443\u043D\u0442" : "\u0412\u043E\u0439\u0442\u0438"
         }
@@ -153,7 +154,7 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
           onClick: submitGoogle,
           disabled: googleBusy,
           type: "button",
-          className: "w-full py-3 rounded-xl text-sm mb-6 flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] disabled:opacity-40",
+          className: "w-full h-11 rounded-[12px] text-sm mb-6 font-medium flex items-center justify-center gap-2 transition-all duration-150 active:scale-[0.98] disabled:opacity-40",
           style: { border: `1px solid ${BASE.line}`, color: BASE.ink, background: BASE.surface2 },
           children: [
             /* @__PURE__ */ jsxs("svg", { width: 16, height: 16, viewBox: "0 0 48 48", "aria-hidden": "true", children: [

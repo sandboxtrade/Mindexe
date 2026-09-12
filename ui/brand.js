@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE } from "../config/app-config.js?v=1";
+import { BASE } from "../config/app-config.js?v=4.9.0";
 
 export function LogoMark({ size = 26, color, accent, animated = false }) {
   const c = color || BASE.ink;

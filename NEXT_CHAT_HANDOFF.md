@@ -1,48 +1,19 @@
-MIND.EXE v4.8.5.1 startup rollback hotfix
+# MIND.EXE — handoff
 
-# MIND.EXE — handoff to next chat
+Current release: **v4.9.0 FINAL QA**
 
-Current release: **v4.8.4**
+## Architecture
 
-## Current architecture
+React SPA / iPhone-first PWA using Firebase Auth + Firestore. The previous monolithic `app.js` has been split into feature/core modules; final `app.js` is ~2.8k lines and mainly owns application orchestration, persistence/recovery wiring and session state.
 
-- React SPA / iPhone-first web/PWA.
-- Firebase Auth + Firestore.
-- `SCHEMA_VERSION = 2`.
-- Canonical public profile shape remains backwards-compatible.
-- Main journal profile uses revisioned/chunked Profile Persistence v2.
-- Journal screenshots use split per-image documents with manifest-last activation.
-- Strategy Lab index uses revisioned Strategy Store with CAS.
-- Direct Strategy Lab trades use per-trade CAS revisions.
-- 64 zero-dependency Node regression checks.
+Main areas:
 
-## Core modules
-
-- `core/trade-math.js`
-- `core/stats.js`
-- `core/journal-model.js`
-- `core/firestore-storage.js`
-- `core/journal-media.js`
-- `core/profile-store.js`
-- `core/strategy-store.js`
-- `config/app-config.js`
-- `i18n/strings.js`
-- `analytics/trader-analytics.js`
-- `analytics/calibration-review.js`
-- `ui/primitives.js`
-- `ui/media-utils.js`
-- `ui/brand.js`
-- `ai/context.js`
-- `ai/ai-service.js`
-- `ai/trade-tools.js`
-- `features/journal/journal-ui.js`
-- `features/strategy/strategy-lab.js`
-- `features/settings/settings-ui.js`
-- `features/coach/coach-ui.js`
-- `features/calibration/calibration-ui.js`
-- `features/dashboard/dashboard-ui.js`
-- `features/auth/auth-ui.js`
-- `ui/app-shell.js`
+- `core/` — trade math, stats, journal migration/model, Firestore adapter, journal media, Profile Store v2, Strategy Store.
+- `analytics/` — trader analytics/Pattern Engine and calibration/review scoring.
+- `ai/` — context builders, Gemini service and trade-image/text tools.
+- `features/` — journal, Strategy Lab, dashboard, auth UI, settings, coach, calibration.
+- `ui/` — primitives, brand, media helpers and app shell/navigation/error boundary.
+- `config/` + `i18n/` — shared visual/data constants and strings.
 
 ## Data-safety invariants
 
@@ -57,223 +28,88 @@ Do not casually change:
 - `STRATEGY_MEDIA_KEY = "mind-exe-strategy-media"`
 - Firestore path shape: `users/{uid}/data/{safeKey}`
 
-Always run `npm test` before release.
+Before every release run `npm test`.
 
+## What v4.9.0 fixed / changed
 
+This release was made from the proven v4.8.5.1 auth/session base after the user confirmed cross-device persistence worked. It intentionally does not reintroduce the failed v4.8.5 Auth-hardening experiment.
 
+### Startup/runtime crash fixes
 
-## What v4.8.4 changed
+- Removed stale `SPLASH_BLACKHOLE_MASK` references left after modular UI extraction. Those references could throw during the main React render and send desktop/iPhone directly to the ErrorBoundary.
+- Restored explicit `Fragment` + `Card` dependencies in `features/auth/auth-ui.js`.
+- Restored the `JournalReview` dependency in `features/dashboard/dashboard-ui.js`.
+- Added static release coverage for unresolved runtime identifiers (`TS2304` / `TS2552` when `tsc` is available).
+- ErrorBoundary now shows the concrete runtime error message instead of only a generic failure screen.
+- Added a pre-React boot fallback in `index.html`; if the entry module/CDN graph fails entirely, the user no longer sees a silent permanent black screen.
 
-Continued modularization after real two-device smoke testing passed on v4.8.3.1. This stage intentionally did **not** alter profile persistence, Strategy persistence, CAS/recovery, auth service semantics or Firestore keys.
+### Visual / typography consolidation
 
-- Home, Patterns/Dynamics and Challenge UI moved to `features/dashboard/dashboard-ui.js`.
-- Dashboard-owned Home advice/market cache helpers moved with the UI and receive the existing Firestore key/value adapter through `configureDashboardData({ storageGet, storageSet })`.
-- Login/register/Google button UI, legacy-migration prompt and boot intro moved to `features/auth/auth-ui.js`; `authService`, Firebase provider creation and `useAuth()` remain in `app.js` unchanged.
-- Splash, blocking profile-load/conflict screen, mobile/desktop navigation, wallet sheet and React ErrorBoundary moved to `ui/app-shell.js`.
-- `app.js` dropped from about 5,381 to **3,470 lines**.
-- Critical profile/Strategy persistence + auth-service section was compared against v4.8.3.1 and remains byte-for-byte unchanged.
-- `npm test`: **64 checks pass**. New checks guard stage 9–11 module boundaries and required runtime dependencies.
-- `index.html` app cache-buster is `?v=4.8.4`.
+- Inter is now the primary UI typeface.
+- IBM Plex Mono is reserved for prices, balances, RR, tickers, dates and technical/status data.
+- Reduced arbitrary display-font mixing and made headings/labels/control typography more consistent.
+- Tightened card surfaces, borders, radii and shadows; primary form actions use a stricter 12px radius while pills/toggles keep pill geometry where semantically appropriate.
+- Desktop sidebar/mobile navigation, auth controls, journal actions, Strategy Lab actions, calibration controls and load/conflict screens were visually normalized.
+- Viewport no longer disables browser zoom.
+- Mobile numeric/text fields retain a 16px input baseline to avoid unwanted iOS Safari zoom.
 
-The next refactor should not chase a lower line count mechanically. The remaining `app.js` is now mostly `MindExe` orchestration, persistence/recovery/backup wiring and auth session logic. Prefer real browser/Firebase E2E coverage before splitting those pieces.
+### Runtime/edge-case hardening
 
-## What v4.8.3.1 fixed
+- Strategy `profitFactor` rendering no longer assumes a number and cannot call `.toFixed()` on the legacy `"Infinity"` sentinel/string.
+- Strategy date sorting compares timestamps explicitly.
+- Journal CloseTrade safely reconstructs/display planned RR if legacy data has Entry/SL/TP but lacks numeric `plannedRR`.
+- JSON FileReader imports verify `reader.result` is a string before parsing.
+- `playPing()` reuses one AudioContext instead of allocating a new context on every sound.
+- Splash poster moved out of JS base64 and uses the existing `splash-poster.jpg`, reducing JS payload/memory. Splash/video cache versions are `4.9.0`.
+- Historical release comments were removed from the runtime entry file; `app.js` is now ~2,787 lines / ~138 KB.
 
-Hotfix for the modular stages 5–8 release after real desktop/iPhone smoke testing exposed startup/runtime failures.
+### Cache generation
 
-- Restored Home advice/market cache helpers that were accidentally moved into the Calibration UI module while Home still referenced them.
-- Restored missing module-local dependencies after extraction: Journal hooks/style/time helpers, Strategy spinner/result helpers, Calibration animated-number hook, AI context math imports, review emotion-impact helpers and pluralization helpers.
-- Legacy journal-media migration now reuses `journalMediaStore.keys.entry(...)` instead of referencing a removed local key helper.
-- Changed-module URLs were bumped (`?v=`) so Safari/iOS cannot keep serving the broken v4.8.3 module bodies from cache.
-- Added a dedicated regression check for modular dependency closure.
-- `npm test`: 62 checks pass.
-- Additional TypeScript static audit found no unresolved runtime identifiers (`TS2304` / `TS2552`) across app/local modules.
-- Persistence/Auth/CAS keys, schemas and Firestore path shape remain unchanged.
+- `index.html`: `app.js?v=4.9.0-final`
+- every local JS import: `?v=4.9.0`
+- splash assets: `?v=4.9.0`
+- manifest URL: `manifest.json?v=4.9.0`
 
-## What v4.8.3 changed
+This prevents iOS/Safari from combining a new entry module with cached pre-final feature modules.
 
-Continued safe modularization. Persistence/auth behavior and public data shape were intentionally left in place.
+## Persistence status
 
-- Journal screens/forms and emotion UI moved to `features/journal/journal-ui.js`.
-- Strategy Lab UI, forms and local strategy statistics moved to `features/strategy/strategy-lab.js`.
-- browser image compression moved to `ui/media-utils.js`.
-- logo/wordmark/decode UI moved to `ui/brand.js`.
-- pure AI context/adaptive-calibration builders moved to `ai/context.js`.
-- Gemini network/service calls moved to `ai/ai-service.js`.
-- screenshot recognition, text polish and Strategy AI tools moved to `ai/trade-tools.js`.
-- Settings moved to `features/settings/settings-ui.js`.
-- Coach moved to `features/coach/coach-ui.js`; AI state persistence remains injected from `app.js`.
-- Calibration and Journal Review moved to `features/calibration/calibration-ui.js`; calibration-history persistence remains injected from `app.js`.
-- `calculateTraderLevel` now lives with the analytics engine; shared `emotionConflict` lives in `core/journal-model.js`.
-- `app.js` dropped from ~9,978 to ~5,297 lines in this release, and from ~12,802 to ~5,297 across the modular refactor (~59% smaller).
-- regression coverage increased to 61 checks, including module-boundary drift guards.
-- no schema/key/path migration; `SCHEMA_VERSION` remains 2.
+The following final files were compared against the tested v4.8.5.1 base and remain byte-for-byte unchanged:
 
-The remaining large block is mostly `MindExe` orchestration plus auth/profile/recovery/backup wiring. Do not split persistence or auth state casually before real browser/Firebase E2E coverage exists.
+- `core/profile-store.js`
+- `core/journal-media.js`
+- `core/strategy-store.js`
+- `core/firestore-storage.js`
 
-## What v4.8.2 changed
+No schema/key/path migration is part of v4.9.0.
 
-Safe modularization only; persistence behavior was intentionally untouched.
+## Regression state
 
-- `STRINGS` moved out of `app.js` to `i18n/strings.js`.
-- shared palette/instrument/setup constants moved to `config/app-config.js`.
-- behavioral analytics, risk/emotion analysis and Pattern Engine moved to `analytics/trader-analytics.js`.
-- calibration questions, dynamic scoring and journal-review quiz/scoring moved to `analytics/calibration-review.js`.
-- `Card`, `Pill`, `Toast` and screenshot preview UI moved to `ui/primitives.js`.
-- `app.js` dropped from ~12,802 to ~9,978 lines.
-- regression harness now syntax-checks every local JS module.
-- At that stage, 56 regression checks passed.
-- no schema/key/path migration; `SCHEMA_VERSION` remains 2.
+`npm test` => **68/68 checks passed**.
 
-The Journal/Strategy/AI modularization recommended at v4.8.2 was completed in v4.8.3.
+The suite now covers syntax of all JS modules, relative imports, unresolved runtime identifiers when TypeScript is available, profile/Strategy CAS and rollback semantics, split media, cloud-first mutations, unit/RR correctness, modular dependency closure, final typography/cache generation, boot fallback and external splash assets.
 
-## What v4.8.1 fixed from the first real two-device smoke test
+## Real-device smoke status / next checks
 
-- Opening the same authenticated account on a second device no longer rewrites `user.anonId` with that device's local anonymous ID.
-- This removes a false profile revision bump that could make an actively editing device hit `profile_revision_conflict` even while the second device was otherwise idle.
-- The existing cloud `anonId` is preserved; a new profile still gets one when none exists.
-- Desktop navigation now labels the trade-entry route explicitly as `Добавить сделку` / `Add trade` instead of the ambiguous `Запись` / `Entry`.
-- Real cross-device smoke result so far: cloud data reloads correctly between desktop and phone; realtime propagation is still intentionally absent until revision watching/onSnapshot is added.
+Previous user smoke testing confirmed ordinary login/profile saves and the same account open on desktop + phone with reload-based cloud synchronization. Realtime `onSnapshot` UX is still not implemented.
 
-## What v4.8.0 completed
+After deploying v4.9.0, manually verify:
 
-- Strategy index immutable revisions.
-- Five Strategy index rollback revisions.
-- Strategy index stale-client CAS.
-- Old Strategy index + backup are readable migration/recovery fallbacks.
-- Direct Strategy trades have additive `persistenceRevision` / `persistenceUpdatedAt`.
-- Stale direct-trade edits are rejected.
-- Strategy timeout uncertainty freezes writes until reload.
-- Full reset clears revisioned Strategy index and known trade/media records.
-- Strategy deletion surfaces incomplete physical cleanup.
-- Journal JSON import is cloud-first.
-- Full-backup profile restore is cloud-first.
-- Strategy backup restore rolls back pre-existing trade records if index activation fails.
+1. cold start on desktop and installed iPhone PWA;
+2. login/logout/login;
+3. create journal trade + screenshots;
+4. edit/close/delete journal trade;
+5. Analytics + Journal Review;
+6. Strategy create/edit + direct trade + close/delete;
+7. Settings/profile/balance/currency reload persistence;
+8. backup export/import and reset flows on a disposable account;
+9. same account on two devices;
+10. brief airplane-mode/background/foreground checks.
 
-## Remaining technical work — priority order
+## Known work intentionally NOT included in this final QA release
 
-### 1. Real Firebase / iPhone production smoke tests — highest priority
-
-The current 61 tests are Node/static/in-memory transaction tests. They do **not** emulate:
-
-- authenticated production Firestore;
-- real network interruption;
-- iOS WebKit / installed PWA;
-- app backgrounding while a Firestore request is pending;
-- two real devices writing simultaneously.
-
-Create a disposable Firebase test account and run a real end-to-end matrix:
-new account → create trade → screenshots → close trade → Strategy Lab → logout → login → verify everything; repeat with airplane-mode/network drops and two devices.
-
-### 2. Auth hardening for iPhone/PWA
-
-Still pending:
-
-- long-lived `onAuthStateChanged` instead of the current mostly one-shot auth session flow;
-- Google popup → redirect fallback on iOS/PWA;
-- audit username synthetic-email password reset limitations;
-- registration / `updateProfile` consistency;
-- logout behavior during uncertain cloud state.
-
-### 3. Firestore Security Rules
-
-Rules are not versioned with the source in this project. Add and audit rules for:
-
-- `users/{uid}/data/*`;
-- shared cache docs;
-- ownership isolation;
-- denial of cross-user reads/writes;
-- size/type constraints where practical.
-
-This is required before a public release.
-
-### 4. Browser E2E automation
-
-Add Playwright/browser tests against a Firebase emulator or disposable project:
-
-- auth;
-- create/edit/close/delete journal trade;
-- screenshot persistence;
-- reload persistence;
-- Strategy create/edit/trade/close/delete;
-- backup restore;
-- reset journal/full reset;
-- conflict screen.
-
-### 5. PWA / dependency reliability
-
-Still pending:
-
-- React/Recharts/Lucide/Tailwind/Firebase are CDN/runtime dependencies;
-- no proper bundled production build;
-- no service worker/offline shell;
-- manifest/versioning cleanup;
-- CDN failure can still black-screen before React ErrorBoundary;
-- viewport/accessibility zoom review.
-
-A proper Vite/build pipeline is the clean long-term fix.
-
-### 6. Media storage scalability / cost
-
-Journal screenshots no longer risk one giant Firestore document, but images are still base64 inside Firestore.
-
-Long term:
-- Firebase Storage for binary screenshots;
-- Firestore only stores metadata/path;
-- migration must remain backwards-compatible with existing base64 docs.
-
-### 7. Strategy restore/orphan cleanup edge case
-
-If a **brand-new imported Strategy trade** is written and Strategy backup activation then fails, v4.8.0 leaves that record as an unreachable orphan rather than risking deletion of a record another device may have touched.
-
-Existing records are rolled back with CAS.
-
-A future cleanup system needs discoverable trade ownership/indexing or a safe orphan-GC mechanism.
-
-The same class of orphan can happen if a brand-new Strategy trade transaction finishes after the UI-side timeout but its index update never runs.
-
-### 8. Realtime multi-device UX
-
-CAS prevents silent overwrites, but the user currently has to reload after a conflict.
-
-Future improvement:
-- Firestore `onSnapshot` / revision watch;
-- show “newer cloud version available” before editing;
-- optional merge UX where safe.
-
-### 9. Large backup / iPhone memory
-
-Full backup still serializes a potentially large JSON blob in memory. On a very large journal with screenshots/Strategy data this can be uncomfortable on iPhone.
-
-Consider streamed/export-lite backups and separating media backup.
-
-### 10. Continue modular refactor
-
-`app.js` is now ~5.3k lines, but `MindExe` still owns a large amount of orchestration.
-
-Do only after E2E coverage:
-- auth/session orchestration module;
-- split `MindExe` state into narrowly scoped hooks/features;
-- backup/import UI and orchestration;
-- remaining home/analytics routing shell;
-- remove remaining empty catches/dead helpers;
-- introduce route/feature lazy loading after the bundled build exists.
-
-Journal UI, Strategy Lab UI, AI, Settings, Coach, Calibration and most pure analytics are already extracted. Do not move persistence/CAS code again before browser/Firebase smoke coverage exists.
-
-## Known product/UX technical debt
-
-- open journal trades still have limited edit paths compared with closed trades;
-- incomplete i18n remains in some screens/messages;
-- screenshot viewer can be improved for native iPhone pinch/double-tap;
-- download behavior in installed iOS PWA needs real-device verification;
-- accessibility/ARIA consistency needs an audit;
-- analytics still perform repeated filter/sort work that can be memoized later;
-- `coinLedger` can grow indefinitely;
-- `playPing` creates a new AudioContext each call.
-
-## Recommended very next task in the new chat
-
-**Do not refactor more first.**
-
-Run the real Firebase/iPhone smoke matrix against v4.8.3 and fix anything it exposes. After that, harden Auth and Security Rules. Only then split `MindExe`/auth orchestration further and move toward a bundled PWA build.
+- Auth hardening (`onAuthStateChanged` lifecycle / Google redirect fallback) was rolled back after a startup regression and should only return incrementally with browser-level coverage.
+- Firestore Security Rules still need to be versioned/audited before a public release.
+- CDN/runtime dependency model remains; a proper Vite/bundled PWA/service-worker build is still the long-term reliability fix.
+- Screenshots are still base64 in Firestore; Firebase Storage migration is future work.
+- Realtime multi-device UX remains reload/conflict based.

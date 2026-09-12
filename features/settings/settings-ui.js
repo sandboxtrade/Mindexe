@@ -6,8 +6,8 @@ import {
   AlertTriangle, Check, Download, LogOut, Trash2, Upload, User, Volume2, VolumeX
 } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, LOSS, ACCENTS } from "../../config/app-config.js?v=1";
-import { CURRENCIES } from "../../core/trade-math.js?v=1";
+import { BASE, LOSS, ACCENTS } from "../../config/app-config.js?v=4.9.0";
+import { CURRENCIES } from "../../core/trade-math.js?v=4.9.0";
 
 function SettingsSection({ children }) {
   return /* @__PURE__ */ jsx("div", { className: "mb-6 break-inside-avoid", children });

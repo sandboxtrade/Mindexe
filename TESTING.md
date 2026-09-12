@@ -1,126 +1,94 @@
-MIND.EXE v4.8.5.1 startup rollback hotfix
+# MIND.EXE v4.9.0 FINAL QA — testing
 
-# MIND.EXE regression tests — v4.8.4
-
-Перед крупными правками запускай:
+Run before every deployment:
 
 ```bash
 npm test
 ```
 
-Никакие пакеты устанавливать не нужно. Тесты используют только встроенный Node.js.
+No npm dependencies are required for the regression suite. Expected final output:
 
-Проверяется: синтаксис, Firebase/profile/media ключи, legacy migrations, SL/TP, RR, result units, Strategy Lab, RR/risk/Pattern Engine, split-media, progressive media loader, cloud-first save, load-error gate, uncertain-write freeze и ключевые runtime-защиты.
+```text
+68 regression checks passed.
+MIND.EXE regression suite: OK
+```
 
-Если финальная строка не `MIND.EXE regression suite: OK`, релиз не выкладывать.
+## Automated coverage
 
-Дополнительно v4.8.0 фиксирует отсутствие production demo-data и недостижимого Simulator.
+The suite checks:
 
-## Cross-device smoke regressions — v4.8.1
+- syntax of `app.js` and every local JS module;
+- all relative JS imports resolve to existing files;
+- static unresolved-identifier audit (`TS2304` / `TS2552`) when global `tsc` is available;
+- exact Firebase/profile/media/Strategy key invariants;
+- Firestore path shape;
+- Profile Store v2 chunk/revision reconstruction;
+- profile stale-client CAS and five-revision rollback;
+- Strategy index revisions/CAS/fallbacks;
+- direct Strategy trade CAS;
+- journal split-media manifest-last activation/readiness guards;
+- cloud-first journal mutations/import/reset/restore semantics;
+- uncertain write freeze and profile conflict gate;
+- result units, SL/TP/manual normalization and RR math;
+- R-only analytics isolation and Pattern Engine calculations;
+- modular dependency boundaries after the large `app.js` extraction;
+- passive second-device `anonId` regression;
+- final runtime dependencies (`Fragment`, `Card`, `JournalReview`, no dead splash mask);
+- Inter + IBM Plex Mono typography contract;
+- one `4.9.0` local module cache generation;
+- pre-React boot fallback;
+- external splash poster/video release assets.
 
-Добавлены проверки, что:
+## Additional release checks already performed for v4.9.0
 
-- passive second device не подменяет сохранённый cloud `anonId` своим локальным ID и не создаёт ложную profile revision;
-- desktop route новой сделки подписан явно как `Добавить сделку` / `Add trade`.
+- `node --check` passes for every production `.js` file.
+- Static TypeScript audit reports no unresolved runtime identifiers (`TS2304` / `TS2552`).
+- Every relative local JS import uses the same `?v=4.9.0` cache generation.
+- `core/profile-store.js`, `core/journal-media.js`, `core/strategy-store.js` and `core/firestore-storage.js` are byte-for-byte identical to the tested v4.8.5.1 base.
 
-Текущий suite: **64 regression checks**.
+A full headless browser smoke could not be validated in the build container because its DNS cannot resolve the external runtime CDNs (`esm.sh`, Firebase gstatic, Tailwind CDN). That is why the following real-device matrix is mandatory after upload.
 
+## Mandatory post-deploy smoke matrix
 
+### Desktop
 
-## Modular refactor — v4.8.2
+- cold reload reaches login/app instead of ErrorBoundary;
+- login and logout work;
+- edit profile name/balance/currency and reload;
+- create an open journal trade;
+- attach entry screenshot;
+- edit it;
+- close it by TP / SL / manual on disposable trades;
+- verify Analytics and Journal Review open;
+- create/edit Strategy, add/close/delete a direct Strategy trade;
+- export backup.
 
-Добавлены проверки, что:
+### iPhone / installed PWA
 
-- все локальные `.js`-модули проходят `node --check`;
-- `config/app-config.js` и `i18n/strings.js` импортируются отдельно;
-- `analytics/trader-analytics.js` импортируется и экспортирует публичный analytics API;
-- `analytics/calibration-review.js` импортируется отдельно и содержит calibration/review scoring;
-- вынесенные STRINGS / Pattern Engine / analytics / calibration-review / UI primitives не дрейфуют обратно в `app.js`.
+- fully close and relaunch PWA after deployment;
+- cold boot completes;
+- no infinite black/loading screen;
+- open journal, screenshots, Strategy Lab, Settings;
+- background the app during normal use, return and verify state;
+- reload and verify cloud data;
+- verify pinch zoom / normal iOS input behavior.
 
-## Modular boundaries v4.8.0
-Regression suite also verifies that trade math, stats and journal migration stay in `core/` and are not silently copied back into `app.js`.
+### Two-device
 
+- same account on desktop + phone;
+- leave phone idle;
+- edit profile/trade on desktop;
+- desktop must not get a false revision conflict from the idle phone;
+- reload phone and verify new cloud data;
+- intentionally edit from both sides to confirm stale-client conflict protection still blocks silent overwrite.
 
-## Persistence boundaries v4.8.0
-- `core/firestore-storage.js` owns low-level Firestore key/value access.
-- `core/journal-media.js` owns journal screenshot cache/readiness/load/save logic.
-- `app.js` still owns profile recovery, auth orchestration and `MindExe`.
-- Regression tests verify exact Firestore paths, media keys and preflight ordering.
+### Network interruption
 
-## Profile Persistence v2 — v4.8.0
+Using a disposable account:
 
-Additional regression coverage verifies:
+- interrupt network during a cloud save;
+- app should freeze uncertain writes / show blocking recovery state rather than pretend success;
+- restore network and reload cloud state;
+- confirm no empty profile overwrote real journal data.
 
-- large journals are split into multiple Firestore documents;
-- `coinLedger` is split separately;
-- reconstructed public profile shape is unchanged;
-- no normal save writes the old whole-profile canonical document;
-- manifest activation happens only after revision documents exist;
-- stale second clients fail with `profile_revision_conflict`;
-- old canonical profile documents remain readable recovery sources;
-- revision conflicts freeze further cloud writes until reload.
-
-## Recovery / reset semantics — v4.8.0
-
-Additional checks cover:
-
-- newest timestamped recovery candidate wins over an older fuller snapshot;
-- five immutable rollback revisions are retained;
-- a broken active revision falls back to the newest valid history revision;
-- durable journal/full-reset tombstones survive manifest loss;
-- old recovery data cannot resurrect a reset journal/profile;
-- journal reset is cloud-first;
-- full reset is cloud-first and clears Strategy Lab, AI Coach and calibration history;
-- a profile commit followed by media failure cannot leave stale journal state ready to auto-save back.
-
-## Strategy Lab persistence — v4.8.0
-
-New coverage verifies:
-
-- Strategy index immutable revisions + 5-version history;
-- Strategy index CAS blocks stale tabs/devices;
-- old canonical Strategy index and old backup are real read fallbacks;
-- direct Strategy trades use per-trade CAS revisions;
-- legacy Strategy trades begin at persistence revision 0;
-- full reset activates an empty Strategy revision with no rollback history;
-- Strategy save timeouts freeze further writes until reload;
-- journal import and full-backup profile restore are cloud-first;
-- Strategy backup restore rolls back previously existing trade records if index activation fails.
-
-## Modular refactor — v4.8.3
-
-Дополнительно проверяется, что:
-
-- Journal и Strategy Lab остаются вынесены из `app.js`;
-- AI context/service/trade-tools остаются отдельными модулями;
-- Settings, Coach, Calibration/Journal Review и brand UI не дрейфуют обратно в `app.js`;
-- общий `emotionConflict` остаётся в `core/journal-model.js`;
-- `calculateTraderLevel` остаётся в analytics-модуле;
-- все локальные JavaScript-модули продолжают проходить синтаксическую проверку;
-- все относительные JavaScript-импорты после разбиения реально указывают на существующие локальные файлы.
-
-Persistence/Auth/CAS semantics этим этапом не менялись.
-
-
-## Modular startup hotfix — v4.8.3.1
-
-Добавлена проверка, что вынесенные feature/AI/calibration модули не теряют runtime-зависимости при переносе из `app.js`.
-
-Перед релизом дополнительно выполнен статический TypeScript-аудит JavaScript-кода на несуществующие идентификаторы (`TS2304` / `TS2552`): ошибок нет. Это отдельная release-проверка; основной `npm test` остаётся zero-dependency.
-
-Для изменённых модулей увеличены `?v=` cache-busters. Это критично для iOS/Safari после v4.8.3, потому что иначе браузер может продолжать использовать старые сломанные тела модулей даже после замены файлов на сервере.
-
-
-## Modular refactor — v4.8.4
-
-Этапы 9–11 вынесли из `app.js` только presentation/runtime UI, не меняя persistence/auth semantics:
-
-- Home + Dynamics/Patterns + Challenge → `features/dashboard/dashboard-ui.js`;
-- Auth/Login/legacy prompt/boot intro UI → `features/auth/auth-ui.js`;
-- splash, mobile/desktop navigation, wallet sheet, blocking load-error screen и React ErrorBoundary → `ui/app-shell.js`;
-- dashboard получает `storageGet/storageSet` через явный `configureDashboardData(...)`;
-- `app.js` уменьшен примерно с 5,381 до 3,470 строк;
-- критический блок profile/Strategy persistence + auth service/useAuth проверен побайтовым сравнением с v4.8.3.1 и не менялся;
-- regression suite расширен до **64 checks** и отдельно охраняет новые границы модулей и их runtime-зависимости.
-
-`SCHEMA_VERSION`, canonical keys, CAS/revision logic и Firestore path shape не менялись.
+Do not deploy if any persistence/conflict/reset behavior differs from the established v4.8.x semantics.
