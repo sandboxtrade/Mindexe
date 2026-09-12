@@ -1,4 +1,4 @@
-# MIND.EXE regression tests — v4.8.0
+# MIND.EXE regression tests — v4.8.3
 
 Перед крупными правками запускай:
 
@@ -14,6 +14,26 @@ npm test
 
 Дополнительно v4.8.0 фиксирует отсутствие production demo-data и недостижимого Simulator.
 
+## Cross-device smoke regressions — v4.8.1
+
+Добавлены проверки, что:
+
+- passive second device не подменяет сохранённый cloud `anonId` своим локальным ID и не создаёт ложную profile revision;
+- desktop route новой сделки подписан явно как `Добавить сделку` / `Add trade`.
+
+Текущий suite: **61 regression checks**.
+
+
+
+## Modular refactor — v4.8.2
+
+Добавлены проверки, что:
+
+- все локальные `.js`-модули проходят `node --check`;
+- `config/app-config.js` и `i18n/strings.js` импортируются отдельно;
+- `analytics/trader-analytics.js` импортируется и экспортирует публичный analytics API;
+- `analytics/calibration-review.js` импортируется отдельно и содержит calibration/review scoring;
+- вынесенные STRINGS / Pattern Engine / analytics / calibration-review / UI primitives не дрейфуют обратно в `app.js`.
 
 ## Modular boundaries v4.8.0
 Regression suite also verifies that trade math, stats and journal migration stay in `core/` and are not silently copied back into `app.js`.
@@ -64,3 +84,17 @@ New coverage verifies:
 - Strategy save timeouts freeze further writes until reload;
 - journal import and full-backup profile restore are cloud-first;
 - Strategy backup restore rolls back previously existing trade records if index activation fails.
+
+## Modular refactor — v4.8.3
+
+Дополнительно проверяется, что:
+
+- Journal и Strategy Lab остаются вынесены из `app.js`;
+- AI context/service/trade-tools остаются отдельными модулями;
+- Settings, Coach, Calibration/Journal Review и brand UI не дрейфуют обратно в `app.js`;
+- общий `emotionConflict` остаётся в `core/journal-model.js`;
+- `calculateTraderLevel` остаётся в analytics-модуле;
+- все локальные JavaScript-модули продолжают проходить синтаксическую проверку;
+- все относительные JavaScript-импорты после разбиения реально указывают на существующие локальные файлы.
+
+Persistence/Auth/CAS semantics этим этапом не менялись.

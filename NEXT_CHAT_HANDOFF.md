@@ -1,0 +1,244 @@
+# MIND.EXE — handoff to next chat
+
+Current release: **v4.8.3**
+
+## Current architecture
+
+- React SPA / iPhone-first web/PWA.
+- Firebase Auth + Firestore.
+- `SCHEMA_VERSION = 2`.
+- Canonical public profile shape remains backwards-compatible.
+- Main journal profile uses revisioned/chunked Profile Persistence v2.
+- Journal screenshots use split per-image documents with manifest-last activation.
+- Strategy Lab index uses revisioned Strategy Store with CAS.
+- Direct Strategy Lab trades use per-trade CAS revisions.
+- 61 zero-dependency Node regression checks.
+
+## Core modules
+
+- `core/trade-math.js`
+- `core/stats.js`
+- `core/journal-model.js`
+- `core/firestore-storage.js`
+- `core/journal-media.js`
+- `core/profile-store.js`
+- `core/strategy-store.js`
+- `config/app-config.js`
+- `i18n/strings.js`
+- `analytics/trader-analytics.js`
+- `analytics/calibration-review.js`
+- `ui/primitives.js`
+- `ui/media-utils.js`
+- `ui/brand.js`
+- `ai/context.js`
+- `ai/ai-service.js`
+- `ai/trade-tools.js`
+- `features/journal/journal-ui.js`
+- `features/strategy/strategy-lab.js`
+- `features/settings/settings-ui.js`
+- `features/coach/coach-ui.js`
+- `features/calibration/calibration-ui.js`
+
+## Data-safety invariants
+
+Do not casually change:
+
+- `SCHEMA_VERSION = 2`
+- `PROFILE_KEY = "mind-exe-journal-state"`
+- `MEDIA_KEY = "mind-exe-journal-media"`
+- `STRATEGY_SCHEMA_VERSION = 1`
+- `STRATEGY_INDEX_KEY = "mind-exe-strategy-index"`
+- `STRATEGY_TRADE_KEY = "mind-exe-strategy-trade"`
+- `STRATEGY_MEDIA_KEY = "mind-exe-strategy-media"`
+- Firestore path shape: `users/{uid}/data/{safeKey}`
+
+Always run `npm test` before release.
+
+
+## What v4.8.3 changed
+
+Continued safe modularization. Persistence/auth behavior and public data shape were intentionally left in place.
+
+- Journal screens/forms and emotion UI moved to `features/journal/journal-ui.js`.
+- Strategy Lab UI, forms and local strategy statistics moved to `features/strategy/strategy-lab.js`.
+- browser image compression moved to `ui/media-utils.js`.
+- logo/wordmark/decode UI moved to `ui/brand.js`.
+- pure AI context/adaptive-calibration builders moved to `ai/context.js`.
+- Gemini network/service calls moved to `ai/ai-service.js`.
+- screenshot recognition, text polish and Strategy AI tools moved to `ai/trade-tools.js`.
+- Settings moved to `features/settings/settings-ui.js`.
+- Coach moved to `features/coach/coach-ui.js`; AI state persistence remains injected from `app.js`.
+- Calibration and Journal Review moved to `features/calibration/calibration-ui.js`; calibration-history persistence remains injected from `app.js`.
+- `calculateTraderLevel` now lives with the analytics engine; shared `emotionConflict` lives in `core/journal-model.js`.
+- `app.js` dropped from ~9,978 to ~5,297 lines in this release, and from ~12,802 to ~5,297 across the modular refactor (~59% smaller).
+- regression coverage increased to 61 checks, including module-boundary drift guards.
+- no schema/key/path migration; `SCHEMA_VERSION` remains 2.
+
+The remaining large block is mostly `MindExe` orchestration plus auth/profile/recovery/backup wiring. Do not split persistence or auth state casually before real browser/Firebase E2E coverage exists.
+
+## What v4.8.2 changed
+
+Safe modularization only; persistence behavior was intentionally untouched.
+
+- `STRINGS` moved out of `app.js` to `i18n/strings.js`.
+- shared palette/instrument/setup constants moved to `config/app-config.js`.
+- behavioral analytics, risk/emotion analysis and Pattern Engine moved to `analytics/trader-analytics.js`.
+- calibration questions, dynamic scoring and journal-review quiz/scoring moved to `analytics/calibration-review.js`.
+- `Card`, `Pill`, `Toast` and screenshot preview UI moved to `ui/primitives.js`.
+- `app.js` dropped from ~12,802 to ~9,978 lines.
+- regression harness now syntax-checks every local JS module.
+- At that stage, 56 regression checks passed.
+- no schema/key/path migration; `SCHEMA_VERSION` remains 2.
+
+The Journal/Strategy/AI modularization recommended at v4.8.2 was completed in v4.8.3.
+
+## What v4.8.1 fixed from the first real two-device smoke test
+
+- Opening the same authenticated account on a second device no longer rewrites `user.anonId` with that device's local anonymous ID.
+- This removes a false profile revision bump that could make an actively editing device hit `profile_revision_conflict` even while the second device was otherwise idle.
+- The existing cloud `anonId` is preserved; a new profile still gets one when none exists.
+- Desktop navigation now labels the trade-entry route explicitly as `Добавить сделку` / `Add trade` instead of the ambiguous `Запись` / `Entry`.
+- Real cross-device smoke result so far: cloud data reloads correctly between desktop and phone; realtime propagation is still intentionally absent until revision watching/onSnapshot is added.
+
+## What v4.8.0 completed
+
+- Strategy index immutable revisions.
+- Five Strategy index rollback revisions.
+- Strategy index stale-client CAS.
+- Old Strategy index + backup are readable migration/recovery fallbacks.
+- Direct Strategy trades have additive `persistenceRevision` / `persistenceUpdatedAt`.
+- Stale direct-trade edits are rejected.
+- Strategy timeout uncertainty freezes writes until reload.
+- Full reset clears revisioned Strategy index and known trade/media records.
+- Strategy deletion surfaces incomplete physical cleanup.
+- Journal JSON import is cloud-first.
+- Full-backup profile restore is cloud-first.
+- Strategy backup restore rolls back pre-existing trade records if index activation fails.
+
+## Remaining technical work — priority order
+
+### 1. Real Firebase / iPhone production smoke tests — highest priority
+
+The current 61 tests are Node/static/in-memory transaction tests. They do **not** emulate:
+
+- authenticated production Firestore;
+- real network interruption;
+- iOS WebKit / installed PWA;
+- app backgrounding while a Firestore request is pending;
+- two real devices writing simultaneously.
+
+Create a disposable Firebase test account and run a real end-to-end matrix:
+new account → create trade → screenshots → close trade → Strategy Lab → logout → login → verify everything; repeat with airplane-mode/network drops and two devices.
+
+### 2. Auth hardening for iPhone/PWA
+
+Still pending:
+
+- long-lived `onAuthStateChanged` instead of the current mostly one-shot auth session flow;
+- Google popup → redirect fallback on iOS/PWA;
+- audit username synthetic-email password reset limitations;
+- registration / `updateProfile` consistency;
+- logout behavior during uncertain cloud state.
+
+### 3. Firestore Security Rules
+
+Rules are not versioned with the source in this project. Add and audit rules for:
+
+- `users/{uid}/data/*`;
+- shared cache docs;
+- ownership isolation;
+- denial of cross-user reads/writes;
+- size/type constraints where practical.
+
+This is required before a public release.
+
+### 4. Browser E2E automation
+
+Add Playwright/browser tests against a Firebase emulator or disposable project:
+
+- auth;
+- create/edit/close/delete journal trade;
+- screenshot persistence;
+- reload persistence;
+- Strategy create/edit/trade/close/delete;
+- backup restore;
+- reset journal/full reset;
+- conflict screen.
+
+### 5. PWA / dependency reliability
+
+Still pending:
+
+- React/Recharts/Lucide/Tailwind/Firebase are CDN/runtime dependencies;
+- no proper bundled production build;
+- no service worker/offline shell;
+- manifest/versioning cleanup;
+- CDN failure can still black-screen before React ErrorBoundary;
+- viewport/accessibility zoom review.
+
+A proper Vite/build pipeline is the clean long-term fix.
+
+### 6. Media storage scalability / cost
+
+Journal screenshots no longer risk one giant Firestore document, but images are still base64 inside Firestore.
+
+Long term:
+- Firebase Storage for binary screenshots;
+- Firestore only stores metadata/path;
+- migration must remain backwards-compatible with existing base64 docs.
+
+### 7. Strategy restore/orphan cleanup edge case
+
+If a **brand-new imported Strategy trade** is written and Strategy backup activation then fails, v4.8.0 leaves that record as an unreachable orphan rather than risking deletion of a record another device may have touched.
+
+Existing records are rolled back with CAS.
+
+A future cleanup system needs discoverable trade ownership/indexing or a safe orphan-GC mechanism.
+
+The same class of orphan can happen if a brand-new Strategy trade transaction finishes after the UI-side timeout but its index update never runs.
+
+### 8. Realtime multi-device UX
+
+CAS prevents silent overwrites, but the user currently has to reload after a conflict.
+
+Future improvement:
+- Firestore `onSnapshot` / revision watch;
+- show “newer cloud version available” before editing;
+- optional merge UX where safe.
+
+### 9. Large backup / iPhone memory
+
+Full backup still serializes a potentially large JSON blob in memory. On a very large journal with screenshots/Strategy data this can be uncomfortable on iPhone.
+
+Consider streamed/export-lite backups and separating media backup.
+
+### 10. Continue modular refactor
+
+`app.js` is now ~5.3k lines, but `MindExe` still owns a large amount of orchestration.
+
+Do only after E2E coverage:
+- auth/session orchestration module;
+- split `MindExe` state into narrowly scoped hooks/features;
+- backup/import UI and orchestration;
+- remaining home/analytics routing shell;
+- remove remaining empty catches/dead helpers;
+- introduce route/feature lazy loading after the bundled build exists.
+
+Journal UI, Strategy Lab UI, AI, Settings, Coach, Calibration and most pure analytics are already extracted. Do not move persistence/CAS code again before browser/Firebase smoke coverage exists.
+
+## Known product/UX technical debt
+
+- open journal trades still have limited edit paths compared with closed trades;
+- incomplete i18n remains in some screens/messages;
+- screenshot viewer can be improved for native iPhone pinch/double-tap;
+- download behavior in installed iOS PWA needs real-device verification;
+- accessibility/ARIA consistency needs an audit;
+- analytics still perform repeated filter/sort work that can be memoized later;
+- `coinLedger` can grow indefinitely;
+- `playPing` creates a new AudioContext each call.
+
+## Recommended very next task in the new chat
+
+**Do not refactor more first.**
+
+Run the real Firebase/iPhone smoke matrix against v4.8.3 and fix anything it exposes. After that, harden Auth and Security Rules. Only then split `MindExe`/auth orchestration further and move toward a bundled PWA build.

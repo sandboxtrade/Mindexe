@@ -69,3 +69,16 @@ export function migrateEntry(e) {
 }
 
 export const isEntryClosed = (e) => e.status === "closed";
+
+// Independent opposing-emotion intensity used by UI and AI context.
+export function emotionConflict(values, variant = "entry") {
+  if (!values) return { x: 0, y: 0, max: 0, has: false };
+  const k = emotionScaleKeys(variant);
+  const g = (n) => emotionClampPct(values[n]);
+  // min(a,b) — насколько сильно выражен более слабый из двух противоположных полюсов.
+  // Оба по 100 -> конфликт 100. Один 100, второй 0 -> конфликта нет, состояние однозначное.
+  const cx = Math.min(g(k[0]), g(k[1]));
+  const cy = Math.min(g(k[2]), g(k[3]));
+  const max = Math.max(cx, cy);
+  return { x: cx, y: cy, max, has: max >= 40 };
+}
