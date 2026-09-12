@@ -9,6 +9,35 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.8.0
+//
+// V4.8.0 — Strategy Lab persistence hardening / final build of this chat.
+//          - Strategy index uses immutable revisions + transactional CAS + 5-revision history;
+//          - old Strategy index and backup are now real read fallbacks;
+//          - direct Strategy Lab trade records use per-trade CAS revisions;
+//          - stale device/tab writes are rejected instead of silently overwriting newer data;
+//          - Strategy deletion reports incomplete physical cleanup;
+//          - full reset clears the revisioned Strategy index as well as trade/media documents.
+//
+// mind.exe — V4.7.1
+//
+// V4.7.1 — Recovery / Backup / Reset semantics.
+//          - recovery prefers newest valid candidates instead of the fullest old snapshot;
+//          - durable journal/full reset tombstones prevent old backups from resurrecting deleted data;
+//          - journal reset and full reset are cloud-first;
+//          - full reset also clears Strategy Lab, AI Coach and calibration-history cloud data;
+//          - split profile revisions now carry savedAt/sequence metadata and retain 5 rollback revisions.
+//
+// mind.exe — V4.7.0
+//
+// V4.7.0 — Profile Persistence v2.
+//          - profile/journal data uses immutable split revisions instead of one growing Firestore JSON doc;
+//          - journal entries and coin ledger are chunked below Firestore document limits;
+//          - a tiny manifest is activated LAST through a Firestore transaction;
+//          - compare-and-swap revision checks prevent stale/late saves and cross-device overwrites;
+//          - legacy PROFILE_KEY documents/backups/device shadow remain readable recovery fallbacks;
+//          - public profile schema remains SCHEMA_VERSION=2.
+//
 // mind.exe — V4.6.13
 //
 // V4.6.13 — Splash background video replaced with the new uploaded clip.
@@ -556,7 +585,8 @@ import {
   doc,
   getDoc,
   setDoc,
-  deleteDoc
+  deleteDoc,
+  runTransaction
 } from "firebase/firestore";
 import { getAI, getGenerativeModel, GoogleAIBackend } from "firebase/ai";
 import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
@@ -706,8 +736,10 @@ import {
   migrateEntry,
   normalizeEmotions
 } from "./core/journal-model.js?v=1";
-import { createFirestoreStorage } from "./core/firestore-storage.js?v=1";
+import { createFirestoreStorage } from "./core/firestore-storage.js?v=2";
 import { createJournalMediaStore } from "./core/journal-media.js?v=1";
+import { createProfileStore } from "./core/profile-store.js?v=2";
+import { createStrategyStore } from "./core/strategy-store.js?v=1";
 // V3.0 — палитра переведена на референс: чистый чёрный фон, поверхности почти сливаются
 // с ним, линии существуют, но не читаются как рамки. Раньше фон был #0A0A0B, а карточка
 // #131315 с видимой границей #25252A — на OLED это выглядит как набор коробок, а не как
@@ -3606,6 +3638,7 @@ function BootLoading({ accent }) {
 }
 function ProfileLoadErrorScreen({ accent, lang = "ru", onRetry, onLogout, kind = "load" }) {
   const isEn = lang === "en";
+  const isConflict = kind === "conflict";
   const isSave = kind === "save";
   return /* @__PURE__ */ jsx("div", {
     className: "fixed inset-0 z-[90] flex items-center justify-center px-6",
@@ -3619,20 +3652,26 @@ function ProfileLoadErrorScreen({ accent, lang = "ru", onRetry, onLogout, kind =
       /* @__PURE__ */ jsx("h2", {
         className: "text-[16px] mb-2",
         style: { color: BASE.ink, fontFamily: "var(--font-display)", fontWeight: 500 },
-        children: isSave
-          ? isEn ? "Sync status is uncertain" : "Не удалось подтвердить сохранение"
-          : isEn ? "Could not load your data" : "Не удалось загрузить данные"
+        children: isConflict
+          ? isEn ? "Cloud data changed elsewhere" : "Облачные данные изменились"
+          : isSave
+            ? isEn ? "Sync status is uncertain" : "Не удалось подтвердить сохранение"
+            : isEn ? "Could not load your data" : "Не удалось загрузить данные"
       }),
       /* @__PURE__ */ jsx("p", {
         className: "text-[12px] leading-relaxed mb-6",
         style: { color: BASE.inkDim },
-        children: isSave
+        children: isConflict
           ? isEn
-            ? "The app stopped further cloud writes to protect your journal from an out-of-order overwrite. Reload the data before continuing."
-            : "Приложение остановило дальнейшие записи в облако, чтобы зависший старый запрос не перезаписал более свежие данные. Перезагрузи данные перед продолжением."
-          : isEn
-            ? "The journal is not being shown as empty because cloud data was not confirmed. Retry the load when the connection is stable."
-            : "Журнал не показывается пустым, потому что облачные данные не удалось подтвердить. Повтори загрузку при стабильном соединении."
+            ? "Another session or device saved a newer profile revision. Reload the cloud data before making more changes."
+            : "Другая сессия или устройство сохранили более новую версию профиля. Перезагрузи облачные данные перед дальнейшими изменениями."
+          : isSave
+            ? isEn
+              ? "The app stopped further cloud writes because the final save status is unknown. Reload the data before continuing."
+              : "Приложение остановило дальнейшие записи в облако, потому что итоговый статус сохранения неизвестен. Перезагрузи данные перед продолжением."
+            : isEn
+              ? "The journal is not being shown as empty because cloud data was not confirmed. Retry the load when the connection is stable."
+              : "Журнал не показывается пустым, потому что облачные данные не удалось подтвердить. Повтори загрузку при стабильном соединении."
       }),
       /* @__PURE__ */ jsxs("div", { className: "flex gap-2", children: [
         /* @__PURE__ */ jsxs("button", {
@@ -9860,7 +9899,13 @@ function readDirectProfileShadow(userId) {
   try {
     const value = window.localStorage?.getItem(directShadowKey(userId));
     if (!value) return null;
-    return { key: directShadowKey(userId), profile: parseStoredProfileValue(value), local: true };
+    const profile = parseStoredProfileValue(value);
+    return {
+      key: directShadowKey(userId),
+      profile,
+      updatedAt: profile?.meta?.updatedAt ?? null,
+      local: true
+    };
   } catch (_) {
     return null;
   }
@@ -9962,6 +10007,17 @@ function mediaKey(userId) {
 function aiKey(userId) {
   return `mind-exe-ai:${userId}`;
 }
+var profileStore = createProfileStore({
+  storageGet,
+  storageSet,
+  storageDelete,
+  getDocRef: fsDocRef,
+  runTransaction,
+  db: fbDb,
+  profileBaseKey: PROFILE_KEY,
+  schemaVersion: SCHEMA_VERSION,
+  logger: console
+});
 async function loadAiState(userId) {
   if (!fbAuth.currentUser || !userId) return { analysis: "", chatMessages: [] };
   try {
@@ -10016,11 +10072,71 @@ function profileIsEffectivelyBlank(profile) {
     && !(typeof profile?.wallet?.mindCoins === "number" && profile.wallet.mindCoins !== 0)
     && (!Array.isArray(profile?.wallet?.coinLedger) || profile.wallet.coinLedger.length === 0);
 }
+function profileTimestampMs(value) {
+  if (value == null) return 0;
+  const n = typeof value === "number" ? value : Date.parse(value);
+  return Number.isFinite(n) ? n : 0;
+}
+function profileRecoveryUpdatedAt(profile, fallbackUpdatedAt = null) {
+  return Math.max(
+    profileTimestampMs(profile?.meta?.updatedAt),
+    profileTimestampMs(profile?.meta?.persistence?.savedAt),
+    profileTimestampMs(fallbackUpdatedAt)
+  );
+}
+function profileOwnResetMs(profile, key) {
+  return profileTimestampMs(profile?.meta?.[key]);
+}
+function applyProfileResetBoundaries(profile, resetState, fallbackUpdatedAt = null) {
+  if (!profile) return null;
+  const candidateMs = profileRecoveryUpdatedAt(profile, fallbackUpdatedAt);
+  const fullResetMs = profileTimestampMs(resetState?.fullResetAt);
+  const journalResetMs = profileTimestampMs(resetState?.journalResetAt);
+  const ownsFullBoundary = fullResetMs > 0 && profileOwnResetMs(profile, "fullResetAt") >= fullResetMs;
+  const ownsJournalBoundary = journalResetMs > 0 && profileOwnResetMs(profile, "journalResetAt") >= journalResetMs;
+
+  // A durable full-reset tombstone is stronger than any older/undated recovery snapshot.
+  if (fullResetMs > 0 && !ownsFullBoundary && (!candidateMs || candidateMs <= fullResetMs)) {
+    return null;
+  }
+
+  // Journal reset is narrower: an older profile may still recover settings/wallet, but its trades
+  // must never come back. Preserve the tombstone in meta so future saves keep the same boundary.
+  if (journalResetMs > 0 && !ownsJournalBoundary && (!candidateMs || candidateMs <= journalResetMs)) {
+    return {
+      ...profile,
+      meta: {
+        ...(profile.meta || {}),
+        journalResetAt: resetState.journalResetAt,
+        intentionalJournalReset: true
+      },
+      journal: {
+        ...(profile.journal || {}),
+        entries: []
+      }
+    };
+  }
+  return profile;
+}
+function compareRecoveryCandidates(a, b) {
+  const at = profileRecoveryUpdatedAt(a?.profile, a?.updatedAt);
+  const bt = profileRecoveryUpdatedAt(b?.profile, b?.updatedAt);
+  if (at && bt && at !== bt) return bt - at;
+  if (at && !bt) return -1;
+  if (!at && bt) return 1;
+  return profileMeaningScore(b?.profile) - profileMeaningScore(a?.profile);
+}
 async function readProfileCandidateCloud(key) {
   try {
     const res = await storageGet(key, false);
     if (!res?.value) return null;
-    return { key, profile: parseStoredProfileValue(res.value), local: false };
+    const profile = parseStoredProfileValue(res.value);
+    return {
+      key,
+      profile,
+      updatedAt: res.updatedAt ?? profile?.meta?.updatedAt ?? null,
+      local: false
+    };
   } catch (_) {
     return null;
   }
@@ -10031,7 +10147,13 @@ async function readProfileShadow(userId) {
   try {
     const res = await legacyStorageGet(`${PROFILE_SHADOW_KEY}:${userId}`, false);
     if (!res?.value) return null;
-    return { key: `${PROFILE_SHADOW_KEY}:${userId}`, profile: parseStoredProfileValue(res.value), local: true };
+    const profile = parseStoredProfileValue(res.value);
+    return {
+      key: `${PROFILE_SHADOW_KEY}:${userId}`,
+      profile,
+      updatedAt: res.updatedAt ?? profile?.meta?.updatedAt ?? null,
+      local: true
+    };
   } catch (_) {
     return null;
   }
@@ -10039,16 +10161,30 @@ async function readProfileShadow(userId) {
 async function saveProfile(userId, profile) {
   assertProfileAuthUser(userId);
   const normalized = { ...profile, version: SCHEMA_VERSION };
-  await storageSet(profileKey(userId), JSON.stringify(normalized), false);
-  writeDirectProfileShadow(userId, normalized);
+  const saved = await profileStore.save(userId, normalized);
+  const committedProfile = saved?.profile || normalized;
+  writeDirectProfileShadow(userId, committedProfile);
   try {
-    await legacyStorageSet(`${PROFILE_SHADOW_KEY}:${userId}`, JSON.stringify(normalized), false);
+    await legacyStorageSet(`${PROFILE_SHADOW_KEY}:${userId}`, JSON.stringify(committedProfile), false);
   } catch (_) {
   }
+  return committedProfile;
 }
 async function saveProfileBackupIfSafer(userId, candidateProfile) {
   assertProfileAuthUser(userId);
   if (!candidateProfile) return;
+
+  // V4.7: split persistence already keeps immutable previous revisions.
+  // During the first migration the untouched legacy canonical document itself is the rollback copy,
+  // so do not create another potentially >1 MiB backup document.
+  if (profileStore.hasManifest()) return;
+  try {
+    const legacyCanonical = await storageGet(profileKey(userId), false);
+    if (legacyCanonical?.value) return;
+  } catch (_) {
+  }
+
+  // Very old accounts without a canonical document may still have the historic backup slot.
   const backupKey = `${PROFILE_KEY}:backup:${userId}`;
   let existing = null;
   try {
@@ -10056,7 +10192,6 @@ async function saveProfileBackupIfSafer(userId, candidateProfile) {
     existing = res?.value ? parseStoredProfileValue(res.value) : null;
   } catch (_) {
   }
-  // Recovery archive should never be replaced by a clearly emptier state.
   if (existing && profileMeaningScore(existing) > profileMeaningScore(candidateProfile)) return;
   await storageSet(backupKey, JSON.stringify({ ...candidateProfile, version: SCHEMA_VERSION }), false);
 }
@@ -10064,39 +10199,91 @@ async function loadProfile(userId) {
   assertProfileAuthUser(userId);
   __lastProfileRecoverySource = null;
 
-  const canonicalKey = profileKey(userId);
-  let canonical = null;
-  let canonicalExists = false;
+  const split = await profileStore.load(userId);
+  const resetState = split?.resetState || null;
+  let canonical = split?.profile
+    ? applyProfileResetBoundaries(
+        parseStoredProfileValue(JSON.stringify(split.profile)),
+        resetState,
+        split.loadedRevisionAt
+      )
+    : null;
+  let canonicalExists = split?.manifestExists === true;
 
-  const primary = await storageGet(canonicalKey, false);
-  canonicalExists = !!primary?.value;
-  if (primary?.value) canonical = parseStoredProfileValue(primary.value);
+  if (split?.source === "history" && canonical) {
+    __lastProfileRecoverySource = `profile-revision:${split.loadedRevision}`;
+  }
+
+  // A full-reset tombstone survives even if the manifest/revisions are later damaged or removed.
+  // In that case returning null/defaults is safer than ever reviving a pre-reset cloud/shadow copy.
+  const fullResetAt = profileTimestampMs(resetState?.fullResetAt);
+  if (!canonical && fullResetAt > 0) {
+    __lastProfileRecoverySource = "full-reset-tombstone";
+    return null;
+  }
+
+  // No usable split revision: the old canonical document is still a read-only fallback.
+  if (!canonical) {
+    try {
+      const legacyPrimary = await storageGet(profileKey(userId), false);
+      if (legacyPrimary?.value) {
+        const rawLegacy = parseStoredProfileValue(legacyPrimary.value);
+        const boundedLegacy = applyProfileResetBoundaries(rawLegacy, resetState, legacyPrimary.updatedAt);
+        if (boundedLegacy) {
+          canonical = boundedLegacy;
+          canonicalExists = true;
+          if (split?.manifestExists) __lastProfileRecoverySource = "legacy-canonical";
+        }
+      }
+    } catch (_) {
+    }
+  }
 
   if (!canonicalExists && __freshAccountUids.has(userId)) {
     __freshAccountUids.delete(userId);
     return null;
   }
-  const intentionalFullReset = canonical?.meta?.intentionalFullReset === true;
-  const shouldRecover = !canonicalExists || (profileIsEffectivelyBlank(canonical) && !intentionalFullReset);
+
+  const hasIntentionalBoundary = !!(
+    canonical?.meta?.intentionalFullReset === true ||
+    canonical?.meta?.intentionalJournalReset === true ||
+    profileTimestampMs(canonical?.meta?.fullResetAt) > 0 ||
+    profileTimestampMs(canonical?.meta?.journalResetAt) > 0
+  );
+
+  const shouldRecover = !canonicalExists || (profileIsEffectivelyBlank(canonical) && !hasIntentionalBoundary);
   if (!shouldRecover) return canonical;
 
-  const candidates = (await Promise.all([
+  const rawCandidates = (await Promise.all([
     readProfileCandidateCloud(`${PROFILE_KEY}:backup:${userId}`),
-    // Older Firestore builds may have used the unsuffixed key inside the same uid collection.
+    readProfileCandidateCloud(profileKey(userId)),
     readProfileCandidateCloud(PROFILE_KEY),
     readProfileShadow(userId)
   ])).filter(Boolean);
 
-  let best = null;
-  for (const candidate of candidates) {
-    if (!best || profileMeaningScore(candidate.profile) > profileMeaningScore(best.profile)) best = candidate;
+  const candidates = rawCandidates
+    .map((candidate) => {
+      const bounded = applyProfileResetBoundaries(candidate.profile, resetState, candidate.updatedAt);
+      return bounded ? { ...candidate, profile: bounded } : null;
+    })
+    .filter(Boolean)
+    .sort(compareRecoveryCandidates);
+
+  const best = candidates[0] || null;
+  if (best) {
+    const currentTime = profileRecoveryUpdatedAt(canonical);
+    const bestTime = profileRecoveryUpdatedAt(best.profile, best.updatedAt);
+    const bestIsNewer = bestTime > 0 && (currentTime === 0 || bestTime > currentTime);
+    const unknownTimeButRicher = bestTime === 0 && currentTime === 0 &&
+      profileMeaningScore(best.profile) > profileMeaningScore(canonical);
+
+    if (!canonical || bestIsNewer || unknownTimeButRicher) {
+      const recovered = await saveProfile(userId, best.profile);
+      canonical = recovered || best.profile;
+      __lastProfileRecoverySource = best.local ? "device-shadow" : best.key;
+    }
   }
 
-  if (best && profileMeaningScore(best.profile) > profileMeaningScore(canonical)) {
-    await saveProfile(userId, best.profile);
-    canonical = best.profile;
-    __lastProfileRecoverySource = best.local ? "device-shadow" : best.key;
-  }
   return canonical;
 }
 // Journal screenshot persistence is isolated in core/journal-media.js.
@@ -10128,6 +10315,18 @@ function strategyTradeKey(userId, tradeId) {
 function strategyMediaKey(userId, tradeId, phase, index) {
   return `${STRATEGY_MEDIA_KEY}:${userId}:${tradeId}:${phase}:${index}`;
 }
+var strategyStore = createStrategyStore({
+  storageGet,
+  storageSet,
+  storageDelete,
+  getDocRef: fsDocRef,
+  runTransaction,
+  db: fbDb,
+  indexBaseKey: STRATEGY_INDEX_KEY,
+  tradeBaseKey: STRATEGY_TRADE_KEY,
+  indexSchemaVersion: STRATEGY_SCHEMA_VERSION,
+  logger: console
+});
 function normalizeStrategy(raw) {
   if (!raw || typeof raw !== "object" || !raw.id) return null;
   return {
@@ -10176,18 +10375,17 @@ function migrateStrategyTrade(raw) {
   };
 }
 async function loadStrategyLabState(userId) {
-  if (!fbAuth.currentUser || !userId) return { strategies: [], trades: [], rawIndex: null };
-  const res = await storageGet(strategyIndexKey(userId), false);
-  if (!res?.value) return { strategies: [], trades: [], rawIndex: null };
-  let parsed;
-  try {
-    parsed = JSON.parse(res.value);
-  } catch (_) {
-    throw new Error("strategy_index_unreadable");
+  if (!fbAuth.currentUser || !userId) {
+    return { strategies: [], trades: [], rawIndex: null, indexSource: "empty" };
   }
-  if (!parsed || typeof parsed !== "object") throw new Error("strategy_index_unreadable");
-  const strategies = (Array.isArray(parsed.strategies) ? parsed.strategies : []).map(normalizeStrategy).filter(Boolean);
+
+  const indexState = await strategyStore.loadIndex(userId);
+  const parsed = indexState?.payload || { version: STRATEGY_SCHEMA_VERSION, strategies: [] };
+  const strategies = (Array.isArray(parsed.strategies) ? parsed.strategies : [])
+    .map(normalizeStrategy)
+    .filter(Boolean);
   const tradeIds = [...new Set(strategies.flatMap((s) => s.tradeIds || []))];
+
   const rows = await Promise.all(tradeIds.map(async (id) => {
     try {
       const tradeRes = await storageGet(strategyTradeKey(userId, id), false);
@@ -10198,8 +10396,14 @@ async function loadStrategyLabState(userId) {
       const entryCount = Math.max(0, Math.min(4, Number(tradeRaw.entryShotCount) || 0));
       const exitCount = Math.max(0, Math.min(4, Number(tradeRaw.exitShotCount) || 0));
       const readShots = async (phase, count) => {
-        const rows = await Promise.all(Array.from({ length: count }, (_, i) => storageGet(strategyMediaKey(userId, id, phase, i), false).then((r) => r?.value || null).catch(() => null)));
-        return rows.filter((v) => typeof v === "string" && v.startsWith("data:image/"));
+        const shots = await Promise.all(
+          Array.from({ length: count }, (_, i) => (
+            storageGet(strategyMediaKey(userId, id, phase, i), false)
+              .then((r) => r?.value || null)
+              .catch(() => null)
+          ))
+        );
+        return shots.filter((v) => typeof v === "string" && v.startsWith("data:image/"));
       };
       trade.screenshots = await readShots("entry", entryCount);
       trade.exitScreenshots = await readShots("exit", exitCount);
@@ -10208,10 +10412,17 @@ async function loadStrategyLabState(userId) {
       return null;
     }
   }));
-  return { strategies, trades: rows.filter(Boolean), rawIndex: parsed };
+
+  return {
+    strategies,
+    trades: rows.filter(Boolean),
+    rawIndex: parsed,
+    indexSource: indexState?.source || "empty",
+    strategyManifest: indexState?.manifest || null
+  };
 }
-async function saveStrategyIndex(userId, strategies) {
-  if (!fbAuth.currentUser || !userId) return;
+async function saveStrategyIndex(userId, strategies, options = {}) {
+  if (!fbAuth.currentUser || !userId) return null;
   const payload = {
     version: STRATEGY_SCHEMA_VERSION,
     strategies: (strategies || []).map((s) => ({
@@ -10219,8 +10430,10 @@ async function saveStrategyIndex(userId, strategies) {
       tradeIds: Array.isArray(s.tradeIds) ? [...new Set(s.tradeIds.filter(Boolean))] : []
     }))
   };
-  await storageSet(strategyIndexKey(userId), JSON.stringify(payload), false);
-  return payload;
+  const saved = options.reset === true
+    ? await strategyStore.resetIndex(userId)
+    : await strategyStore.saveIndex(userId, payload);
+  return options.reset === true ? saved.payload : saved.payload;
 }
 async function saveStrategyTradeRecord(userId, trade, options = {}) {
   if (!fbAuth.currentUser || !userId || !trade?.id) return { mediaErrors: [] };
@@ -10237,8 +10450,13 @@ async function saveStrategyTradeRecord(userId, trade, options = {}) {
   clean.exitShotCount = exitShots.length;
   clean.date = clean.date instanceof Date ? clean.date.toISOString() : clean.date;
   clean.exitDate = clean.exitDate instanceof Date ? clean.exitDate.toISOString() : clean.exitDate;
-  // Primary structured record first. Existing Firestore key/schema remains unchanged.
-  await storageSet(strategyTradeKey(userId, trade.id), JSON.stringify(clean), false);
+  // Structured record is committed transactionally before media. New fields are additive and
+  // older Strategy Lab records without persistenceRevision are treated as revision 0.
+  const committedClean = await strategyStore.saveTrade(userId, clean, {
+    createOnly: options.createOnly === true,
+    upsert: options.upsert === true,
+    expectedRevision: options.expectedRevision
+  });
   const mediaErrors = [];
   const saveOne = async (phase, index, value) => {
     let lastError = null;
@@ -10271,17 +10489,79 @@ async function saveStrategyTradeRecord(userId, trade, options = {}) {
   if (mediaPhases.has("entry")) phaseJobs.push(savePhase("entry", entryShots));
   if (mediaPhases.has("exit")) phaseJobs.push(savePhase("exit", exitShots));
   await Promise.all(phaseJobs);
-  return { mediaErrors };
+  const committedTrade = migrateStrategyTrade({
+    ...committedClean,
+    screenshots: entryShots,
+    exitScreenshots: exitShots
+  });
+  return { mediaErrors, committedTrade };
 }
 async function deleteStrategyTradeRecord(userId, tradeId) {
-  if (!fbAuth.currentUser || !userId || !tradeId) return;
+  if (!fbAuth.currentUser || !userId || !tradeId) return { failed: 0 };
   const jobs = [storageDelete(strategyTradeKey(userId, tradeId), false)];
   for (const phase of ["entry", "exit"]) {
     for (let i = 0; i < 4; i++) {
       jobs.push(storageDelete(strategyMediaKey(userId, tradeId, phase, i), false));
     }
   }
-  await Promise.allSettled(jobs);
+  const settled = await Promise.allSettled(jobs);
+  return { failed: settled.filter((r) => r.status === "rejected").length };
+}
+async function clearAuxiliaryUserDataForFullReset(userId, knownTradeIds = []) {
+  if (!fbAuth.currentUser || !userId) throw new Error("full_reset_auth_missing");
+
+  // Make Strategy Lab unreachable FIRST. Physical trade/media cleanup can then be best-effort
+  // without ever bringing deleted strategies back into the UI.
+  let tradeIds = [...new Set((knownTradeIds || []).filter(Boolean))];
+
+  // Prefer the revisioned index, but also inspect the old canonical index for pre-v4.8 leftovers.
+  try {
+    const state = await strategyStore.loadIndex(userId);
+    const splitStrategies = Array.isArray(state?.payload?.strategies) ? state.payload.strategies : [];
+    tradeIds = [...new Set([
+      ...tradeIds,
+      ...splitStrategies.flatMap((s) => Array.isArray(s?.tradeIds) ? s.tradeIds : [])
+    ].filter(Boolean))];
+  } catch (_) {
+  }
+  try {
+    const res = await storageGet(strategyIndexKey(userId), false);
+    if (res?.value) {
+      const parsed = JSON.parse(res.value);
+      const legacyStrategies = Array.isArray(parsed?.strategies) ? parsed.strategies : [];
+      tradeIds = [...new Set([
+        ...tradeIds,
+        ...legacyStrategies.flatMap((s) => Array.isArray(s?.tradeIds) ? s.tradeIds : [])
+      ].filter(Boolean))];
+    }
+  } catch (_) {
+  }
+
+  const resetIndexResult = await strategyStore.resetIndex(userId);
+  const emptyStrategyIndex = resetIndexResult?.payload || { version: STRATEGY_SCHEMA_VERSION, strategies: [] };
+
+  const tradeCleanup = await Promise.all(
+    tradeIds.map((tradeId) => deleteStrategyTradeRecord(userId, tradeId))
+  );
+  const tradeCleanupFailed = tradeCleanup.reduce((sum, row) => sum + (row?.failed || 0), 0);
+
+  const jobs = [
+    storageDelete(`${STRATEGY_INDEX_KEY}:backup:${userId}`, false),
+    storageDelete(aiKey(userId), false),
+    storageDelete(calibHistoryKey(userId), false),
+    // Pre-v4.7 profile snapshots contain data that a full reset explicitly supersedes.
+    storageDelete(`${PROFILE_KEY}:backup:${userId}`, false),
+    storageDelete(profileKey(userId), false),
+    storageDelete(PROFILE_KEY, false)
+  ];
+
+  const settled = await Promise.allSettled(jobs);
+  const failed = settled.filter((r) => r.status === "rejected");
+  return {
+    strategyIndex: emptyStrategyIndex,
+    tradeIds,
+    cleanupFailed: failed.length + tradeCleanupFailed
+  };
 }
 
 var AUTH_USERS_KEY = "mind-exe-auth-users";
@@ -10935,6 +11215,7 @@ function MindExe() {
     strategyCanPersistRef.current = false;
     strategyRawIndexRef.current = null;
     strategyBackupPendingRef.current = false;
+    strategyStore.reset();
     setStartingCapital(1e3);
     setCustomInstruments([]);
     setCustomTags([]);
@@ -11006,6 +11287,7 @@ function MindExe() {
     profileWriteUncertainRef.current = false;
     setProfileDataError(null);
     journalMediaStore.reset();
+    profileStore.reset();
     setLoaded(false);
     setIntroResolved(false);
     setShowBootIntro(false);
@@ -11035,6 +11317,7 @@ function MindExe() {
     rawProfileRef.current = null;
     backupPendingRef.current = false;
     journalMediaStore.reset();
+    profileStore.reset();
     resetInMemoryState();
     const tryLoad = async (attempt = 0) => {
       if (cancelled) return;
@@ -11189,7 +11472,7 @@ function MindExe() {
         setStrategies(state.strategies || []);
         setStrategyTrades(state.trades || []);
         strategyRawIndexRef.current = state.rawIndex || null;
-        strategyBackupPendingRef.current = !!state.rawIndex;
+        strategyBackupPendingRef.current = false;
         strategyCanPersistRef.current = true;
         setStrategyLoaded(true);
       } catch (e) {
@@ -11214,8 +11497,21 @@ function MindExe() {
     const prev = rawProfileRef.current || {};
     const src = { entries, name, accentIndex: ACCENTS.findIndex((a) => a.value === accentPreset.value), soundOn, weeklyGoal, lang, measureMode, currency, tradingAsset, strategyNote, startingCapital, customInstruments, customTags, lastCalibration, mindCoins, coinLedger, lastDailyReward, ...overrides };
     const nextMeta = { ...(prev.meta || {}) };
-    if (overrides.__intentionalFullReset === true) nextMeta.intentionalFullReset = true;
-    if (Array.isArray(src.entries) && src.entries.length > 0) nextMeta.intentionalFullReset = false;
+    const resetNowIso = overrides.__resetAt || (/* @__PURE__ */ new Date()).toISOString();
+    if (overrides.__intentionalJournalReset === true) {
+      nextMeta.journalResetAt = resetNowIso;
+      nextMeta.intentionalJournalReset = true;
+    }
+    if (overrides.__intentionalFullReset === true) {
+      nextMeta.fullResetAt = resetNowIso;
+      nextMeta.journalResetAt = resetNowIso;
+      nextMeta.intentionalFullReset = true;
+      nextMeta.intentionalJournalReset = true;
+    }
+    if (Array.isArray(src.entries) && src.entries.length > 0) {
+      nextMeta.intentionalFullReset = false;
+      nextMeta.intentionalJournalReset = false;
+    }
     return {
       // spread the previously stored document first so unknown / future top-level fields are kept;
       // every section below then overwrites only the keys this build actually owns.
@@ -11269,6 +11565,7 @@ function MindExe() {
         journalMediaStore.assertWriteSafe(mediaMap, existingCloudEntryIds);
 
         let profileUnchanged = false;
+        let profileCommitted = false;
         try {
           profileUnchanged = !!rawProfileRef.current && JSON.stringify(payload) === JSON.stringify(rawProfileRef.current);
         } catch (_) {
@@ -11283,14 +11580,29 @@ function MindExe() {
             } catch (_) {
             }
           }
-          await saveProfile(userId, payload);
-          rawProfileRef.current = payload;
+          const committedProfile = await saveProfile(userId, payload);
+          rawProfileRef.current = committedProfile || payload;
+          profileCommitted = true;
         }
 
-        await journalMediaStore.save(userId, mediaMap, {
-          activeEntryIds: capturedEntries.map((e) => String(e.id)),
-          existingCloudEntryIds
-        });
+        try {
+          await journalMediaStore.save(userId, mediaMap, {
+            activeEntryIds: capturedEntries.map((e) => String(e.id)),
+            existingCloudEntryIds
+          });
+        } catch (mediaError) {
+          // Profile is the source of truth for the journal. Once its immutable revision is committed,
+          // never leave the UI on the old journal merely because auxiliary screenshot persistence
+          // failed afterwards; that old UI state could otherwise be auto-saved back into the cloud.
+          if (profileCommitted) {
+            console.warn("mind.exe: profile committed but journal media persistence is incomplete", mediaError);
+            showToast(lang === "en"
+              ? "Journal saved. Some screenshot sync is still pending."
+              : "\u0416\u0443\u0440\u043D\u0430\u043B \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D. \u0427\u0430\u0441\u0442\u044C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u043E\u0432 \u0435\u0449\u0451 \u043D\u0435 \u0441\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0438\u0440\u043E\u0432\u0430\u043D\u0430.");
+            return true;
+          }
+          throw mediaError;
+        }
         return true;
       } catch (e) {
         console.error("mind.exe: persist failed", e);
@@ -11302,6 +11614,9 @@ function MindExe() {
           showToast(lang === "en"
             ? "This trade's old screenshots could not be verified. Reload the app before changing its screenshots."
             : "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0432\u0435\u0440\u0438\u0442\u044C \u0441\u0442\u0430\u0440\u044B\u0435 \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u044B \u044D\u0442\u043E\u0439 \u0441\u0434\u0435\u043B\u043A\u0438. \u041F\u0435\u0440\u0435\u0437\u0430\u0433\u0440\u0443\u0437\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u043F\u0435\u0440\u0435\u0434 \u0438\u0437\u043C\u0435\u043D\u0435\u043D\u0438\u0435\u043C \u0444\u043E\u0442\u043E.");
+        } else if (e?.message === "profile_revision_conflict") {
+          canPersistRef.current = false;
+          setProfileDataError({ kind: "conflict", reason: "profile_revision_conflict" });
         } else {
           showToast("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u0442\u044C \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0441\u0432\u044F\u0437\u044C");
         }
@@ -11313,21 +11628,26 @@ function MindExe() {
     profilePersistChainRef.current = queued.catch(() => false);
     return queued;
   };
-  const commitJournalEntries = async (nextEntries, successText) => {
+  const commitJournalEntries = async (nextEntries, successText, extraOverrides = {}) => {
     if (!canPersistRef.current || !fbAuth.currentUser || !userId || profileWriteUncertainRef.current) {
       showToast(lang === "en" ? "Cloud data is not ready. Retry the data load first." : "Облачные данные не готовы. Сначала повтори загрузку.");
       return false;
     }
     try {
-      const ok = await caWithTimeout(persistNow({ entries: nextEntries }), 22e3, "journal_commit_timeout");
+      const ok = await caWithTimeout(
+        persistNow({ entries: nextEntries, ...extraOverrides }),
+        22e3,
+        "journal_commit_timeout"
+      );
       if (!ok) return false;
       setEntries(nextEntries);
       if (successText) showToast(successText);
       return true;
     } catch (e) {
       if (e?.message === "journal_commit_timeout") {
-        // The original Firestore request cannot be cancelled. Freeze writes in this session so
-        // a late old request can never finish after a newer request and overwrite it.
+        // The original Firestore request cannot be cancelled. Freeze this session because the
+        // commit status is unknown. Profile Persistence v2 also compare-and-swaps the manifest, so a
+        // late stale revision cannot overwrite a newer revision after reload.
         profileWriteUncertainRef.current = true;
         canPersistRef.current = false;
         setProfileDataError({ kind: "save", reason: "journal_commit_timeout" });
@@ -11368,25 +11688,34 @@ function MindExe() {
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   };
+  const freezeStrategyWritesForConflict = (reason = "strategy_revision_conflict") => {
+    strategyCanPersistRef.current = false;
+    console.warn("mind.exe: Strategy Lab writes frozen until reload", reason);
+    showToast(lang === "en"
+      ? "Strategy Lab changed in another session. Reload before editing it again."
+      : "Strategy Lab изменился в другой сессии. Перезагрузи приложение перед дальнейшим редактированием.");
+  };
   const persistStrategyIndexNow = async (nextStrategies) => {
     if (!strategyCanPersistRef.current || !fbAuth.currentUser || !userId) {
       showToast(lang === "en" ? "Strategy Lab is not ready to save yet" : "Strategy Lab ещё не готов к сохранению");
       return false;
     }
     try {
-      if (strategyBackupPendingRef.current && strategyRawIndexRef.current) {
-        strategyBackupPendingRef.current = false;
-        try {
-          await storageSet(`${STRATEGY_INDEX_KEY}:backup:${userId}`, JSON.stringify(strategyRawIndexRef.current), false);
-        } catch (_) {
-        }
-      }
-      const payload = await saveStrategyIndex(userId, nextStrategies);
+      const payload = await caWithTimeout(
+        saveStrategyIndex(userId, nextStrategies),
+        18e3,
+        "strategy_index_save_timeout"
+      );
       strategyRawIndexRef.current = payload || { version: STRATEGY_SCHEMA_VERSION, strategies: nextStrategies };
+      strategyBackupPendingRef.current = false;
       return true;
     } catch (e) {
       console.error("mind.exe: strategy index save failed", e);
-      showToast(lang === "en" ? "Could not save Strategy Lab — check connection" : "Не удалось сохранить стратегии — проверь связь");
+      if (e?.message === "strategy_revision_conflict" || e?.message === "strategy_index_save_timeout") {
+        freezeStrategyWritesForConflict(e.message);
+      } else {
+        showToast(lang === "en" ? "Could not save Strategy Lab — check connection" : "Не удалось сохранить стратегии — проверь связь");
+      }
       return false;
     }
   };
@@ -11439,13 +11768,22 @@ function MindExe() {
     try {
       // Write the trade first. If the index write then fails, remove the orphan so the cloud
       // cannot contain an invisible trade that the user has no way to reach.
-      const saveResult = await caWithTimeout(saveStrategyTradeRecord(userId, trade, { cleanupStale: false, mediaPhases: ["entry"] }), 15e3, "strategy_trade_save_timeout");
+      const saveResult = await caWithTimeout(
+        saveStrategyTradeRecord(userId, trade, {
+          cleanupStale: false,
+          mediaPhases: ["entry"],
+          createOnly: true
+        }),
+        15e3,
+        "strategy_trade_save_timeout"
+      );
+      const committedTrade = saveResult?.committedTrade || trade;
       const indexOk = await persistStrategyIndexNow(nextStrategies);
       if (!indexOk) {
         await deleteStrategyTradeRecord(userId, trade.id);
         return false;
       }
-      setStrategyTrades((prev) => [...prev, trade]);
+      setStrategyTrades((prev) => [...prev, committedTrade]);
       setStrategies(nextStrategies);
       if (saveResult?.mediaErrors?.length) {
         showToast(lang === "en" ? "Trade saved, but one or more screenshots did not upload" : "Сделка сохранена, но часть скриншотов не загрузилась");
@@ -11455,7 +11793,11 @@ function MindExe() {
       return true;
     } catch (e) {
       console.error("mind.exe: strategy trade save failed", e);
-      showToast(lang === "en" ? "Could not save strategy trade" : "Не удалось сохранить тестовую сделку");
+      if (e?.message === "strategy_trade_save_timeout" || e?.message === "strategy_trade_revision_conflict") {
+        freezeStrategyWritesForConflict(e.message);
+      } else {
+        showToast(lang === "en" ? "Could not save strategy trade" : "Не удалось сохранить тестовую сделку");
+      }
       return false;
     }
   };
@@ -11467,11 +11809,15 @@ function MindExe() {
     const phases = nextTrade.status === "closed" ? ["entry", "exit"] : ["entry"];
     try {
       const saveResult = await caWithTimeout(
-        saveStrategyTradeRecord(userId, nextTrade, { mediaPhases: phases }),
+        saveStrategyTradeRecord(userId, nextTrade, {
+          mediaPhases: phases,
+          expectedRevision: Number.isFinite(Number(current.persistenceRevision)) ? Number(current.persistenceRevision) : 0
+        }),
         15e3,
         "strategy_trade_update_timeout"
       );
-      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? nextTrade : t));
+      const committedTrade = saveResult?.committedTrade || nextTrade;
+      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? committedTrade : t));
       if (saveResult?.mediaErrors?.length) {
         showToast(lang === "en" ? "Trade updated, but one or more screenshots did not upload" : "Сделка обновлена, но часть скриншотов не загрузилась");
       } else {
@@ -11480,7 +11826,11 @@ function MindExe() {
       return true;
     } catch (e) {
       console.error("mind.exe: strategy trade update failed", e);
-      showToast(lang === "en" ? "Could not update strategy trade" : "Не удалось обновить тестовую сделку");
+      if (e?.message === "strategy_trade_revision_conflict" || e?.message === "strategy_trade_update_timeout") {
+        freezeStrategyWritesForConflict(e.message);
+      } else {
+        showToast(lang === "en" ? "Could not update strategy trade" : "Не удалось обновить тестовую сделку");
+      }
       return false;
     }
   };
@@ -11489,8 +11839,16 @@ function MindExe() {
     if (!current || !strategyCanPersistRef.current || !userId) return false;
     const nextTrade = migrateStrategyTrade({ ...current, ...patch });
     try {
-      const saveResult = await caWithTimeout(saveStrategyTradeRecord(userId, nextTrade, { mediaPhases: ["exit"] }), 15e3, "strategy_close_save_timeout");
-      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? nextTrade : t));
+      const saveResult = await caWithTimeout(
+        saveStrategyTradeRecord(userId, nextTrade, {
+          mediaPhases: ["exit"],
+          expectedRevision: Number.isFinite(Number(current.persistenceRevision)) ? Number(current.persistenceRevision) : 0
+        }),
+        15e3,
+        "strategy_close_save_timeout"
+      );
+      const committedTrade = saveResult?.committedTrade || nextTrade;
+      setStrategyTrades((prev) => prev.map((t) => t.id === tradeId ? committedTrade : t));
       if (saveResult?.mediaErrors?.length) {
         showToast(lang === "en" ? "Trade closed, but one or more screenshots did not upload" : "Сделка закрыта, но часть скриншотов не загрузилась");
       } else {
@@ -11499,7 +11857,11 @@ function MindExe() {
       return true;
     } catch (e) {
       console.error("mind.exe: strategy trade close failed", e);
-      showToast(lang === "en" ? "Could not save closing trade" : "Не удалось сохранить закрытие сделки");
+      if (e?.message === "strategy_trade_revision_conflict" || e?.message === "strategy_close_save_timeout") {
+        freezeStrategyWritesForConflict(e.message);
+      } else {
+        showToast(lang === "en" ? "Could not save closing trade" : "Не удалось сохранить закрытие сделки");
+      }
       return false;
     }
   };
@@ -11523,8 +11885,15 @@ function MindExe() {
       setStrategyTrades((prev) => prev.filter((t) => t.strategyId !== strategyId));
       // Cleanup happens only after the strategy is safely removed from the index.
       // Failure here can leave an unreachable orphan document, but can never erase journal data.
-      await Promise.allSettled(directTradeIds.map((tradeId) => deleteStrategyTradeRecord(userId, tradeId)));
-      showToast(lang === "en" ? "Strategy deleted" : "Стратегия удалена");
+      const cleanupRows = await Promise.all(directTradeIds.map((tradeId) => deleteStrategyTradeRecord(userId, tradeId)));
+      const cleanupFailed = cleanupRows.reduce((sum, row) => sum + (row?.failed || 0), 0);
+      if (cleanupFailed > 0) {
+        showToast(lang === "en"
+          ? "Strategy removed. Some orphan files could not be cleaned yet."
+          : "Стратегия удалена. Часть недоступных файлов пока не удалось очистить.");
+      } else {
+        showToast(lang === "en" ? "Strategy deleted" : "Стратегия удалена");
+      }
       return true;
     } catch (e) {
       console.error("mind.exe: strategy delete failed", e);
@@ -11599,17 +11968,21 @@ function MindExe() {
   };
   const importJournal = (file) => {
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const raw = JSON.parse(reader.result);
         if (!Array.isArray(raw)) throw new Error("not an array");
         const restored = raw.map(sanitizeImportedEntry).filter(Boolean);
         if (restored.length === 0 && raw.length > 0) throw new Error("nothing salvageable");
-        setEntries(restored);
-        persistNow({ entries: restored });
-        showToast(restored.length < raw.length ? `\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E ${restored.length} \u0438\u0437 ${raw.length} \u2014 \u0447\u0430\u0441\u0442\u044C \u0437\u0430\u043F\u0438\u0441\u0435\u0439 \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0435\u043D\u0430` : `\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u043D\u043E \u0437\u0430\u043F\u0438\u0441\u0435\u0439: ${restored.length}`);
-      } catch (_) {
-        showToast("\u0424\u0430\u0439\u043B \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0451\u043D \u0438\u043B\u0438 \u043D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442");
+        const message = restored.length < raw.length
+          ? `Импортировано ${restored.length} из ${raw.length} — часть записей повреждена`
+          : `Импортировано записей: ${restored.length}`;
+        const ok = await commitJournalEntries(restored, message);
+        if (!ok) throw new Error("journal_import_save_failed");
+      } catch (e) {
+        if (e?.message !== "journal_import_save_failed") {
+          showToast("Файл повреждён или неверный формат");
+        }
       }
     };
     reader.readAsText(file);
@@ -11650,24 +12023,7 @@ function MindExe() {
         if (!profile) throw new Error("unrecognized backup format");
         const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
         const restoredEntries = (Array.isArray(journal.entries) ? journal.entries : []).map(sanitizeImportedEntry).filter(Boolean);
-        setEntries(restoredEntries);
-        if (user.name !== void 0) setName(user.name);
-        if (typeof settings.accentIndex === "number") setAccentPreset(ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
-        if (typeof settings.soundOn === "boolean") setSoundOn(settings.soundOn);
-        if (typeof settings.weeklyGoal === "number") setWeeklyGoal(settings.weeklyGoal);
-        if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
-        if (settings.measureMode) setMeasureMode(settings.measureMode);
-        if (settings.currency) setCurrency(settings.currency);
-        if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
-        if (typeof settings.strategyNote === "string") setStrategyNote(settings.strategyNote);
-        if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
-        if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
-        if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
-        if (progress.lastCalibration) setLastCalibration(progress.lastCalibration);
-        if (typeof wallet.mindCoins === "number") setMindCoins(wallet.mindCoins);
-        if (Array.isArray(wallet.coinLedger)) setCoinLedger(wallet.coinLedger);
-        if (wallet.lastDailyReward) setLastDailyReward(wallet.lastDailyReward);
-        await persistNow({
+        const profileRestoreOk = await persistNow({
           entries: restoredEntries,
           name: user.name ?? name,
           accentIndex: typeof settings.accentIndex === "number" ? settings.accentIndex : ACCENTS.findIndex((a) => a.value === accentPreset.value),
@@ -11686,6 +12042,26 @@ function MindExe() {
           coinLedger: wallet.coinLedger ?? coinLedger,
           lastDailyReward: wallet.lastDailyReward ?? lastDailyReward
         });
+        if (!profileRestoreOk) throw new Error("full_backup_profile_save_failed");
+
+        // Cloud profile is confirmed; only now mirror it into React state.
+        setEntries(restoredEntries);
+        if (user.name !== void 0) setName(user.name);
+        if (typeof settings.accentIndex === "number") setAccentPreset(ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
+        if (typeof settings.soundOn === "boolean") setSoundOn(settings.soundOn);
+        if (typeof settings.weeklyGoal === "number") setWeeklyGoal(settings.weeklyGoal);
+        if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
+        if (settings.measureMode) setMeasureMode(settings.measureMode);
+        if (settings.currency) setCurrency(settings.currency);
+        if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
+        if (typeof settings.strategyNote === "string") setStrategyNote(settings.strategyNote);
+        if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
+        if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
+        if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
+        if (progress.lastCalibration) setLastCalibration(progress.lastCalibration);
+        if (typeof wallet.mindCoins === "number") setMindCoins(wallet.mindCoins);
+        if (Array.isArray(wallet.coinLedger)) setCoinLedger(wallet.coinLedger);
+        if (wallet.lastDailyReward) setLastDailyReward(wallet.lastDailyReward);
         let strategyRestoreFailed = false;
         if (raw.strategyLab && (!strategyCanPersistRef.current || !userId)) {
           strategyRestoreFailed = true;
@@ -11701,30 +12077,90 @@ function MindExe() {
               ...s,
               tradeIds: [...new Set([...(s.tradeIds || []), ...(tradeIdsByStrategy[s.id] || [])])]
             }));
-            for (const trade of importedTrades) await saveStrategyTradeRecord(userId, trade);
-            const indexPayload = await saveStrategyIndex(userId, fixedStrategies);
-            strategyRawIndexRef.current = indexPayload;
-            strategyBackupPendingRef.current = !!fixedStrategies.length;
+
+            const previousById = new Map(strategyTrades.map((trade) => [trade.id, trade]));
+            const touched = [];
+            const restoredTrades = [];
+            try {
+              for (const trade of importedTrades) {
+                const previous = previousById.get(trade.id) || null;
+                const expectedRevision = previous
+                  ? (Number.isFinite(Number(previous.persistenceRevision)) ? Number(previous.persistenceRevision) : 0)
+                  : (Number.isFinite(Number(trade.persistenceRevision)) ? Number(trade.persistenceRevision) : 0);
+
+                const savedTrade = await saveStrategyTradeRecord(userId, trade, {
+                  upsert: true,
+                  expectedRevision
+                });
+                const committedTrade = savedTrade?.committedTrade || trade;
+                touched.push({
+                  id: trade.id,
+                  previous,
+                  committedRevision: Number.isFinite(Number(committedTrade.persistenceRevision))
+                    ? Number(committedTrade.persistenceRevision)
+                    : expectedRevision + 1
+                });
+                restoredTrades.push(committedTrade);
+              }
+
+              const indexOk = await persistStrategyIndexNow(fixedStrategies);
+              if (!indexOk) throw new Error("strategy_restore_index_failed");
+            } catch (restoreError) {
+              // Existing trade records are rolled back with CAS. Newly-created failed-restore records
+              // are deliberately left as unreachable orphans instead of risking deletion of a record
+              // that another device may have modified after our write.
+              for (const row of [...touched].reverse()) {
+                if (!row.previous) continue;
+                try {
+                  await saveStrategyTradeRecord(userId, row.previous, {
+                    expectedRevision: row.committedRevision,
+                    mediaPhases: ["entry", "exit"]
+                  });
+                } catch (_) {
+                }
+              }
+              throw restoreError;
+            }
+
+            strategyRawIndexRef.current = {
+              version: STRATEGY_SCHEMA_VERSION,
+              strategies: fixedStrategies
+            };
+            strategyBackupPendingRef.current = false;
             setStrategies(fixedStrategies);
-            setStrategyTrades(importedTrades);
+            setStrategyTrades(restoredTrades);
           } catch (e) {
             console.error("mind.exe: Strategy Lab backup restore failed", e);
             strategyRestoreFailed = true;
           }
         }
         showToast(strategyRestoreFailed ? "\u0411\u044D\u043A\u0430\u043F \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u043D\u043E Strategy Lab \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043B\u0441\u044F" : "\u0411\u044D\u043A\u0430\u043F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D");
-      } catch (_) {
-        showToast("\u0424\u0430\u0439\u043B \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0451\u043D \u0438\u043B\u0438 \u044D\u0442\u043E \u043D\u0435 \u0431\u044D\u043A\u0430\u043F mind.exe");
+      } catch (e) {
+        if (e?.message === "full_backup_profile_save_failed") {
+          showToast(lang === "en"
+            ? "Backup was read, but cloud restore could not be confirmed."
+            : "\u0411\u044D\u043A\u0430\u043F \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u043D, \u043D\u043E \u043D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u0438\u0435 \u0432 \u043E\u0431\u043B\u0430\u043A\u0435.");
+        } else {
+          showToast("\u0424\u0430\u0439\u043B \u043F\u043E\u0432\u0440\u0435\u0436\u0434\u0451\u043D \u0438\u043B\u0438 \u044D\u0442\u043E \u043D\u0435 \u0431\u044D\u043A\u0430\u043F mind.exe");
+        }
       }
     };
     reader.readAsText(file);
   };
-  const resetJournal = () => {
-    setEntries([]);
-    persistNow({ entries: [] });
-    showToast("\u0416\u0443\u0440\u043D\u0430\u043B \u043E\u0447\u0438\u0449\u0435\u043D");
+  const resetJournal = async () => {
+    const resetAt = (/* @__PURE__ */ new Date()).toISOString();
+    return commitJournalEntries(
+      [],
+      lang === "en" ? "Journal cleared" : "\u0416\u0443\u0440\u043D\u0430\u043B \u043E\u0447\u0438\u0449\u0435\u043D",
+      { __intentionalJournalReset: true, __resetAt: resetAt }
+    );
   };
-  const resetEverything = () => {
+  const resetEverything = async () => {
+    if (!canPersistRef.current || !fbAuth.currentUser || !userId || profileWriteUncertainRef.current) {
+      showToast(lang === "en" ? "Cloud data is not ready. Retry the data load first." : "\u041E\u0431\u043B\u0430\u0447\u043D\u044B\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u043D\u0435 \u0433\u043E\u0442\u043E\u0432\u044B. \u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043F\u043E\u0432\u0442\u043E\u0440\u0438 \u0437\u0430\u0433\u0440\u0443\u0437\u043A\u0443.");
+      return false;
+    }
+
     const cosmicIndex = ACCENTS.findIndex((a) => a.cosmic);
     const defaults = {
       entries: [],
@@ -11745,25 +12181,78 @@ function MindExe() {
       coinLedger: [],
       lastDailyReward: null
     };
-    setEntries([]);
-    setName("");
-    setAccentPreset(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
-    setSoundOn(true);
-    setWeeklyGoal(7);
-    setLang("ru");
-    setMeasureMode("R");
-    setCurrency("USD");
-    setTradingAsset(null);
-    setStrategyNote("");
-    setStartingCapital(1e3);
-    setCustomInstruments([]);
-    setCustomTags([]);
-    setLastCalibration(null);
-    setMindCoins(0);
-    setCoinLedger([]);
-    setLastDailyReward(null);
-    persistNow({ ...defaults, __intentionalFullReset: true });
-    showToast("\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u043E");
+    const resetAt = (/* @__PURE__ */ new Date()).toISOString();
+
+    try {
+      const ok = await caWithTimeout(
+        persistNow({ ...defaults, __intentionalFullReset: true, __resetAt: resetAt }),
+        25e3,
+        "full_reset_timeout"
+      );
+      if (!ok) return false;
+
+      // Profile reset is now durably committed together with the full-reset tombstone.
+      // Only after that do we update local UI state and remove auxiliary cloud stores.
+      setEntries([]);
+      setName("");
+      setAccentPreset(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
+      setSoundOn(true);
+      setWeeklyGoal(7);
+      setLang("ru");
+      setMeasureMode("R");
+      setCurrency("USD");
+      setTradingAsset(null);
+      setStrategyNote("");
+      setStartingCapital(1e3);
+      setCustomInstruments([]);
+      setCustomTags([]);
+      setLastCalibration(null);
+      setMindCoins(0);
+      setCoinLedger([]);
+      setLastDailyReward(null);
+      setTab("home");
+
+      let aux = null;
+      try {
+        aux = await caWithTimeout(
+          clearAuxiliaryUserDataForFullReset(
+            userId,
+            [
+              ...strategyTrades.map((t) => t.id),
+              ...strategies.flatMap((s) => Array.isArray(s.tradeIds) ? s.tradeIds : [])
+            ]
+          ),
+          22e3,
+          "full_reset_aux_timeout"
+        );
+        setStrategies([]);
+        setStrategyTrades([]);
+        strategyRawIndexRef.current = aux.strategyIndex;
+        strategyBackupPendingRef.current = false;
+        strategyCanPersistRef.current = true;
+      } catch (e) {
+        console.error("mind.exe: full reset auxiliary cleanup incomplete", e);
+      }
+
+      if (aux && aux.cleanupFailed === 0) {
+        showToast(lang === "en" ? "Application reset" : "\u041F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u0435 \u0441\u0431\u0440\u043E\u0448\u0435\u043D\u043E");
+      } else {
+        showToast(lang === "en"
+          ? "Profile reset. Some auxiliary cloud data may need another cleanup attempt."
+          : "\u041F\u0440\u043E\u0444\u0438\u043B\u044C \u0441\u0431\u0440\u043E\u0448\u0435\u043D. \u0427\u0430\u0441\u0442\u044C \u0434\u043E\u043F. \u0434\u0430\u043D\u043D\u044B\u0445 \u043C\u043E\u0436\u0435\u0442 \u043F\u043E\u0442\u0440\u0435\u0431\u043E\u0432\u0430\u0442\u044C \u043F\u043E\u0432\u0442\u043E\u0440\u043D\u043E\u0439 \u043E\u0447\u0438\u0441\u0442\u043A\u0438.");
+      }
+      return true;
+    } catch (e) {
+      if (e?.message === "full_reset_timeout") {
+        profileWriteUncertainRef.current = true;
+        canPersistRef.current = false;
+        setProfileDataError({ kind: "save", reason: "full_reset_timeout" });
+      } else {
+        console.error("mind.exe: full reset failed", e);
+        showToast(lang === "en" ? "Could not confirm full reset" : "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u043E\u0434\u0442\u0432\u0435\u0440\u0434\u0438\u0442\u044C \u043F\u043E\u043B\u043D\u044B\u0439 \u0441\u0431\u0440\u043E\u0441");
+      }
+      return false;
+    }
   };
   const addCustomInstrument = (v) => setCustomInstruments((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
   const addCustomTag = (v) => setCustomTags((prev) => prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [v, ...prev]);
