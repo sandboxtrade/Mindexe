@@ -250,9 +250,9 @@ await test("stage 5-7 feature modules stay extracted from app.js", () => {
   ]) ok(!appSource.includes(token), `feature implementation drifted back into app.js: ${token}`);
 
   for (const token of [
-    'from "./features/journal/journal-ui.js?v=1"',
-    'from "./features/strategy/strategy-lab.js?v=1"',
-    'from "./ai/context.js?v=1"',
+    'from "./features/journal/journal-ui.js?v=2"',
+    'from "./features/strategy/strategy-lab.js?v=2"',
+    'from "./ai/context.js?v=2"',
     'from "./ai/ai-service.js?v=1"',
     'from "./ai/trade-tools.js?v=1"'
   ]) ok(appSource.includes(token), `feature module import missing: ${token}`);
@@ -272,8 +272,29 @@ await test("stage 8 feature UI stays extracted from app.js", () => {
     'from "./ui/brand.js?v=1"',
     'from "./features/settings/settings-ui.js?v=1"',
     'from "./features/coach/coach-ui.js?v=1"',
-    'from "./features/calibration/calibration-ui.js?v=1"'
+    'from "./features/calibration/calibration-ui.js?v=2"'
   ]) ok(appSource.includes(token), `stage 8 module import missing: ${token}`);
+});
+
+
+await test("modular extraction keeps every moved runtime dependency local or imported", () => {
+  const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
+  const journal = read("features/journal/journal-ui.js");
+  const strategy = read("features/strategy/strategy-lab.js");
+  const calibration = read("features/calibration/calibration-ui.js");
+  const aiContext = read("ai/context.js");
+  const review = read("analytics/calibration-review.js");
+  const strings = read("i18n/strings.js");
+
+  ok(journal.includes("useEffect") && journal.includes("const softLift") && journal.includes("function relTime"), "journal module lost extracted helpers");
+  ok(journal.includes("export function pointToEmotions"), "pointToEmotions is not exported for analytics UI");
+  ok(strategy.includes('import { LogoSpinner }') && strategy.includes("export function normalizeStrategyResultByCloseType") && strategy.includes("export function strategyResultOutcome"), "strategy module lost shared runtime helpers");
+  ok(calibration.includes("function useAnimatedNumber") && !calibration.includes("storageGet(HOME_ADVICE_KEY"), "calibration module contains unresolved app-level cache dependencies");
+  ok(aiContext.includes("entriesWithRealizedRR") && aiContext.includes("st_median"), "AI context imports are incomplete");
+  ok(review.includes("function emotionImpactStats") && review.includes("const EMOTION_IMPACT_HIGH"), "review module lost emotion-impact helpers");
+  ok(strings.includes("function pluralRu"), "localized formatter dependency missing");
+  ok(appSource.includes("async function getHomeAdvice") && appSource.includes("async function getMarketSnapshot"), "Home cache helpers disappeared from app orchestration");
+  ok(appSource.includes("journalMediaStore.keys.entry(userId, id)"), "legacy media migration bypasses journal-media key adapter");
 });
 
 await test("shared emotion-conflict logic is pure and reusable", async () => {

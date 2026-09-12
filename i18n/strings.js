@@ -1,6 +1,15 @@
 // mind.exe — localized UI copy extracted from app.js.
 // Keep language content isolated from runtime/persistence logic.
 
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
 export const STRINGS = {
   ru: {
     nav: { home: "\u0413\u043B\u0430\u0432\u043D\u0430\u044F", new: "\u0414\u043E\u0431\u0430\u0432\u0438\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443", log: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A", patterns: "\u0410\u043D\u0430\u043B\u0438\u0442\u0438\u043A\u0430", strategies: "\u0421\u0442\u0440\u0430\u0442\u0435\u0433\u0438\u0438", challenge: "\u0427\u0435\u043B\u043B\u0435\u043D\u0434\u0436", coach: "\u0410\u043D\u0430\u043B\u0438\u0437", settings: "\u041F\u0440\u043E\u0444\u0438\u043B\u044C" },

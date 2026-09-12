@@ -1,7 +1,7 @@
 // mind.exe — journal entry/edit/close/log UI.
 // UI-only feature module. Persistence callbacks are supplied by app.js.
 
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   Sparkles, NotebookText, Search, Trash2, ChevronRight, ChevronDown, Check,
   X as XIcon, PenLine, Plus, ImagePlus, Target, Camera
@@ -22,6 +22,24 @@ import {
 import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=2";
 import { compressImageFile } from "../../ui/media-utils.js?v=1";
 import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=1";
+
+const ring = (accent) => `0 0 0 1px ${accent}35`;
+const softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+function relTime(date) {
+  const delta = Date.now() - date.getTime();
+  if (delta < 6e4) return "сейчас";
+  if (delta < 36e5) return `${Math.floor(delta / 6e4)} мин`;
+  if (delta < 864e5) return `${Math.floor(delta / 36e5)} ч`;
+  return date.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+}
 
 const outcomeColor = (o) => o === "Win" ? WIN : o === "Loss" ? LOSS : BASE.inkDim;
 
@@ -70,7 +88,7 @@ function emotionsToPoint(values, variant = "entry") {
 // сохранённых процентов. Однозначного разложения нет (x=80 это и 60/0, и 70/10), поэтому
 // берётся простейший вариант: перевес идёт в один полюс, противоположный обнуляется.
 // Точка на сетке при этом сохраняется без сдвига, аналитика не меняется.
-function pointToEmotions(x, y, variant = "entry") {
+export function pointToEmotions(x, y, variant = "entry") {
   if (x === null || x === void 0 || y === null || y === void 0 || isNaN(x) || isNaN(y)) return null;
   const k = emotionScaleKeys(variant);
   const dx = (x - 50) * 2;

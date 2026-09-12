@@ -15,16 +15,26 @@ import {
 import { isEntryClosed } from "../../core/journal-model.js?v=1";
 import { BASE, WIN, LOSS, INSTRUMENTS } from "../../config/app-config.js?v=1";
 import { Card, Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=2";
+import { LogoSpinner } from "../../ui/brand.js?v=1";
 import { compressImageFile } from "../../ui/media-utils.js?v=1";
-import { PickerField } from "../journal/journal-ui.js?v=1";
+import { PickerField } from "../journal/journal-ui.js?v=2";
 import { aiAnalyzeStrategy, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=1";
+
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
 
 const outcomeColor = (o) => o === "Win" ? WIN : o === "Loss" ? LOSS : BASE.inkDim;
 
-function normalizeStrategyResultByCloseType(closeType, value) {
+export function normalizeStrategyResultByCloseType(closeType, value) {
   return normalizeResultByCloseType(closeType, value);
 }
-function strategyResultOutcome(value) {
+export function strategyResultOutcome(value) {
   return outcomeFromResult(value);
 }
 export function strategyAllTrades(strategyId, strategyTrades, journalEntries) {

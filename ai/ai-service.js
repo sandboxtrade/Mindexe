@@ -2,7 +2,7 @@
 // Network/model calls only. Context construction, persistence and React UI live elsewhere.
 
 import { getGenerativeModel } from "firebase/ai";
-import { caWithTimeout, CALIBRATION_SCALE_TYPES } from "../analytics/calibration-review.js?v=1";
+import { caWithTimeout, CALIBRATION_SCALE_TYPES } from "../analytics/calibration-review.js?v=2";
 
 let runtimeAiLogic = null;
 let runtimeModelName = null;

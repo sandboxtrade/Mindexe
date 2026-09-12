@@ -5,6 +5,15 @@ import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js?v=1"
 import { computeRRWinRateStats, st_mean, st_median, st_round2, st_stdev } from "../core/stats.js?v=1";
 import { isEntryClosed, normalizeEmotions } from "../core/journal-model.js?v=1";
 
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
 var TA_CONFIDENCE_THRESHOLDS = { low: 5, moderate: 15, high: 30 };
 function ta_confidence(sampleSize, thresholds = TA_CONFIDENCE_THRESHOLDS) {
   if (!sampleSize || sampleSize < thresholds.low) return "insufficient";

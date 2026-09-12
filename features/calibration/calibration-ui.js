@@ -10,13 +10,36 @@ import { LogoSpinner } from "../../ui/brand.js?v=1";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview, caScaleSet, scoreCalibrationDynamic, caWithTimeout
-} from "../../analytics/calibration-review.js?v=1";
-import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js?v=1";
+} from "../../analytics/calibration-review.js?v=2";
+import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js?v=2";
 import {
   aiGenerateCalibrationQuestions, aiReviewQuestions, aiReviewSummary
 } from "../../ai/ai-service.js?v=1";
 
 const softLift = (accent) => `0 0 0 1px ${accent}35, 0 6px 20px ${accent}1F`;
+
+function useAnimatedNumber(target, duration = 600) {
+  const [display, setDisplay] = useState(target);
+  const prevRef = useRef(target);
+  useEffect(() => {
+    const from = prevRef.current;
+    const to = target;
+    if (from === to) return;
+    let start;
+    let raf;
+    const step = (ts) => {
+      if (!start) start = ts;
+      const progress = Math.min(1, (ts - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(from + (to - from) * eased);
+      if (progress < 1) raf = requestAnimationFrame(step);
+      else prevRef.current = to;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return display;
+}
 
 function CalibrationRing({ pct, color, size = 172 }) {
   const animated = useAnimatedNumber(pct, 1100);
@@ -383,73 +406,6 @@ export function JournalReview({ entries, accent, onClose, t, lang }) {
     ] })
   ] });
 }
-// ---- aiPrompts.js ------------------------------------------------------------
-var HOME_ADVICE_KEY = "home-advice";
-// Кэш приватный (shared=false \u2192 users/{uid}/data/home-advice), поэтому совет одного пользователя
-// физически не может показаться другому. Ключ инвалидации \u2014 хэш того же контекста, который
-// уходит в модель: пока статистика, состояние и стратегия не менялись, запрос не уходит вообще.
-async function getHomeAdvice(context, contextHash, force) {
-  if (!context) return null;
-  if (!force) {
-    try {
-      const res = await caWithTimeout(storageGet(HOME_ADVICE_KEY, false), 1e4, "home_advice_cache_timeout");
-      const cached = res?.value ? JSON.parse(res.value) : null;
-      if (cached && cached.hash === contextHash && cached.text) return cached.text;
-    } catch (_) {
-    }
-  }
-  const text = await caWithTimeout(aiGenerateHomeAdvice(context), 2e4, "home_advice_timeout");
-  if (!text) return null;
-  storageSet(HOME_ADVICE_KEY, JSON.stringify({ hash: contextHash, text }), false).catch(() => {
-  });
-  return text;
-}
-function marketHourBucket() {
-  return Math.floor(Date.now() / 36e5);
-}
-function marketSnapshotKey(assetClass) {
-  return `market-snapshot:${assetClass}`;
-}
-async function loadCachedMarketSnapshot(assetClass) {
-  try {
-    const res = await storageGet(marketSnapshotKey(assetClass), true);
-    return res?.value ? JSON.parse(res.value) : null;
-  } catch {
-    return null;
-  }
-}
-async function saveCachedMarketSnapshot(assetClass, snapshot) {
-  try {
-    await storageSet(marketSnapshotKey(assetClass), JSON.stringify(snapshot), true);
-  } catch {
-  }
-}
-// In-memory guard: the shared Firestore cache is the primary hourly cache, but if writing it ever
-// fails (rules, offline) the hour bucket check would miss on every mount and fire a fresh grounded
-// Gemini call each time the Home tab renders. This keeps at most one call per asset per hour per
-// session regardless of whether the shared write succeeded.
-var __marketMemCache = {};
-async function getMarketSnapshot(assetClass, lang) {
-  if (!assetClass) return null;
-  const bucket = marketHourBucket();
-  const mem = __marketMemCache[assetClass];
-  if (mem && mem.hourBucket === bucket) return mem;
-  const cached = await loadCachedMarketSnapshot(assetClass);
-  if (cached && cached.hourBucket === bucket) {
-    __marketMemCache[assetClass] = cached;
-    return cached;
-  }
-  try {
-    const fresh = await aiFetchMarketSnapshot(assetClass, lang);
-    const withBucket = { ...fresh, hourBucket: bucket };
-    __marketMemCache[assetClass] = withBucket;
-    saveCachedMarketSnapshot(assetClass, withBucket);
-    return withBucket;
-  } catch {
-    return cached || null;
-  }
-}
-
 // ============================================================================
 // ---- Adaptive Calibration Engine ---------------------------------------------
 // New layer on top of the existing Calibration/scoreCalibrationDynamic UI and the existing

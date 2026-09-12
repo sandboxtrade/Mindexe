@@ -2,8 +2,73 @@
 // Questionnaire construction/scoring only; no React UI or persistence writes.
 
 import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js?v=1";
-import { patternEngineV2 } from "./trader-analytics.js?v=1";
+import { patternEngineV2 } from "./trader-analytics.js?v=3";
 import { WIN, LOSS, WARN } from "../config/app-config.js?v=1";
+import { emotionClampPct, emotionConflict, emotionScaleKeys, normalizeEmotions } from "../core/journal-model.js?v=2";
+
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last === 1) return one;
+  if (last >= 2 && last <= 4) return few;
+  return many;
+}
+
+const EMOTION_IMPACT_HIGH = 60;
+const EMOTION_IMPACT_LOW = 40;
+const EMOTION_IMPACT_MIN = 3;
+function pointToEmotions(x, y, variant = "entry") {
+  if (x === null || x === undefined || y === null || y === undefined || isNaN(x) || isNaN(y)) return null;
+  const k = emotionScaleKeys(variant);
+  const dx = (x - 50) * 2;
+  const dy = (y - 50) * 2;
+  return {
+    [k[0]]: dx >= 0 ? emotionClampPct(dx) : 0,
+    [k[1]]: dx < 0 ? emotionClampPct(-dx) : 0,
+    [k[2]]: dy >= 0 ? emotionClampPct(dy) : 0,
+    [k[3]]: dy < 0 ? emotionClampPct(-dy) : 0
+  };
+}
+function emotionImpactAverage(rows) {
+  return rows.length ? rows.reduce((sum, x) => sum + x.r, 0) / rows.length : null;
+}
+function emotionImpactStats(entries, labelList) {
+  const keys = emotionScaleKeys("entry");
+  const labels = Array.isArray(labelList) && labelList.length === keys.length ? labelList : keys;
+  const rows = (entries || []).filter((e) => typeof e.r === "number" && !isNaN(e.r)).map((e) => {
+    const exact = normalizeEmotions(e.emotions, "entry");
+    return { r: e.r, v: exact || pointToEmotions(e.x, e.y, "entry"), exact: !!exact };
+  }).filter((x) => x.v);
+  if (rows.length < EMOTION_IMPACT_MIN * 2) {
+    return { available: false, reason: "few_trades", sample: rows.length, needed: EMOTION_IMPACT_MIN * 2 };
+  }
+  const allScales = keys.map((key, i) => {
+    const high = rows.filter((x) => emotionClampPct(x.v[key]) >= EMOTION_IMPACT_HIGH);
+    const low = rows.filter((x) => emotionClampPct(x.v[key]) <= EMOTION_IMPACT_LOW);
+    return { key, label: labels[i], highN: high.length, lowN: low.length, highAvg: emotionImpactAverage(high), lowAvg: emotionImpactAverage(low) };
+  });
+  const scales = allScales
+    .filter((item) => item.highN >= EMOTION_IMPACT_MIN && item.lowN >= EMOTION_IMPACT_MIN)
+    .map((item) => ({ ...item, diff: item.highAvg - item.lowAvg }))
+    .sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff));
+  const withConflict = rows.map((x) => ({ ...x, c: emotionConflict(x.v, "entry").max }));
+  const mixed = withConflict.filter((x) => x.c >= 40);
+  const clear = withConflict.filter((x) => x.c < 40);
+  const conflict = mixed.length >= EMOTION_IMPACT_MIN && clear.length >= EMOTION_IMPACT_MIN
+    ? { mixedN: mixed.length, clearN: clear.length, mixedAvg: emotionImpactAverage(mixed), clearAvg: emotionImpactAverage(clear) }
+    : null;
+  const available = scales.length > 0 || !!conflict;
+  return {
+    available,
+    reason: available ? null : "no_groups",
+    sample: rows.length,
+    approxCount: rows.filter((x) => !x.exact).length,
+    allScales,
+    scales,
+    conflict
+  };
+}
 
 export const CALIBRATION_QUESTIONS = [
   {

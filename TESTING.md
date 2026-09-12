@@ -1,4 +1,4 @@
-# MIND.EXE regression tests — v4.8.3
+# MIND.EXE regression tests — v4.8.3.1
 
 Перед крупными правками запускай:
 
@@ -21,7 +21,7 @@ npm test
 - passive second device не подменяет сохранённый cloud `anonId` своим локальным ID и не создаёт ложную profile revision;
 - desktop route новой сделки подписан явно как `Добавить сделку` / `Add trade`.
 
-Текущий suite: **61 regression checks**.
+Текущий suite: **62 regression checks**.
 
 
 
@@ -98,3 +98,12 @@ New coverage verifies:
 - все относительные JavaScript-импорты после разбиения реально указывают на существующие локальные файлы.
 
 Persistence/Auth/CAS semantics этим этапом не менялись.
+
+
+## Modular startup hotfix — v4.8.3.1
+
+Добавлена проверка, что вынесенные feature/AI/calibration модули не теряют runtime-зависимости при переносе из `app.js`.
+
+Перед релизом дополнительно выполнен статический TypeScript-аудит JavaScript-кода на несуществующие идентификаторы (`TS2304` / `TS2552`): ошибок нет. Это отдельная release-проверка; основной `npm test` остаётся zero-dependency.
+
+Для изменённых модулей увеличены `?v=` cache-busters. Это критично для iOS/Safari после v4.8.3, потому что иначе браузер может продолжать использовать старые сломанные тела модулей даже после замены файлов на сервере.

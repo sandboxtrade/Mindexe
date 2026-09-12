@@ -1,6 +1,6 @@
 # MIND.EXE — handoff to next chat
 
-Current release: **v4.8.3**
+Current release: **v4.8.3.1**
 
 ## Current architecture
 
@@ -12,7 +12,7 @@ Current release: **v4.8.3**
 - Journal screenshots use split per-image documents with manifest-last activation.
 - Strategy Lab index uses revisioned Strategy Store with CAS.
 - Direct Strategy Lab trades use per-trade CAS revisions.
-- 61 zero-dependency Node regression checks.
+- 62 zero-dependency Node regression checks.
 
 ## Core modules
 
@@ -54,6 +54,20 @@ Do not casually change:
 
 Always run `npm test` before release.
 
+
+
+## What v4.8.3.1 fixed
+
+Hotfix for the modular stages 5–8 release after real desktop/iPhone smoke testing exposed startup/runtime failures.
+
+- Restored Home advice/market cache helpers that were accidentally moved into the Calibration UI module while Home still referenced them.
+- Restored missing module-local dependencies after extraction: Journal hooks/style/time helpers, Strategy spinner/result helpers, Calibration animated-number hook, AI context math imports, review emotion-impact helpers and pluralization helpers.
+- Legacy journal-media migration now reuses `journalMediaStore.keys.entry(...)` instead of referencing a removed local key helper.
+- Changed-module URLs were bumped (`?v=`) so Safari/iOS cannot keep serving the broken v4.8.3 module bodies from cache.
+- Added a dedicated regression check for modular dependency closure.
+- `npm test`: 62 checks pass.
+- Additional TypeScript static audit found no unresolved runtime identifiers (`TS2304` / `TS2552`) across app/local modules.
+- Persistence/Auth/CAS keys, schemas and Firestore path shape remain unchanged.
 
 ## What v4.8.3 changed
 

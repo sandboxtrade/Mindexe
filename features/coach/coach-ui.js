@@ -10,7 +10,7 @@ import { jsx, jsxs } from "react/jsx-runtime";
 import { BASE, WIN, LOSS } from "../../config/app-config.js?v=1";
 import { Card } from "../../ui/primitives.js?v=2";
 import { DecodeText, LogoSpinner } from "../../ui/brand.js?v=1";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js?v=1";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js?v=2";
 import { aiGenerateInsight, aiChatReply } from "../../ai/ai-service.js?v=1";
 
 const ring = (accent) => `0 0 0 1px ${accent}35`;

@@ -9,6 +9,14 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
+// mind.exe — V4.8.3.1
+//
+// V4.8.3.1 — modular startup hotfix.
+//            - restores dependencies accidentally left behind by stages 5–8 extraction;
+//            - fixes Home market/advice helpers, Journal/Strategy/Calibration module helpers;
+//            - keeps Profile/Strategy persistence schemas and keys unchanged;
+//            - bumps changed module URLs so iOS/Safari cannot reuse the broken v4.8.3 modules.
+//
 // mind.exe — V4.8.3
 //
 // V4.8.3 — modular refactor, stages 5–8.
@@ -768,13 +776,13 @@ import { createJournalMediaStore } from "./core/journal-media.js?v=1";
 import { createProfileStore } from "./core/profile-store.js?v=2";
 import { createStrategyStore } from "./core/strategy-store.js?v=1";
 import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js?v=1";
-import { STRINGS } from "./i18n/strings.js?v=1";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=2";
+import { STRINGS } from "./i18n/strings.js?v=2";
+import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=3";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, CALIBRATION_SCALE_SETS, CALIBRATION_SCALE_TYPES,
   caWithTimeout, caScaleSet, scoreCalibrationDynamic, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview
-} from "./analytics/calibration-review.js?v=1";
+} from "./analytics/calibration-review.js?v=2";
 import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js?v=2";
 import { LogoMark, Wordmark } from "./ui/brand.js?v=1";
 import { configureTradeAi } from "./ai/trade-tools.js?v=1";
@@ -782,16 +790,16 @@ import {
   configureAiService, aiGetModel, aiGenerateInsight, aiChatReply, aiReviewQuestions,
   aiReviewSummary, aiFetchMarketSnapshot, aiGenerateHomeAdvice, aiGenerateCalibrationQuestions
 } from "./ai/ai-service.js?v=1";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js?v=1";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js?v=2";
 import {
   emotionStateText, emotionVerdict, emotionValuesText, emotionValuesColor,
   entryStateText, entryStateColor, EmotionScales,
-  NewEntry, CloseTrade, EditTrade, Log
-} from "./features/journal/journal-ui.js?v=1";
-import { strategyAllTrades, calculateStrategyStats, StrategyLab } from "./features/strategy/strategy-lab.js?v=1";
+  pointToEmotions, NewEntry, CloseTrade, EditTrade, Log
+} from "./features/journal/journal-ui.js?v=2";
+import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome, StrategyLab } from "./features/strategy/strategy-lab.js?v=2";
 import { Settings } from "./features/settings/settings-ui.js?v=1";
 import { Coach } from "./features/coach/coach-ui.js?v=1";
-import { Calibration, JournalReview } from "./features/calibration/calibration-ui.js?v=1";
+import { Calibration, JournalReview } from "./features/calibration/calibration-ui.js?v=2";
 // V3.0 — палитра переведена на референс: чистый чёрный фон, поверхности почти сливаются
 // с ним, линии существуют, но не читаются как рамки. Раньше фон был #0A0A0B, а карточка
 // #131315 с видимой границей #25252A — на OLED это выглядит как набор коробок, а не как
@@ -1223,6 +1231,72 @@ function Sparkline({ points, color, width = 84, height = 30 }) {
     /* @__PURE__ */ jsx("circle", { cx: last[0], cy: last[1], r: "2", fill: color })
   ] });
 }
+var HOME_ADVICE_KEY = "home-advice";
+// Кэш приватный (shared=false \u2192 users/{uid}/data/home-advice), поэтому совет одного пользователя
+// физически не может показаться другому. Ключ инвалидации \u2014 хэш того же контекста, который
+// уходит в модель: пока статистика, состояние и стратегия не менялись, запрос не уходит вообще.
+async function getHomeAdvice(context, contextHash, force) {
+  if (!context) return null;
+  if (!force) {
+    try {
+      const res = await caWithTimeout(storageGet(HOME_ADVICE_KEY, false), 1e4, "home_advice_cache_timeout");
+      const cached = res?.value ? JSON.parse(res.value) : null;
+      if (cached && cached.hash === contextHash && cached.text) return cached.text;
+    } catch (_) {
+    }
+  }
+  const text = await caWithTimeout(aiGenerateHomeAdvice(context), 2e4, "home_advice_timeout");
+  if (!text) return null;
+  storageSet(HOME_ADVICE_KEY, JSON.stringify({ hash: contextHash, text }), false).catch(() => {
+  });
+  return text;
+}
+function marketHourBucket() {
+  return Math.floor(Date.now() / 36e5);
+}
+function marketSnapshotKey(assetClass) {
+  return `market-snapshot:${assetClass}`;
+}
+async function loadCachedMarketSnapshot(assetClass) {
+  try {
+    const res = await storageGet(marketSnapshotKey(assetClass), true);
+    return res?.value ? JSON.parse(res.value) : null;
+  } catch {
+    return null;
+  }
+}
+async function saveCachedMarketSnapshot(assetClass, snapshot) {
+  try {
+    await storageSet(marketSnapshotKey(assetClass), JSON.stringify(snapshot), true);
+  } catch {
+  }
+}
+// In-memory guard: the shared Firestore cache is the primary hourly cache, but if writing it ever
+// fails (rules, offline) the hour bucket check would miss on every mount and fire a fresh grounded
+// Gemini call each time the Home tab renders. This keeps at most one call per asset per hour per
+// session regardless of whether the shared write succeeded.
+var __marketMemCache = {};
+async function getMarketSnapshot(assetClass, lang) {
+  if (!assetClass) return null;
+  const bucket = marketHourBucket();
+  const mem = __marketMemCache[assetClass];
+  if (mem && mem.hourBucket === bucket) return mem;
+  const cached = await loadCachedMarketSnapshot(assetClass);
+  if (cached && cached.hourBucket === bucket) {
+    __marketMemCache[assetClass] = cached;
+    return cached;
+  }
+  try {
+    const fresh = await aiFetchMarketSnapshot(assetClass, lang);
+    const withBucket = { ...fresh, hourBucket: bucket };
+    __marketMemCache[assetClass] = withBucket;
+    saveCachedMarketSnapshot(assetClass, withBucket);
+    return withBucket;
+  } catch {
+    return cached || null;
+  }
+}
+
 function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
@@ -3137,8 +3211,8 @@ async function mergeLegacyIntoCloud(userId, legacyProfileRaw, legacyMediaRaw) {
     }
     for (const [id, val] of Object.entries(media)) {
       try {
-        const cur = await storageGet(mediaEntryKey(userId, id), false);
-        if (!cur?.value) await storageSet(mediaEntryKey(userId, id), JSON.stringify(val), false);
+        const cur = await storageGet(journalMediaStore.keys.entry(userId, id), false);
+        if (!cur?.value) await storageSet(journalMediaStore.keys.entry(userId, id), JSON.stringify(val), false);
       } catch (_) {
       }
     }
