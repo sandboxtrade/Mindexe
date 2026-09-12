@@ -1,6 +1,8 @@
+MIND.EXE v4.8.5.1 startup rollback hotfix
+
 # MIND.EXE — handoff to next chat
 
-Current release: **v4.8.5**
+Current release: **v4.8.4**
 
 ## Current architecture
 
@@ -12,7 +14,7 @@ Current release: **v4.8.5**
 - Journal screenshots use split per-image documents with manifest-last activation.
 - Strategy Lab index uses revisioned Strategy Store with CAS.
 - Direct Strategy Lab trades use per-trade CAS revisions.
-- 67 zero-dependency Node regression checks.
+- 64 zero-dependency Node regression checks.
 
 ## Core modules
 
@@ -59,22 +61,6 @@ Always run `npm test` before release.
 
 
 
-
-
-## What v4.8.5 changed
-
-Auth hardening after the v4.8.4 modular build passed the real two-device scenario. No profile/Strategy persistence schema or key changed.
-
-- `useAuth()` now keeps a long-lived Firebase `onAuthStateChanged` subscription instead of relying on a mostly one-shot session lookup.
-- Google auth stays popup-first in normal browsers; installed PWAs use redirect and popup-blocked/unsupported environments fall back to redirect.
-- `getRedirectResult()` is consumed on startup so the returning OAuth flow is finalized explicitly.
-- A pending legacy-local-data migration gate is stored in `sessionStorage` before Google redirect and restored before profile loading, preventing a redirect from bypassing the existing migration prompt.
-- Registration no longer reports failure solely because `updateProfile(displayName)` failed after Firebase already created/authenticated the account; username fallback remains deterministic from the synthetic email.
-- New pure `core/auth-runtime.js` contains environment/normalization/session helpers.
-- Regression suite: **67 checks pass**.
-- `index.html` app cache-buster is `?v=4.8.5`.
-
-Real-device follow-up: smoke-test Google sign-in once in desktop browser and once from installed iPhone PWA. Firebase OAuth redirect behavior cannot be fully proven by the Node suite.
 
 ## What v4.8.4 changed
 

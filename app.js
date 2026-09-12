@@ -9,15 +9,12 @@
 //        - Gemini анализирует описание + рассчитанную приложением статистику;
 //        - существующие journal/profile/media keys и schema не менялись.
 //
-// mind.exe — V4.8.5
+// mind.exe — V4.8.5.1
 //
-// V4.8.5 — auth hardening after real two-device smoke testing.
-//          - useAuth now follows Firebase through a long-lived onAuthStateChanged subscription;
-//          - installed PWA Google auth uses redirect, popup-blocked browsers fall back to redirect;
-//          - redirect completion is explicitly consumed after startup;
-//          - legacy local-data migration gate survives a Google redirect via sessionStorage;
-//          - post-registration displayName failure no longer reports the already-created account as failed;
-//          - persistence/CAS schemas, keys and Firestore paths remain unchanged.
+// V4.8.5.1 — startup rollback hotfix.
+//            - restores the proven v4.8.4 auth/session runtime after a v4.8.5 startup render regression;
+//            - no persistence/CAS/schema/key changes;
+//            - auth hardening will be reintroduced incrementally after browser-level coverage.
 //
 // mind.exe — V4.8.4
 //
@@ -628,9 +625,7 @@ import {
   onAuthStateChanged,
   updateProfile as firebaseUpdateProfile,
   GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult
+  signInWithPopup
 } from "firebase/auth";
 import {
   getFirestore,
@@ -796,10 +791,6 @@ import { createFirestoreStorage } from "./core/firestore-storage.js?v=2";
 import { createJournalMediaStore } from "./core/journal-media.js?v=1";
 import { createProfileStore } from "./core/profile-store.js?v=2";
 import { createStrategyStore } from "./core/strategy-store.js?v=1";
-import {
-  GOOGLE_REDIRECT_LEGACY_KEY, normalizeFirebaseUser, shouldPreferGoogleRedirect,
-  isGooglePopupFallbackError, safeSessionGet, safeSessionSet, safeSessionRemove
-} from "./core/auth-runtime.js?v=1";
 import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js?v=1";
 import { STRINGS } from "./i18n/strings.js?v=2";
 import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=3";
@@ -1664,25 +1655,17 @@ async function migrateLocalAccountIfNeeded(uid, username) {
   }
 }
 function createFirebaseAuthProvider() {
-  const googleProvider = () => new GoogleAuthProvider();
   return {
     async register(username, password) {
       const uname = (username || "").trim();
       if (!USERNAME_RE.test(uname.toLowerCase())) {
-        throw new Error("Логин: 3-32 символа, латиница/цифры/._-");
+        throw new Error("\u041B\u043E\u0433\u0438\u043D: 3-32 \u0441\u0438\u043C\u0432\u043E\u043B\u0430, \u043B\u0430\u0442\u0438\u043D\u0438\u0446\u0430/\u0446\u0438\u0444\u0440\u044B/._-");
       }
       if ((password || "").length < 6) {
-        throw new Error("Пароль должен быть от 6 символов");
+        throw new Error("\u041F\u0430\u0440\u043E\u043B\u044C \u0434\u043E\u043B\u0436\u0435\u043D \u0431\u044B\u0442\u044C \u043E\u0442 6 \u0441\u0438\u043C\u0432\u043E\u043B\u043E\u0432");
       }
       const cred = await createUserWithEmailAndPassword(fbAuth, usernameToEmail(uname), password);
-      // Account creation has already succeeded at this point. A transient updateProfile failure must
-      // not make the UI report registration as failed while leaving a live Firebase account behind.
-      // usernameToEmail gives us the same username fallback on every future session anyway.
-      try {
-        await firebaseUpdateProfile(cred.user, { displayName: uname });
-      } catch (e) {
-        console.warn("mind.exe: Firebase displayName update deferred", e);
-      }
+      await firebaseUpdateProfile(cred.user, { displayName: uname });
       const migration = await migrateLocalAccountIfNeeded(cred.user.uid, uname);
       if (migration === "none") __freshAccountUids.add(cred.user.uid);
       return { id: cred.user.uid, username: uname };
@@ -1691,54 +1674,23 @@ function createFirebaseAuthProvider() {
       const uname = (username || "").trim();
       const cred = await signInWithEmailAndPassword(fbAuth, usernameToEmail(uname), password);
       await migrateLocalAccountIfNeeded(cred.user.uid, uname);
-      return normalizeFirebaseUser(cred.user);
+      return { id: cred.user.uid, username: cred.user.displayName || emailToUsername(cred.user.email) };
     },
     async logout() {
       await firebaseSignOut(fbAuth);
     },
     async loginWithGoogle() {
-      const provider = googleProvider();
-      // Installed PWAs are the environment where popup auth is least reliable. Go straight to the
-      // redirect flow there; normal browsers keep the faster popup path and fall back only when the
-      // browser explicitly tells us popup auth is unavailable.
-      if (shouldPreferGoogleRedirect()) {
-        await signInWithRedirect(fbAuth, provider);
-        return { redirecting: true };
-      }
-      try {
-        const cred = await signInWithPopup(fbAuth, provider);
-        return normalizeFirebaseUser(cred.user);
-      } catch (e) {
-        if (!isGooglePopupFallbackError(e)) throw e;
-        await signInWithRedirect(fbAuth, provider);
-        return { redirecting: true };
-      }
-    },
-    async completeRedirectLogin() {
-      const cred = await getRedirectResult(fbAuth);
-      return cred?.user ? normalizeFirebaseUser(cred.user) : null;
-    },
-    subscribe(listener, onError) {
-      return onAuthStateChanged(
-        fbAuth,
-        (u) => listener(normalizeFirebaseUser(u)),
-        onError
-      );
+      const provider = new GoogleAuthProvider();
+      const cred = await signInWithPopup(fbAuth, provider);
+      const uname = cred.user.displayName || emailToUsername(cred.user.email) || `user_${cred.user.uid.slice(0, 6)}`;
+      return { id: cred.user.uid, username: uname };
     },
     async getSession() {
-      return new Promise((resolve, reject) => {
-        let unsub = null;
-        unsub = onAuthStateChanged(
-          fbAuth,
-          (u) => {
-            if (unsub) unsub();
-            resolve(normalizeFirebaseUser(u));
-          },
-          (e) => {
-            if (unsub) unsub();
-            reject(e);
-          }
-        );
+      return new Promise((resolve) => {
+        const unsub = onAuthStateChanged(fbAuth, (u) => {
+          unsub();
+          resolve(u ? { id: u.uid, username: u.displayName || emailToUsername(u.email) } : null);
+        });
       });
     }
   };
@@ -1784,8 +1736,6 @@ var authService = {
     };
     return authProvider.loginWithGoogle().catch((e) => { throw friendly(e); });
   },
-  completeRedirectLogin: () => authProvider.completeRedirectLogin(),
-  subscribe: (listener, onError) => authProvider.subscribe(listener, onError),
   getCurrentUser: () => authProvider.getSession()
 };
 async function checkLegacyDataAvailable() {
@@ -1826,31 +1776,16 @@ function useAuth() {
   const [user, setUser] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    const applyUser = (u) => {
-      if (cancelled) return;
-      setUser(u);
-      setStatus(u ? "authenticated" : "unauthenticated");
-    };
-    const unsubscribe = authService.subscribe(
-      applyUser,
-      () => {
-        if (!cancelled) {
-          setUser(null);
-          setStatus("unauthenticated");
-        }
+    authService.getCurrentUser().then((u) => {
+      if (!cancelled) {
+        setUser(u);
+        setStatus(u ? "authenticated" : "unauthenticated");
       }
-    );
-    // Firebase resolves redirect auth asynchronously after returning to the app. Keep the normal
-    // observer as the source of truth, but explicitly consume the redirect result so iOS/PWA Google
-    // login is finalized and any redirect-only SDK errors are not left unobserved.
-    authService.completeRedirectLogin().then((u) => {
-      if (u) applyUser(u);
-    }).catch((e) => {
-      console.warn("mind.exe: Google redirect completion failed", e);
+    }).catch(() => {
+      if (!cancelled) setStatus("unauthenticated");
     });
     return () => {
       cancelled = true;
-      if (typeof unsubscribe === "function") unsubscribe();
     };
   }, []);
   const register = async (username, password) => {
@@ -1866,11 +1801,10 @@ function useAuth() {
     return u;
   };
   const loginWithGoogle = async () => {
-    const result = await authService.loginWithGoogle();
-    if (result?.redirecting) return result;
-    setUser(result);
+    const u = await authService.loginWithGoogle();
+    setUser(u);
     setStatus("authenticated");
-    return result;
+    return u;
   };
   const logout = async () => {
     await authService.logout();
@@ -1927,7 +1861,7 @@ function MindExe() {
   // If a Firestore write hits our timeout, the original network request may still be alive.
   // Never start a newer write in that same session: an old request finishing late could overwrite it.
   const profileWriteUncertainRef = useRef(false);
-  const authLegacyGateRef = useRef(safeSessionGet(GOOGLE_REDIRECT_LEGACY_KEY) === "1");
+  const authLegacyGateRef = useRef(false);
   const strategyCanPersistRef = useRef(false);
   const strategyRawIndexRef = useRef(null);
   const strategyBackupPendingRef = useRef(false);
@@ -1988,16 +1922,11 @@ function MindExe() {
   const handleGoogleLogin = async () => {
     const hasLegacy = await checkLegacyDataAvailable();
     authLegacyGateRef.current = hasLegacy;
-    if (hasLegacy) safeSessionSet(GOOGLE_REDIRECT_LEGACY_KEY, "1");
-    else safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
     try {
       const newUser = await authLoginWithGoogle();
-      if (newUser?.redirecting) return newUser;
-      safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
-      if (hasLegacy && newUser?.id) setMigrateFor(newUser.id);
+      if (hasLegacy) setMigrateFor(newUser.id);
       return newUser;
     } catch (e) {
-      safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
       authLegacyGateRef.current = false;
       throw e;
     }
@@ -2005,13 +1934,11 @@ function MindExe() {
   const handleMigrate = async () => {
     if (!migrateFor) return;
     await claimLegacyData(migrateFor);
-    safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
     authLegacyGateRef.current = false;
     setMigrateFor(null);
   };
   const handleSkipMigrate = async () => {
     await skipLegacyData();
-    safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
     authLegacyGateRef.current = false;
     setMigrateFor(null);
   };
@@ -2047,38 +1974,6 @@ function MindExe() {
     resetInMemoryState();
     setTab("home");
   };
-  useEffect(() => {
-    const pendingLegacyAfterRedirect = safeSessionGet(GOOGLE_REDIRECT_LEGACY_KEY) === "1";
-    if (!pendingLegacyAfterRedirect || authStatus === "checking") return;
-    if (authStatus === "unauthenticated") {
-      safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
-      authLegacyGateRef.current = false;
-      return;
-    }
-    if (!userId || migrateFor) return;
-    let cancelled = false;
-    checkLegacyDataAvailable().then((hasLegacy) => {
-      if (cancelled) return;
-      safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
-      if (hasLegacy) {
-        authLegacyGateRef.current = true;
-        setMigrateFor(userId);
-      } else {
-        authLegacyGateRef.current = false;
-        // Profile load may already have skipped once while the redirect migration gate was active.
-        // Bump its existing retry nonce so it starts immediately after the gate is released.
-        setProfileLoadRetryNonce((n) => n + 1);
-      }
-    }).catch(() => {
-      if (cancelled) return;
-      safeSessionRemove(GOOGLE_REDIRECT_LEGACY_KEY);
-      authLegacyGateRef.current = false;
-      setProfileLoadRetryNonce((n) => n + 1);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, userId, migrateFor]);
   useEffect(() => {
     if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
     setShowBootIntro(true);

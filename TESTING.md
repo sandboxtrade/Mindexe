@@ -1,4 +1,6 @@
-# MIND.EXE regression tests — v4.8.5
+MIND.EXE v4.8.5.1 startup rollback hotfix
+
+# MIND.EXE regression tests — v4.8.4
 
 Перед крупными правками запускай:
 
@@ -21,7 +23,7 @@ npm test
 - passive second device не подменяет сохранённый cloud `anonId` своим локальным ID и не создаёт ложную profile revision;
 - desktop route новой сделки подписан явно как `Добавить сделку` / `Add trade`.
 
-Текущий suite: **67 regression checks**.
+Текущий suite: **64 regression checks**.
 
 
 
@@ -122,17 +124,3 @@ Persistence/Auth/CAS semantics этим этапом не менялись.
 - regression suite расширен до **64 checks** и отдельно охраняет новые границы модулей и их runtime-зависимости.
 
 `SCHEMA_VERSION`, canonical keys, CAS/revision logic и Firestore path shape не менялись.
-
-
-## Auth hardening — v4.8.5
-
-Добавлены проверки, что:
-
-- `useAuth()` использует долгоживущий Firebase `onAuthStateChanged`, а не только one-shot чтение сессии;
-- auth observer корректно отписывается при unmount;
-- Google popup остаётся основным desktop-путём, а установленный PWA и popup-blocked окружение переходят на redirect;
-- redirect result явно завершается через Firebase после возврата в приложение;
-- legacy migration gate переживает redirect и не позволяет profile loader стартовать раньше времени;
-- transient `updateProfile(displayName)` после уже успешного `createUser` больше не превращает регистрацию в ложную ошибку.
-
-Перед релизом Google redirect всё равно требует реального smoke-test на iPhone/PWA: Node-suite проверяет wiring и инварианты, но не может эмулировать браузерный Firebase OAuth redirect.

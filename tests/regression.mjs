@@ -14,7 +14,6 @@ const firestoreStoragePath = path.join(root, "core", "firestore-storage.js");
 const journalMediaPath = path.join(root, "core", "journal-media.js");
 const profileStorePath = path.join(root, "core", "profile-store.js");
 const strategyStorePath = path.join(root, "core", "strategy-store.js");
-const authRuntimePath = path.join(root, "core", "auth-runtime.js");
 const appConfigPath = path.join(root, "config", "app-config.js");
 const stringsPath = path.join(root, "i18n", "strings.js");
 const traderAnalyticsPath = path.join(root, "analytics", "trader-analytics.js");
@@ -41,7 +40,6 @@ const firestoreStorageSource = fs.readFileSync(firestoreStoragePath, "utf8");
 const journalMediaSource = fs.readFileSync(journalMediaPath, "utf8");
 const profileStoreSource = fs.readFileSync(profileStorePath, "utf8");
 const strategyStoreSource = fs.readFileSync(strategyStorePath, "utf8");
-const authRuntimeSource = fs.readFileSync(authRuntimePath, "utf8");
 const appConfigSource = fs.readFileSync(appConfigPath, "utf8");
 const stringsSource = fs.readFileSync(stringsPath, "utf8");
 const traderAnalyticsSource = fs.readFileSync(traderAnalyticsPath, "utf8");
@@ -60,7 +58,7 @@ const calibrationUiSource = fs.readFileSync(calibrationUiPath, "utf8");
 const dashboardUiSource = fs.readFileSync(dashboardUiPath, "utf8");
 const authUiSource = fs.readFileSync(authUiPath, "utf8");
 const appShellSource = fs.readFileSync(appShellPath, "utf8");
-const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${authRuntimeSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}\n${dashboardUiSource}\n${authUiSource}\n${appShellSource}`;
+const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}\n${dashboardUiSource}\n${authUiSource}\n${appShellSource}`;
 
 let passed = 0;
 const failures = [];
@@ -355,34 +353,6 @@ await test("stage 9-11 moved modules keep their runtime dependencies explicit", 
     "function LegacyMigratePrompt",
     "function BootIntro"
   ]) ok(authUiSource.includes(token), `auth-ui dependency missing: ${token}`);
-});
-
-await test("auth runtime helpers cover PWA redirect and popup fallback decisions", async () => {
-  const authRuntime = await import("../core/auth-runtime.js");
-  eq(authRuntime.normalizeFirebaseUser({ uid: "u1", displayName: "Trader", email: "x@example.com" }).username, "Trader", "displayName normalization changed");
-  eq(authRuntime.normalizeFirebaseUser({ uid: "u2", displayName: "", email: "fallback@mindexe.local" }).username, "fallback", "email username fallback changed");
-  ok(authRuntime.shouldPreferGoogleRedirect({ navigatorObj: { standalone: true }, windowObj: {} }), "installed iOS PWA should prefer redirect auth");
-  ok(authRuntime.shouldPreferGoogleRedirect({ navigatorObj: {}, windowObj: { matchMedia: () => ({ matches: true }) } }), "standalone display mode should prefer redirect auth");
-  ok(!authRuntime.shouldPreferGoogleRedirect({ navigatorObj: {}, windowObj: { matchMedia: () => ({ matches: false }) } }), "normal browser should keep popup-first auth");
-  ok(authRuntime.isGooglePopupFallbackError({ code: "auth/popup-blocked" }), "popup-blocked no longer falls back to redirect");
-  ok(!authRuntime.isGooglePopupFallbackError({ code: "auth/popup-closed-by-user" }), "user-cancelled popup must not silently redirect");
-});
-
-await test("auth session is now observed continuously instead of one-shot only", () => {
-  const block = appSource.slice(appSource.indexOf("function useAuth() {"), appSource.indexOf("function MindExe() {"));
-  ok(block.includes("authService.subscribe("), "useAuth lost long-lived auth observer");
-  ok(block.includes("completeRedirectLogin"), "redirect completion is not consumed on startup");
-  ok(block.includes('return () => {') && block.includes('unsubscribe()'), "auth observer is not unsubscribed on unmount");
-  ok(!block.includes("authService.getCurrentUser().then"), "useAuth regressed to one-shot session lookup");
-});
-
-await test("Google auth hardening preserves legacy-data gate across redirect", () => {
-  ok(appSource.includes("signInWithRedirect"), "Google redirect fallback import missing");
-  ok(appSource.includes("isGooglePopupFallbackError(e)"), "popup failure does not trigger redirect fallback");
-  ok(appSource.includes("safeSessionSet(GOOGLE_REDIRECT_LEGACY_KEY"), "legacy migration gate is not persisted before redirect");
-  ok(appSource.includes('useRef(safeSessionGet(GOOGLE_REDIRECT_LEGACY_KEY) === "1")'), "redirect legacy gate is not restored before profile load");
-  ok(appSource.includes("setProfileLoadRetryNonce((n) => n + 1)"), "profile load does not resume after redirect gate release");
-  ok(appSource.includes('console.warn("mind.exe: Firebase displayName update deferred"'), "registration still risks reporting failure after account creation solely on updateProfile");
 });
 
 await test("shared emotion-conflict logic is pure and reusable", async () => {
@@ -1366,7 +1336,6 @@ await test("journal/full reset handlers are cloud-first and full reset clears au
 
 await test("app routes Strategy index and direct-trade writes through revisioned Strategy store", () => {
   ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
-  ok(appSource.includes('from "./core/auth-runtime.js?v=1"'), "auth-runtime import missing");
   const loadStart = appSource.indexOf("async function loadStrategyLabState");
   const loadEnd = appSource.indexOf("async function saveStrategyTradeRecord", loadStart);
   const block = appSource.slice(loadStart, loadEnd);
@@ -1503,7 +1472,6 @@ await test("core logic stays extracted instead of drifting back into app.js", ()
   ok(appSource.includes('from "./core/journal-media.js?v=1"'), "journal-media import missing");
   ok(appSource.includes('from "./core/profile-store.js?v=2"'), "profile-store import missing");
   ok(appSource.includes('from "./core/strategy-store.js?v=1"'), "strategy-store import missing");
-  ok(appSource.includes('from "./core/auth-runtime.js?v=1"'), "auth-runtime import missing");
   ok(!appSource.includes("async function loadMedia("), "journal media loader drifted back into app.js");
   ok(!appSource.includes("async function saveMedia("), "journal media writer drifted back into app.js");
   ok(!/^(?!\s*\/\/).*__mediaReadyIds/m.test(appSource), "journal media private cache leaked back into app.js");
