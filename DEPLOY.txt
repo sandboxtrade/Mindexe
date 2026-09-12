@@ -1,8 +1,16 @@
-MIND.EXE v4.4.2
+MIND.EXE v4.6.13 — Splash video replacement
 
-Replace in repository root:
+IMPORTANT: upload app.js, index.html, splash.mp4 and the full core/ directory together.
+
+Production files:
 - app.js
 - index.html
+- splash.mp4
+- core/trade-math.js
+- core/stats.js
+- core/journal-model.js
+- core/firestore-storage.js
+- core/journal-media.js
 
-No Firebase/Firestore migration is required.
-Existing screenshot documents are not modified.
+No Firebase migration required.
+Cloud/profile/media persistence logic was not changed in this release.
