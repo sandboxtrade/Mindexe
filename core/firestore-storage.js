@@ -32,7 +32,13 @@ export function createFirestoreStorage({
     if (!ref) return null;
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
-    return { key, value: snap.data().value, shared: !!shared };
+    const data = snap.data() || {};
+    return {
+      key,
+      value: data.value,
+      updatedAt: data.updatedAt ?? null,
+      shared: !!shared
+    };
   }
 
   async function set(key, value, shared = false) {
