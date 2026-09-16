@@ -113,3 +113,9 @@ export async function compressImageFile(file, maxDim = 1280, quality = 0.72, max
 export function compressJournalImageFile(file) {
   return compressImageFile(file, 2560, 0.9, 850000);
 }
+
+// Decision Lab stores one chart screenshot in a dedicated Firestore document, so it can keep
+// chart labels readable without using the larger Journal target.
+export function compressDecisionImageFile(file) {
+  return compressImageFile(file, 2200, 0.9, 780000);
+}

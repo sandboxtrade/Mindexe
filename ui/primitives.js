@@ -2,7 +2,7 @@
 // Presentational/browser UI only; no profile persistence or Firebase writes.
 
 import { useEffect, useState } from "react";
-import { Download, X as XIcon, Maximize2, Minimize2 } from "lucide-react";
+import { Download, X as XIcon, Maximize2, Minimize2, AlertTriangle } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import { BASE } from "../config/app-config.js";
 
@@ -37,6 +37,101 @@ export function Card({ children, className = "", glowing = false, accent, style 
     }
   );
 }
+
+let confirmRequestSeq = 0;
+
+export function requestAppConfirm({
+  title = "Подтвердить действие",
+  message = "",
+  confirmLabel = "OK",
+  cancelLabel = "Отмена",
+  danger = false
+} = {}) {
+  if (typeof window === "undefined") return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const id = `confirm_${Date.now().toString(36)}_${(++confirmRequestSeq).toString(36)}`;
+    window.dispatchEvent(new CustomEvent("mindexe:confirm", {
+      detail: { id, title, message, confirmLabel, cancelLabel, danger: danger === true, resolve }
+    }));
+  });
+}
+
+export function AppConfirmHost() {
+  const [request, setRequest] = useState(null);
+
+  useEffect(() => {
+    const onRequest = (event) => {
+      const next = event?.detail;
+      if (!next?.id || typeof next.resolve !== "function") return;
+      setRequest((current) => {
+        current?.resolve?.(false);
+        return next;
+      });
+    };
+    window.addEventListener("mindexe:confirm", onRequest);
+    return () => window.removeEventListener("mindexe:confirm", onRequest);
+  }, []);
+
+  useEffect(() => {
+    if (!request) return;
+    const prior = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event) => {
+      if (event.key === "Escape") {
+        request.resolve(false);
+        setRequest(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prior;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [request]);
+
+  if (!request) return null;
+  const finish = (value) => {
+    const current = request;
+    setRequest(null);
+    current?.resolve?.(value);
+  };
+
+  return jsxs("div", {
+    className: "fixed inset-0 z-[170] flex items-end sm:items-center justify-center px-3",
+    onMouseDown: (event) => { if (event.target === event.currentTarget) finish(false); },
+    style: {
+      background: "rgba(0,0,0,0.72)",
+      backdropFilter: "blur(12px)",
+      WebkitBackdropFilter: "blur(12px)",
+      paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)"
+    },
+    children: jsxs("div", {
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": `${request.id}-title`,
+      className: "w-full max-w-[390px] rounded-[20px] p-5",
+      style: {
+        background: "rgba(9,9,11,0.98)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        boxShadow: "0 26px 80px rgba(0,0,0,0.6)"
+      },
+      children: [
+        jsx("div", {
+          className: "w-10 h-10 rounded-full flex items-center justify-center mb-4",
+          style: { background: request.danger ? "rgba(220,68,68,0.10)" : BASE.surface2, color: request.danger ? "#D95858" : BASE.inkDim },
+          children: jsx(AlertTriangle, { size: 18 })
+        }),
+        jsx("h3", { id: `${request.id}-title`, className: "text-[18px] leading-tight mb-2", style: { color: BASE.ink, fontWeight: 650, letterSpacing: "-0.02em" }, children: request.title }),
+        request.message && jsx("p", { className: "text-[13px] leading-[1.55] mb-5", style: { color: BASE.inkDim }, children: request.message }),
+        jsxs("div", { className: "grid grid-cols-2 gap-2", children: [
+          jsx("button", { type: "button", onClick: () => finish(false), className: "h-11 rounded-[12px] text-[13px] active:scale-[0.985]", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: request.cancelLabel }),
+          jsx("button", { type: "button", onClick: () => finish(true), className: "h-11 rounded-[12px] text-[13px] active:scale-[0.985]", style: { background: request.danger ? "#B83939" : BASE.ink, color: request.danger ? "#fff" : BASE.bg, fontWeight: 650 }, children: request.confirmLabel })
+        ] })
+      ]
+    })
+  });
+}
+
 export function Toast({ text }) {
   if (!text) return null;
   return /* @__PURE__ */ jsx(

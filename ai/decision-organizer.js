@@ -22,7 +22,8 @@ export async function organizeDecisionTranscript({
   mode = "direction",
   consideredDirection = null,
   lang = "ru",
-  source = "voice"
+  source = "voice",
+  chartImageDataUrl = null
 } = {}) {
   const clean = String(transcript || "").trim();
   if (!clean) throw new Error("decision_transcript_empty");
@@ -39,7 +40,10 @@ ${modeExplanation}
 TRANSCRIPT:
 ${clean}
 
-TASK:
+${chartImageDataUrl ? `CHART SCREENSHOT:
+An image is attached as visual context. Use it only to understand direct visual references already present in the transcript (for example “this level” or “this impulse”). Never create a new argument from the screenshot alone, never infer a trade signal, and never add technical-analysis claims that the trader did not say.
+
+` : ""}TASK:
 - Split the transcript into 4-10 distinct arguments when possible, maximum 14.
 - Merge obvious repetitions, but do not merge genuinely different reasons.
 - Keep contradictions instead of resolving them.
@@ -61,7 +65,15 @@ RETURN EXACTLY:
   return runAiRequest({
     key: "decision_organizer", operation: "DECISION_ORGANIZER", timeoutMs: 30000, retries: 0, slowMs: 6000,
     execute: async () => {
-      const result = await model.generateContent(prompt);
+      const imageMatch = typeof chartImageDataUrl === "string"
+        ? /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(chartImageDataUrl)
+        : null;
+      const result = imageMatch
+        ? await model.generateContent([
+            prompt,
+            { inlineData: { mimeType: imageMatch[1], data: imageMatch[2] } }
+          ])
+        : await model.generateContent(prompt);
       const text = result?.response?.text?.();
       if (!text || !text.trim()) throw new Error("decision_organizer_empty");
       let parsed;

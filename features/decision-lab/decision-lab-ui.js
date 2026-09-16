@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import {
   Brain, Mic, Square, ChevronRight, ChevronLeft, Plus, Trash2, Check,
-  RotateCcw, Clock3, AlertTriangle, Sparkles, History, SlidersHorizontal, X, BarChart3
+  RotateCcw, Clock3, AlertTriangle, Sparkles, History, SlidersHorizontal, X, BarChart3, ImagePlus
 } from "lucide-react";
 import { BASE, WIN, LOSS } from "../../config/app-config.js";
+import { ScreenshotImage, requestAppConfirm } from "../../ui/primitives.js";
+import { compressDecisionImageFile } from "../../ui/media-utils.js";
 import {
   createDecisionSession,
   addDecisionTranscriptSegment,
@@ -108,8 +110,17 @@ const UI = {
     recordingLimit: "Максимум 3 минуты",
     localRecovered: "Восстановлены локальные изменения, которые ещё не успели попасть в облако.",
     deleteDecision: "Удалить разбор",
-    deleteConfirm: "Удалить этот разбор без возможности восстановления?",
+    deleteTitle: "Удалить разбор?",
+    deleteConfirm: "Это действие нельзя отменить. Разбор и прикреплённый скрин будут удалены.",
+    deleteAction: "Удалить",
     deleteError: "Не удалось удалить разбор",
+    chartShot: "Скрин графика",
+    chartShotHint: "Можно добавить один скрин как контекст к этому решению.",
+    addChartShot: "Добавить скрин",
+    replaceChartShot: "Заменить",
+    removeChartShot: "Удалить скрин",
+    chartShotLocked: "Скрин зафиксирован вместе с решением",
+    chartShotError: "Не удалось сохранить скрин",
     deleted: "Разбор удалён",
     showAllHistory: "Показать всю историю",
     showLessHistory: "Свернуть историю",
@@ -197,8 +208,17 @@ const UI = {
     recordingLimit: "Maximum 3 minutes",
     localRecovered: "Recovered local changes that had not reached the cloud yet.",
     deleteDecision: "Delete decision",
-    deleteConfirm: "Delete this decision permanently?",
+    deleteTitle: "Delete decision?",
+    deleteConfirm: "This cannot be undone. The decision and attached chart screenshot will be deleted.",
+    deleteAction: "Delete",
     deleteError: "Could not delete decision",
+    chartShot: "Chart screenshot",
+    chartShotHint: "Attach one chart screenshot as context for this decision.",
+    addChartShot: "Add screenshot",
+    replaceChartShot: "Replace",
+    removeChartShot: "Remove screenshot",
+    chartShotLocked: "Screenshot locked with this decision",
+    chartShotError: "Could not save screenshot",
     deleted: "Decision deleted",
     showAllHistory: "Show full history",
     showLessHistory: "Show less",
@@ -393,7 +413,7 @@ function ModeHome({ index, activeDraft, onStart, onOpen, onDelete, accent, lang,
   ] });
 }
 
-export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCreateTrade, onBeforeDeleteSession, trades = [] }) {
+export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", notify, onCreateTrade, onBeforeDeleteSession, trades = [] }) {
   const l = UI[lang] || UI.ru;
   const [index, setIndex] = useState({ sessions: [] });
   const [active, setActive] = useState(null);
@@ -413,6 +433,8 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   const [analyticsSessions, setAnalyticsSessions] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [startPromptMode, setStartPromptMode] = useState(null);
+  const [chartMedia, setChartMedia] = useState(null);
+  const [chartBusy, setChartBusy] = useState(false);
 
   const recorderRef = useRef(null);
   const timerRef = useRef(null);
@@ -428,6 +450,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   const recordingChunksRef = useRef([]);
   const recordingAudioIdRef = useRef(null);
   const recordingSessionIdRef = useRef(null);
+  const chartInputRef = useRef(null);
   const audioStore = useMemo(() => createAudioDraftStore(), []);
   const draftCache = useMemo(() => createDecisionDraftCache(), []);
 
@@ -471,6 +494,20 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [active?.id, audioStore]);
+
+  useEffect(() => {
+    if (!active?.id || !mediaStore || !userId) { setChartMedia(null); setChartBusy(false); return; }
+    let cancelled = false;
+    setChartBusy(true);
+    mediaStore.loadForSession(userId, active.id).then((media) => {
+      if (!cancelled) setChartMedia(media || null);
+    }).catch(() => {
+      if (!cancelled) setChartMedia(null);
+    }).finally(() => {
+      if (!cancelled) setChartBusy(false);
+    });
+    return () => { cancelled = true; };
+  }, [active?.id, mediaStore, userId]);
 
   const syncDraft = (candidate = activeRef.current, capturedSeq = editSeqRef.current) => {
     if (!candidate || candidate.status !== "draft" || !userId || !store) return Promise.resolve(null);
@@ -646,6 +683,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
       setIndex((prev) => ({ ...(prev || { sessions: [] }), sessions: (prev?.sessions || []).filter((row) => row.id !== activeDraft.id) }));
       draftCache.remove(userId, activeDraft.id);
       await audioStore.clearForSession(activeDraft.id).catch(() => {});
+      if (mediaStore) await mediaStore.deleteForSession(userId, activeDraft.id).catch(() => {});
       if (activeRef.current?.id === activeDraft.id) { activeRef.current = null; setActive(null); }
       cloudRef.current = null;
       await createFreshDraft(mode);
@@ -809,6 +847,47 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     setManualText("");
   };
 
+  const attachChartScreenshot = async (file) => {
+    const current = activeRef.current;
+    if (!file || !current?.id || current.status !== "draft" || !mediaStore || !userId) return;
+    setChartBusy(true);
+    try {
+      const dataUrl = await compressDecisionImageFile(file);
+      const now = Date.now();
+      const local = await mediaStore.saveLocal(userId, current.id, {
+        dataUrl, mimeType: "image/jpeg", createdAt: chartMedia?.createdAt || now, updatedAt: now, cloudSynced: false
+      });
+      setChartMedia(local);
+      if (!current.chartImageAttached) applyLocal({ ...current, chartImageAttached: true });
+      try {
+        const synced = await mediaStore.saveCloud(userId, current.id, local);
+        setChartMedia(synced);
+      } catch (cloudError) {
+        notify?.(lang === "en" ? "Screenshot saved on this device; cloud sync will need a retry." : "Скрин сохранён на устройстве, но облачная синхронизация пока не прошла.");
+      }
+    } catch (e) {
+      notify?.(`${l.chartShotError}: ${e?.message || e}`);
+    } finally {
+      if (chartInputRef.current) chartInputRef.current.value = "";
+      setChartBusy(false);
+    }
+  };
+
+  const removeChartScreenshot = async () => {
+    const current = activeRef.current;
+    if (!current?.id || current.status !== "draft" || !mediaStore || !userId) return;
+    setChartBusy(true);
+    try {
+      await mediaStore.deleteForSession(userId, current.id);
+      setChartMedia(null);
+      if (current.chartImageAttached) applyLocal({ ...current, chartImageAttached: false });
+    } catch (e) {
+      notify?.(`${l.chartShotError}: ${e?.message || e}`);
+    } finally {
+      setChartBusy(false);
+    }
+  };
+
   const organize = async () => {
     const current = activeRef.current;
     const transcript = current?.rawInput?.combinedTranscript?.trim();
@@ -818,7 +897,14 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     setOrganizing(true);
     setOrganizeError(null);
     try {
-      const args = await organizeDecisionTranscript({ transcript, mode: current.mode, consideredDirection: current.consideredDirection, lang, source: current.rawInput.inputMethod });
+      const args = await organizeDecisionTranscript({
+        transcript,
+        mode: current.mode,
+        consideredDirection: current.consideredDirection,
+        lang,
+        source: current.rawInput.inputMethod,
+        chartImageDataUrl: chartMedia?.dataUrl || null
+      });
       const latest = activeRef.current;
       if (generation !== organizerGenerationRef.current || !latest || latest.id !== sessionId || latest.rawInput.combinedTranscript.trim() !== transcript) {
         notify?.(lang === "en" ? "Thoughts changed while structuring. Run it again." : "Пока шёл разбор, текст изменился. Запусти разбор ещё раз.");
@@ -872,6 +958,13 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
         persistenceRevision: base?.persistenceRevision || 0,
         persistenceUpdatedAt: base?.persistenceUpdatedAt ?? null
       });
+      if (candidate.chartImageAttached) {
+        if (!chartMedia?.dataUrl) throw new Error("decision_chart_media_missing");
+        if (!chartMedia.cloudSynced && mediaStore) {
+          const synced = await mediaStore.saveCloud(userId, candidate.id, chartMedia);
+          setChartMedia(synced);
+        }
+      }
       const locked = lockDecisionSession(candidate);
       const committed = await store.saveSession(userId, locked);
       cloudRef.current = committed;
@@ -897,7 +990,13 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   const deleteSessionRecord = async (sessionOrRow) => {
     const id = String(sessionOrRow?.id || "");
     if (!id || !store?.deleteSession || !userId) return false;
-    const confirmed = typeof window === "undefined" ? true : window.confirm(l.deleteConfirm);
+    const confirmed = await requestAppConfirm({
+      title: l.deleteTitle,
+      message: l.deleteConfirm,
+      confirmLabel: l.deleteAction,
+      cancelLabel: l.cancel,
+      danger: true
+    });
     if (!confirmed) return false;
     setSaving(true);
     setError(null);
@@ -913,6 +1012,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
       await store.deleteSession(userId, id, { expectedRevision: cloud?.persistenceRevision ?? null });
       draftCache.remove(userId, id);
       await audioStore.clearForSession(id).catch(() => {});
+      if (mediaStore) await mediaStore.deleteForSession(userId, id).catch(() => {});
       setIndex((prev) => ({ ...(prev || { sessions: [] }), sessions: (prev?.sessions || []).filter((row) => row.id !== id) }));
       setAnalyticsSessions((prev) => (prev || []).filter((row) => row?.id !== id));
       if (activeRef.current?.id === id) {
@@ -987,6 +1087,20 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
         pendingAudio && !voiceBusy && jsxs("div", { className: "mt-3 pt-3", style: { borderTop: `1px solid ${BASE.line}` }, children: [jsx("p", { className: "text-[12px] leading-relaxed mb-2", style: { color: BASE.inkDim }, children: l.savedAudio }), jsx("button", { type: "button", onClick: () => processAudioDraft(pendingAudio), className: "h-9 px-3 rounded-[10px] text-[11px] flex items-center gap-2", style: { border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [jsx(RotateCcw, { size: 13 }), l.retryAudio] })] })
       ] }),
       jsxs(Panel, { className: "mb-3", children: [jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: l.typeFallback }), jsx("textarea", { value: manualText, onChange: (e) => setManualText(e.target.value), rows: 3, className: "w-full bg-transparent outline-none resize-none text-[14px] leading-[1.6]", style: { color: BASE.ink }, placeholder: lang === "en" ? "Write any thought here…" : "Можно дописать любую мысль…" }), jsx("button", { type: "button", onClick: addManualText, disabled: !manualText.trim(), className: "mt-2 h-9 px-3 rounded-[10px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: manualText.trim() ? BASE.ink : BASE.inkFaint }, children: l.addText })] }),
+      jsxs(Panel, { className: "mb-3", children: [
+        jsxs("div", { className: "flex items-start justify-between gap-3 mb-3", children: [
+          jsxs("div", { children: [jsx("div", { className: "text-[12px] mb-1", style: { color: BASE.ink, fontWeight: 600 }, children: l.chartShot }), jsx("div", { className: "text-[11px] leading-[1.45]", style: { color: BASE.inkFaint }, children: l.chartShotHint })] }),
+          jsx(ImagePlus, { size: 17, style: { color: BASE.inkFaint, flexShrink: 0 } })
+        ] }),
+        jsx("input", { ref: chartInputRef, type: "file", accept: "image/*", className: "hidden", onChange: (e) => attachChartScreenshot(e.target.files?.[0] || null) }),
+        chartMedia?.dataUrl ? jsxs("div", { children: [
+          jsx(ScreenshotImage, { src: chartMedia.dataUrl, alt: active.symbol ? `${active.symbol} · ${l.chartShot}` : l.chartShot, className: "w-full max-h-[300px] object-contain rounded-[12px]", style: { background: "#030304", border: `1px solid ${BASE.line}` } }),
+          jsxs("div", { className: "grid grid-cols-2 gap-2 mt-3", children: [
+            jsx("button", { type: "button", disabled: chartBusy, onClick: () => chartInputRef.current?.click(), className: "h-10 rounded-[10px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: l.replaceChartShot }),
+            jsx("button", { type: "button", disabled: chartBusy, onClick: removeChartScreenshot, className: "h-10 rounded-[10px] text-[11px]", style: { border: `1px solid ${LOSS}33`, color: LOSS, background: `${LOSS}07` }, children: l.removeChartShot })
+          ] })
+        ] }) : jsx("button", { type: "button", disabled: chartBusy, onClick: () => chartInputRef.current?.click(), className: "w-full h-11 rounded-[11px] flex items-center justify-center gap-2 text-[12px]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim, background: BASE.surface2 }, children: [jsx(ImagePlus, { size: 15 }), chartBusy ? (lang === "en" ? "Preparing…" : "Подготавливаю…") : l.addChartShot] })
+      ] }),
       active.rawInput.combinedTranscript && jsxs(Panel, { className: "mb-3", children: [jsx(SectionTitle, { children: l.transcript }), jsx("textarea", { value: active.rawInput.combinedTranscript, onChange: (e) => applyLocal(setDecisionTranscript(activeRef.current, e.target.value)), rows: 7, className: "w-full bg-transparent outline-none resize-none text-[14px] leading-[1.6]", style: { color: BASE.inkDim } })] }),
       organizeError && jsx("button", { type: "button", onClick: continueManual, className: "w-full h-10 rounded-[10px] mb-2 text-xs", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: l.manual }),
       jsx(PrimaryButton, { accent, disabled: organizing || voiceBusy || !active.rawInput.combinedTranscript.trim(), onClick: organize, icon: Sparkles, children: organizing ? l.organizing : l.organize })
@@ -1055,6 +1169,11 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
         jsxs("div", { children: [jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Clarity after" : "Ясность после" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.clarityAfterRated ? pct(locked.preDecisionState.clarityAfter) : "—" }), delta != null && jsx("div", { className: "text-[11px] mt-1", style: { color: delta >= 0 ? WIN : LOSS }, children: `${delta >= 0 ? "+" : ""}${delta}` })] }),
         jsxs("div", { children: [jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Confidence" : "Уверенность" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.decisionConfidenceRated ? pct(locked.preDecisionState.decisionConfidence) : "—" })] })
       ] })
+    ] }),
+    locked.chartImageAttached && chartMedia?.dataUrl && jsxs(Panel, { className: "mb-3", children: [
+      jsx(SectionTitle, { children: l.chartShot }),
+      jsx(ScreenshotImage, { src: chartMedia.dataUrl, alt: locked.symbol ? `${locked.symbol} · ${l.chartShot}` : l.chartShot, className: "w-full max-h-[340px] object-contain rounded-[12px]", style: { background: "#030304", border: `1px solid ${BASE.line}` } }),
+      jsx("div", { className: "text-[10px] mt-2", style: { color: BASE.inkFaint }, children: l.chartShotLocked })
     ] }),
     ...groups.map(([side, label]) => {
       const args = locked.arguments.filter((arg) => arg.side === side);

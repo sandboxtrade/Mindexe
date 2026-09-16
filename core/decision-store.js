@@ -70,6 +70,7 @@ export function createDecisionStore({
   db,
   indexBaseKey = "mind-exe-decision-index",
   sessionBaseKey = "mind-exe-decision-session",
+  mediaBaseKey = null,
   now = () => Date.now()
 }) {
   if (typeof storageGet !== "function" || typeof storageDelete !== "function" ||
@@ -161,6 +162,7 @@ export function createDecisionStore({
     const id = String(sessionId);
     const sessionRef = getDocRef(sessionKey(uid, id), false);
     const indexRef = getDocRef(indexKey(uid), false);
+    const mediaRef = mediaBaseKey ? getDocRef(`${mediaBaseKey}:${uid}:${id}`, false) : null;
     if (!sessionRef || !indexRef) throw new Error("decision_auth_uid_mismatch");
 
     let deleted = null;
@@ -191,6 +193,7 @@ export function createDecisionStore({
         });
         tx.set(indexRef, { value: JSON.stringify(nextIndex), updatedAt: savedAt });
       }
+      if (mediaRef) tx.delete(mediaRef);
       if (sessionSnap.exists()) tx.delete(sessionRef);
     });
     return deleted;

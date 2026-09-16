@@ -81,6 +81,7 @@ export function createDecisionSession({
     finalDecision: null,
     lockedAt: null,
     linkedTradeId: null,
+    chartImageAttached: false,
     postDecisionNote: "",
     postReview: null
   };
@@ -224,6 +225,7 @@ export function normalizeDecisionSession(raw) {
     finalDecision,
     lockedAt: raw.lockedAt ?? null,
     linkedTradeId: cleanId(raw.linkedTradeId) || null,
+    chartImageAttached: raw.chartImageAttached === true,
     postDecisionNote: cleanText(raw.postDecisionNote, 2000),
     postReview: normalizeDecisionPostReview(raw.postReview, { arguments: normalizedArgs })
   };
@@ -342,6 +344,7 @@ export function decisionLockedSnapshot(session) {
     arguments: s.arguments,
     conditions: s.conditions,
     finalDecision: s.finalDecision,
+    chartImageAttached: s.chartImageAttached === true,
     lockedAt: s.lockedAt
   };
 }

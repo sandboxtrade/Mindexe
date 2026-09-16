@@ -1809,6 +1809,71 @@ await test("Decision deletion cleans local state and asks app to unlink Journal 
   ok(appSource.includes("decisionSessionId: null"), "Journal link is not cleared before Decision deletion");
 });
 
+await test("Decision destructive actions use the in-app confirm host instead of native browser dialogs", () => {
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  const primitives = fs.readFileSync(path.join(root, "ui", "primitives.js"), "utf8");
+  ok(!decisionUi.includes("window.confirm"), "Decision deletion still opens the native browser confirm dialog");
+  ok(decisionUi.includes("requestAppConfirm"), "Decision deletion is not routed through the shared in-app confirm host");
+  ok(primitives.includes("export function AppConfirmHost"), "shared styled confirm host is missing");
+  ok(appSource.includes("jsx(AppConfirmHost"), "confirm host is not mounted at app level");
+});
+
+await test("Decision chart screenshot is stored outside the revisioned session and is deleted atomically", async () => {
+  const mediaSource = fs.readFileSync(path.join(root, "core", "decision-media.js"), "utf8");
+  const storeSource = fs.readFileSync(path.join(root, "core", "decision-store.js"), "utf8");
+  ok(mediaSource.includes('baseKey = "mind-exe-decision-media"'), "Decision media does not use a dedicated cloud keyspace");
+  ok(mediaSource.includes("saveLocal") && mediaSource.includes("saveCloud") && mediaSource.includes("loadForSession"), "Decision media lacks local-first/cloud persistence");
+  ok(storeSource.includes("mediaBaseKey") && storeSource.includes("tx.delete(mediaRef)"), "Decision delete does not atomically delete the cloud screenshot");
+
+  const { createDecisionMediaStore } = await import(new URL("../core/decision-media.js?v=decision-media-test", import.meta.url));
+  const cloud = new Map();
+  const mediaStore = createDecisionMediaStore({
+    indexedDBImpl: null,
+    storageGet: async (key) => cloud.has(key) ? { value: cloud.get(key) } : null,
+    storageSet: async (key, value) => { cloud.set(key, value); },
+    storageDelete: async (key) => { cloud.delete(key); }
+  });
+  const dataUrl = `data:image/jpeg;base64,${Buffer.from("chart").toString("base64")}`;
+  await mediaStore.saveLocal("u1", "d1", { dataUrl, updatedAt: 10 });
+  let loaded = await mediaStore.loadForSession("u1", "d1");
+  eq(loaded.dataUrl, dataUrl, "local Decision screenshot is not recoverable");
+  loaded = await mediaStore.saveCloud("u1", "d1", loaded);
+  ok(loaded.cloudSynced, "cloud media save does not mark the record synced");
+  await mediaStore.deleteForSession("u1", "d1");
+  eq(await mediaStore.loadForSession("u1", "d1"), null, "Decision screenshot survives explicit deletion");
+});
+
+await test("Decision chart screenshot is immutable after the pre-trade snapshot is locked", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=decision-chart-lock-test", import.meta.url));
+  const base = model.normalizeDecisionSession({ ...model.createDecisionSession({ id: "chart-lock" }), status: "locked", chartImageAttached: true, lockedAt: 10 });
+  let threw = false;
+  try {
+    model.assertDecisionMutationAllowed(base, { ...base, chartImageAttached: false });
+  } catch (e) {
+    threw = e?.message === "decision_locked_snapshot_mutation";
+  }
+  ok(threw, "locked Decision can silently change whether a chart screenshot belonged to the original decision");
+});
+
+await test("Decision screenshot UI uses a dedicated high-detail pipeline and Gemini receives optional image context", () => {
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  const mediaUtils = fs.readFileSync(path.join(root, "ui", "media-utils.js"), "utf8");
+  const organizer = fs.readFileSync(path.join(root, "ai", "decision-organizer.js"), "utf8");
+  ok(mediaUtils.includes("compressDecisionImageFile") && mediaUtils.includes("compressImageFile(file, 2200, 0.9, 780000)"), "Decision screenshot compressor is missing or too low-detail");
+  ok(decisionUi.includes('type: "file", accept: "image/*"'), "Decision input has no chart screenshot picker");
+  ok(decisionUi.includes("ScreenshotImage") && decisionUi.includes("replaceChartShot") && decisionUi.includes("removeChartScreenshot"), "Decision screenshot preview/replace/remove controls are incomplete");
+  ok(organizer.includes("chartImageDataUrl") && organizer.includes("inlineData"), "Decision organizer does not send the optional chart screenshot to Gemini");
+  ok(organizer.includes("Never create a new argument from the screenshot alone"), "Gemini screenshot context can invent standalone trading arguments");
+});
+
+await test("Decision screenshot participates in backup, restore and full reset", () => {
+  const exportSection = appSource.slice(appSource.indexOf("const exportFullBackup"), appSource.indexOf("const importFullBackup"));
+  const importSection = appSource.slice(appSource.indexOf("const importFullBackup"), appSource.indexOf("const resetJournal"));
+  ok(exportSection.includes("decisionMediaStore.exportSessions"), "full backup omits Decision screenshots");
+  ok(importSection.includes("decisionMediaStore.restoreSessions"), "full backup restore omits Decision screenshots");
+  ok(appSource.includes("decisionMediaStore.clearUser(userId, decisionSessionIds)"), "full reset leaves Decision screenshots behind");
+});
+
 await test("journal screenshots preserve substantially more detail without inflating Strategy Lab records", () => {
   const mediaUtils = fs.readFileSync(path.join(root, "ui", "media-utils.js"), "utf8");
   const journalUi = fs.readFileSync(path.join(root, "features", "journal", "journal-ui.js"), "utf8");
@@ -2278,7 +2343,7 @@ await test("Home auto AI work is idle-scheduled and no longer wraps an AI call i
 
 await test("Approach 3 uses a Vite/npm production graph with no runtime dependency CDN", () => {
   const pkg = JSON.parse(packageSource);
-  eq(pkg.version, "5.4.1", "package release version not bumped");
+  eq(pkg.version, "5.4.2", "package release version not bumped");
   ok(pkg.scripts?.build?.includes("vite build"), "production build does not use Vite");
   for (const dep of ["react", "react-dom", "firebase", "lucide-react", "recharts"]) {
     ok(pkg.dependencies?.[dep], `npm dependency missing: ${dep}`);
@@ -2386,7 +2451,7 @@ await test("profile-store never activates a partially failed parallel revision a
 });
 
 await test("Approach 3 service worker is same-origin only, build-precache aware and deferred until cloud readiness", () => {
-  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.1"'), "service-worker cache generation is stale");
+  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.2"'), "service-worker cache generation is stale");
   ok(!serviceWorkerSource.includes("skipWaiting"), "service worker still forces activation and can invalidate lazy chunks in an already-open old client");
   ok(serviceWorkerSource.includes('url.origin !== self.location.origin'), "service worker can intercept external Firebase/Gemini traffic");
   ok(serviceWorkerSource.includes("PRECACHE_URLS.map"), "service worker does not support build-generated shell precaching");

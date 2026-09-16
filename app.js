@@ -1,4 +1,4 @@
-// mind.exe — V5.4.1 RELEASE HARDENING / Vite production architecture
+// mind.exe — V5.4.2 DECISION MEDIA / Vite production architecture
 // Built on the v4.9.0 FINAL QA base.
 // - runtime dependencies repaired after modular extraction;
 // - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;
@@ -87,8 +87,6 @@ var storageGet = firestoreStorage.get;
 var storageSet = firestoreStorage.set;
 var storageDelete = firestoreStorage.delete;
 configureDashboardData({ storageGet, storageSet });
-
-// mind-exe.tsx
 import { Component, useState, useMemo, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Sparkles,
@@ -180,6 +178,7 @@ import { createJournalMediaStore } from "./core/journal-media.js";
 import { createProfileStore } from "./core/profile-store.js";
 import { createStrategyStore } from "./core/strategy-store.js";
 import { createDecisionStore } from "./core/decision-store.js";
+import { createDecisionMediaStore } from "./core/decision-media.js";
 import { createDecisionDraftCache } from "./core/decision-draft-cache.js";
 import { createAudioDraftStore } from "./audio/audio-draft-store.js";
 import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js";
@@ -190,7 +189,7 @@ import {
   caWithTimeout, caScaleSet, scoreCalibrationDynamic, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview
 } from "./analytics/calibration-review.js";
-import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js";
+import { Pill, Card, Toast, ScreenshotPreviewHost, AppConfirmHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js";
 import { LogoMark, Wordmark } from "./ui/brand.js";
 import { configureTradeAi } from "./ai/trade-tools.js";
 import { configureDecisionAi } from "./ai/decision-runtime.js";
@@ -769,8 +768,10 @@ var decisionStore = createDecisionStore({
   runTransaction,
   db: fbDb,
   indexBaseKey: "mind-exe-decision-index",
-  sessionBaseKey: "mind-exe-decision-session"
+  sessionBaseKey: "mind-exe-decision-session",
+  mediaBaseKey: "mind-exe-decision-media"
 });
+var decisionMediaStore = createDecisionMediaStore({ storageGet, storageSet, storageDelete, baseKey: "mind-exe-decision-media" });
 var decisionDraftCache = createDecisionDraftCache();
 var decisionAudioDraftStore = createAudioDraftStore();
 function normalizeStrategy(raw) {
@@ -1004,6 +1005,8 @@ async function clearAuxiliaryUserDataForFullReset(userId, knownTradeIds = []) {
   } catch (_) {
     decisionCleanupFailed = 1;
   }
+  try { decisionCleanupFailed += (await decisionMediaStore.clearUser(userId, decisionSessionIds))?.failed || 0; }
+  catch (_) { decisionCleanupFailed += 1; }
   // Full reset also clears unsynced local Decision text/audio so deleted reasoning cannot
   // reappear on this device after the cloud reset has succeeded. Local cleanup is best-effort.
   try { decisionDraftCache.clearUser(userId); } catch (_) {}
@@ -1027,7 +1030,6 @@ async function clearAuxiliaryUserDataForFullReset(userId, knownTradeIds = []) {
     cleanupFailed: failed.length + tradeCleanupFailed + decisionCleanupFailed
   };
 }
-
 var AUTH_USERS_KEY = "mind-exe-auth-users";
 var LEGACY_CLAIMED_KEY = "mind-exe-legacy-claimed";
 var LOCAL_MIGRATED_KEY = "mind-exe-local-migrated";
@@ -2298,10 +2300,9 @@ function MindExe() {
           exitDate: trade.exitDate instanceof Date ? trade.exitDate.toISOString() : trade.exitDate
         }))
       };
-      payload.decisionLab = {
-        version: 1,
-        sessions: userId ? await decisionStore.loadAllSessions(userId, { strict: true }) : []
-      };
+      const decisionSessions = userId ? await decisionStore.loadAllSessions(userId, { strict: true }) : [];
+      const decisionMediaIds = decisionSessions.filter((session) => session?.chartImageAttached).map((session) => session.id);
+      payload.decisionLab = { version: 1, sessions: decisionSessions, media: userId ? await decisionMediaStore.exportSessions(userId, decisionMediaIds) : [] };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -2445,7 +2446,8 @@ function MindExe() {
           } else {
             try {
               const restoredDecision = await decisionStore.restoreSessions(userId, raw.decisionLab.sessions || []);
-              decisionRestoreFailed = (restoredDecision?.failed || 0) > 0;
+              const restoredDecisionMedia = await decisionMediaStore.restoreSessions(userId, raw.decisionLab.media || []);
+              decisionRestoreFailed = (restoredDecision?.failed || 0) > 0 || (restoredDecisionMedia?.failed || 0) > 0;
             } catch (e) {
               console.error("mind.exe: Decision Lab backup restore failed", e);
               decisionRestoreFailed = true;
@@ -2851,6 +2853,7 @@ function MindExe() {
       ] }),
       /* @__PURE__ */ jsx(Toast, { text: toast }),
       /* @__PURE__ */ jsx(ScreenshotPreviewHost, {}),
+      /* @__PURE__ */ jsx(AppConfirmHost, {}),
       cachedReadOnly && /* @__PURE__ */ jsx("div", { className: "fixed inset-0 z-[110]", style: { background: "transparent", touchAction: "pan-y" }, "aria-hidden": "true" }),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
@@ -2981,6 +2984,7 @@ function MindExe() {
             children: /* @__PURE__ */ jsx(DecisionLab, {
               userId,
               store: decisionStore,
+              mediaStore: decisionMediaStore,
               accent,
               lang,
               notify: showToast,
