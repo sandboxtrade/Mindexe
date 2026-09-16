@@ -1,6 +1,22 @@
-# MIND.EXE Decision Lab — v5.3.1 / FINAL QA; Approach 2 hardening preserved
+# MIND.EXE Decision Lab — v5.4.4
 
 Decision Lab is an independent pre-trade reasoning system. It does not produce trading advice or a market signal. It records the user's own reasoning before the result is known, locks that pre-trade snapshot, and later compares it with Journal outcomes.
+
+## v5.4.4 psychological synthesis
+
+After arguments are structured, rated and conditioned, Decision Lab now adds a psychological synthesis before the user rates final clarity/confidence and chooses the final action.
+
+The split is intentional:
+
+- deterministic code calculates the distribution of the user's own logical weights between LONG/SHORT (or FOR/AGAINST entry);
+- emotional pull is calculated separately from the user's own emotion-intensity ratings;
+- neutral argument weight is exposed separately rather than being forced into a direction;
+- Gemini summarizes how each side exists in the user's own reasoning, what is internally strong, what is unstable, the central conflict, and one introspective question.
+
+The psychology path is not allowed to become a market analyst. It receives no chart image, ticker/symbol, market feed or external market facts. Every market-related sentence is treated as a subjective belief stated by the user. System/prompt rules prohibit validating the market thesis, technical analysis, strategy correction, entry/exit/confirmation advice, stops/targets, probabilities or an AI-selected direction. A response guard also rejects prescriptive trading language or model-generated percentages.
+
+The synthesis is fingerprinted from transcript + argument sides + user ratings + conditions. If those reasoning inputs change, stale synthesis is invalidated and must be regenerated. Once the Decision is locked, the synthesis is part of the immutable pre-trade snapshot.
+
 
 ## Data-integrity changes in v5.2.1
 

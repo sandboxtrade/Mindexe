@@ -1,4 +1,4 @@
-// mind.exe — V5.4.2 DECISION MEDIA / Vite production architecture
+// mind.exe — V5.4.4 DECISION PSYCHOLOGY SYNTHESIS / Vite production architecture
 // Built on the v4.9.0 FINAL QA base.
 // - runtime dependencies repaired after modular extraction;
 // - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;

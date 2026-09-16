@@ -94,3 +94,16 @@ Run the ordinary production chain:
 Journal create → screenshot AI recognition → copyedit → save → edit → close → reload → logout/login → Strategy Lab → Decision Lab → full backup/export → restore on a disposable account.
 
 No step should depend on source `?v=` query strings or CDN import maps after v5.4.1.
+
+
+## v5.4.4 Decision psychological synthesis smoke test
+
+1. Create a Direction Decision with at least one LONG, one SHORT and optionally one neutral argument.
+2. Give logical weights and emotional intensities that deliberately disagree (for example logic favors LONG, emotion favors SHORT).
+3. Continue through conditions to the final screen. Confirm that the psychological synthesis runs before final clarity/confidence controls appear.
+4. Confirm logical and emotional balance are different and are derived only from the entered ratings. Neutral share should be shown separately when present.
+5. Read Gemini text and verify it discusses only the structure of your reasoning: no chart validation, market prediction, entry/exit/wait advice, confirmation advice, stop/target changes or strategy correction.
+6. Attach a chart screenshot and repeat. The psychology synthesis must not refer to anything visible only on the screenshot.
+7. Go back, change an argument weight or condition, then return. The old synthesis must be invalidated/regenerated.
+8. Lock the Decision, reopen it from history, and verify the saved synthesis is still visible and immutable.
+9. Simulate Gemini failure/offline state and verify Retry and Continue without it both work; final decision flow must not deadlock.

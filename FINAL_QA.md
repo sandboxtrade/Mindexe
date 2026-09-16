@@ -1,12 +1,15 @@
-# MIND.EXE v5.4.1 — FINAL QA report
+# MIND.EXE v5.4.4 — FINAL QA report
 
 ## Verified in this source package
 
-- 127/127 regression checks pass.
+- 139/139 regression checks pass.
 - Every local JavaScript file passes syntax checking.
 - Every relative JavaScript import resolves and the local module graph remains acyclic.
 - Profile/Journal/Strategy persistence invariants remain covered by regression tests.
 - Decision session CAS, stale-write rejection, stale-delete rejection and atomic session/index deletion are covered. Older abandoned records remain reachable from the full-history deletion UI.
+- Decision Lab psychological synthesis is deterministic where it matters: logical/emotional side balance is calculated from user ratings in code, while Gemini only explains the structure of the user's own reasoning.
+- The psychology Gemini path receives no chart image, ticker/symbol, market feed or external market data. Prompt and response guards reject prescriptive trading language and AI-generated percentages.
+- Final clarity/confidence are collected only after psychological synthesis succeeds or the user explicitly skips it. Saved synthesis is fingerprinted and locked into the immutable pre-trade snapshot.
 - Failed replacement of an unfinished Decision draft restores autosync eligibility.
 - Decision audio is normalized to mono PCM WAV 16 kHz before Gemini and temporary audio survives failed processing for retry.
 - The transcript readability pass is rejected if it alters critical numbers, direction, negation, known ticker, or suspiciously changes transcript length.

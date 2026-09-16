@@ -2203,6 +2203,22 @@ await test("Decision audio recorder exposes checkpoint chunks for durable iPhone
   eq(stopped,1,"microphone track was not released after successful recording");
 });
 
+
+await test("Decision condition editor preserves spaces while typing and normalizes only on commit", () => {
+  const ui = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(ui.includes('conditionDrafts') && ui.includes('setConditionDrafts'), "conditions have no raw UI draft state");
+  ok(!ui.includes('[firstKey]: lines(e.target.value)') && !ui.includes('[secondKey]: lines(e.target.value)'), "condition textarea still trims on every keystroke");
+  ok(ui.includes('onBlur: () => commitConditionDrafts("first")') && ui.includes('onBlur: () => commitConditionDrafts("second")'), "condition normalization is not deferred until commit/blur");
+  ok(ui.includes("const committed = commitConditionDrafts()") && ui.includes("onClick: enterDecisionStep"), "condition drafts are not committed before leaving the step");
+});
+
+await test("Decision factor picker uses the in-app listbox instead of native select", () => {
+  const ui = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(ui.includes("function AppSelect"), "custom Decision listbox component is missing");
+  ok(ui.includes("max-h-[280px] overflow-y-auto"), "custom listbox is not scroll-bounded");
+  ok(!ui.includes('jsx("select"'), "native select still leaks browser styling into Decision Lab");
+  ok(ui.includes('aria-expanded'), "custom listbox lacks expanded state semantics");
+});
 await test("Decision Lab hardening keeps drafts local-first and prevents stale taxonomy/rating data", () => {
   const ui = fs.readFileSync(path.join(root,"features","decision-lab","decision-lab-ui.js"),"utf8");
   const model = fs.readFileSync(path.join(root,"core","decision-model.js"),"utf8");
@@ -2279,10 +2295,81 @@ await test("Decision analytics cloud loading skips draft and abandoned sessions 
 });
 
 
+
+await test("Decision psychological balance is deterministic and separates logic from emotion", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=psych-balance-model", import.meta.url));
+  const psych = await import(new URL("../core/decision-psychology.js?v=psych-balance-core", import.meta.url));
+  let session = model.createDecisionSession({ id: "psych-balance", mode: "direction", clarityBefore: 30, now: 1000 });
+  session = model.setDecisionArguments(session, [
+    { id: "l1", rawText: "long fact", normalizedText: "Long fact", side: "long", factorGroup: "other", factorId: "other", weight: 80, weightRated: true, emotionIntensity: 20, emotionRated: true },
+    { id: "s1", rawText: "short fact", normalizedText: "Short fact", side: "short", factorGroup: "other", factorId: "other", weight: 20, weightRated: true, emotionIntensity: 80, emotionRated: true },
+    { id: "n1", rawText: "unclear", normalizedText: "Unclear", side: "neutral", factorGroup: "other", factorId: "other", weight: 100, weightRated: true, emotionIntensity: 100, emotionRated: true }
+  ], 1100);
+  const balance = psych.calculateDecisionThoughtBalance(session);
+  eq(balance.logical.leftPct, 80, "logical LONG share was not derived from user weights");
+  eq(balance.logical.rightPct, 20, "logical SHORT share was not derived from user weights");
+  eq(balance.logical.neutralSharePct, 50, "logical neutral share is wrong");
+  eq(balance.emotional.leftPct, 20, "emotional LONG share was mixed with logical weight");
+  eq(balance.emotional.rightPct, 80, "emotional SHORT share was mixed with logical weight");
+  eq(balance.alignment, "conflict", "logic/emotion conflict was not detected");
+});
+
+await test("Decision psychology context excludes chart and instrument data from Gemini", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=psych-context-model", import.meta.url));
+  const psych = await import(new URL("../core/decision-psychology.js?v=psych-context-core", import.meta.url));
+  let session = model.createDecisionSession({ id: "psych-context", mode: "direction", symbol: "BTCUSDT", clarityBefore: 40, now: 1000 });
+  session = { ...session, chartImageAttached: true };
+  const context = psych.buildDecisionPsychologyContext(session);
+  ok(!Object.prototype.hasOwnProperty.call(context, "symbol"), "psychological context leaks ticker/instrument data");
+  ok(!Object.prototype.hasOwnProperty.call(context, "chartImageAttached"), "psychological context leaks chart metadata");
+  const ai = fs.readFileSync(path.join(root, "ai", "decision-psychology.js"), "utf8");
+  ok(!ai.includes("chartImageDataUrl") && !ai.includes("inlineData"), "psychological Gemini path can receive a chart image");
+  ok(ai.includes("Do NOT decide whether any market statement is true") && ai.includes("Do NOT improve, correct or teach the trader's strategy"), "psychology prompt lacks hard market/strategy boundaries");
+  ok(ai.includes("tradingQuestion") && ai.includes("decision_psychology_strategy_leak"), "psychology response guard does not reject prescriptive self-questions");
+});
+
+await test("Decision psychology fingerprint follows reasoning edits but ignores the eventual choice", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=psych-hash-model", import.meta.url));
+  const psych = await import(new URL("../core/decision-psychology.js?v=psych-hash-core", import.meta.url));
+  let session = model.createDecisionSession({ id: "psych-hash", mode: "direction", clarityBefore: 25, now: 1000 });
+  session = model.setDecisionArguments(session, [{ id: "a", rawText: "one", normalizedText: "One", side: "long", factorGroup: "other", factorId: "other", weight: 60, weightRated: true, emotionIntensity: 30, emotionRated: true }], 1100);
+  const h1 = psych.decisionPsychologyInputHash(session);
+  const h2 = psych.decisionPsychologyInputHash({ ...session, finalDecision: "long", preDecisionState: { ...session.preDecisionState, clarityAfter: 80, clarityAfterRated: true } });
+  eq(h2, h1, "post-synthesis clarity/final choice incorrectly changes psychology input fingerprint");
+  const changed = { ...session, arguments: session.arguments.map((arg) => ({ ...arg, weight: 90 })) };
+  ok(psych.decisionPsychologyInputHash(changed) !== h1, "argument weight edit does not invalidate psychological synthesis");
+});
+
+await test("Decision psychological synthesis is part of the immutable pre-trade snapshot", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=psych-lock-model", import.meta.url));
+  const psych = await import(new URL("../core/decision-psychology.js?v=psych-lock-core", import.meta.url));
+  let session = model.createDecisionSession({ id: "psych-lock", mode: "direction", clarityBefore: 30, now: 1000 });
+  session = model.setDecisionArguments(session, [{ id: "a", rawText: "one", normalizedText: "One", side: "long", factorGroup: "other", factorId: "other", weight: 70, weightRated: true, emotionIntensity: 40, emotionRated: true }], 1100);
+  const hash = psych.decisionPsychologyInputHash(session);
+  session = model.setDecisionPsychologySynthesis(session, {
+    sideASummary: "A", sideBSummary: "B", neutralSummary: "", strongPattern: "Strong", weakPattern: "Weak", mainConflict: "Conflict", selfQuestion: "Question?"
+  }, hash, 1200);
+  session = { ...session, preDecisionState: { ...session.preDecisionState, clarityAfter: 60, clarityAfterRated: true, decisionConfidence: 55, decisionConfidenceRated: true }, finalDecision: "long" };
+  const locked = model.lockDecisionSession(session, 1300);
+  ok(model.decisionLockedSnapshot(locked).psychologySynthesis?.inputHash === hash, "locked snapshot lost psychological synthesis");
+  let blocked = false;
+  try { model.assertDecisionMutationAllowed(locked, { ...locked, psychologySynthesis: { ...locked.psychologySynthesis, mainConflict: "Rewritten after result" } }); } catch (e) { blocked = e.message === "decision_locked_snapshot_mutation"; }
+  ok(blocked, "locked psychological synthesis can be rewritten after the decision");
+});
+
+await test("Decision final clarity is collected after psychological synthesis or explicit skip", () => {
+  const ui = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(ui.includes("psychologyReady && jsxs(Panel") && ui.includes("label: l.clarityAfter"), "clarity-after rating is not gated behind the psychology stage");
+  ok(ui.includes("calculateDecisionThoughtBalance(active)"), "final screen does not show deterministic thought balance");
+  ok(ui.includes("PsychologySynthesisCard"), "Gemini psychological synthesis is not rendered on the final screen");
+  ok(ui.includes("psychologySynthesis: null") && ui.includes("decisionPsychologyInputHash"), "stale psychological synthesis is not invalidated/revalidated after reasoning changes");
+});
+
 await test("Approach 1 re-audit routes all major Gemini operations through the common AI runtime", () => {
   const service = fs.readFileSync(path.join(root,"ai","ai-service.js"),"utf8");
   const tools = fs.readFileSync(path.join(root,"ai","trade-tools.js"),"utf8");
   const organizer = fs.readFileSync(path.join(root,"ai","decision-organizer.js"),"utf8");
+  const psychology = fs.readFileSync(path.join(root,"ai","decision-psychology.js"),"utf8");
   const transcription = fs.readFileSync(path.join(root,"ai","transcription-service.js"),"utf8");
   ok(service.includes('runAiRequest'),"general AI service bypasses the shared request runtime");
   ok(service.includes('AI_COACH_ANALYZE') && service.includes('AI_COACH_CHAT'),"Coach AI operations are not individually traceable");
@@ -2290,7 +2377,8 @@ await test("Approach 1 re-audit routes all major Gemini operations through the c
   ok(!service.includes('caWithTimeout(model.generateContent'),"general AI service still has an untracked direct model timeout");
   ok(tools.includes('AI_STRATEGY_ANALYSIS'),"Strategy analysis bypasses shared AI diagnostics");
   ok(!tools.includes('caWithTimeout(model.generateContent'),"trade AI tools still bypass the shared runtime");
-  ok(organizer.includes('runAiRequest') && transcription.includes('runAiRequest'),"Decision AI operations bypass shared runtime");
+  ok(organizer.includes('runAiRequest') && psychology.includes('runAiRequest') && transcription.includes('runAiRequest'),"Decision AI operations bypass shared runtime");
+  ok(psychology.includes('DECISION_PSYCHOLOGY_SYNTHESIS') && psychology.includes('decision_psychology_strategy_leak'),"Decision psychology synthesis lacks traceability/strategy-leak guard");
 });
 
 await test("AI runtime releases a timed-out operation and retries transient failures only once when configured", async () => {
@@ -2343,7 +2431,7 @@ await test("Home auto AI work is idle-scheduled and no longer wraps an AI call i
 
 await test("Approach 3 uses a Vite/npm production graph with no runtime dependency CDN", () => {
   const pkg = JSON.parse(packageSource);
-  eq(pkg.version, "5.4.2", "package release version not bumped");
+  eq(pkg.version, "5.4.4", "package release version not bumped");
   ok(pkg.scripts?.build?.includes("vite build"), "production build does not use Vite");
   for (const dep of ["react", "react-dom", "firebase", "lucide-react", "recharts"]) {
     ok(pkg.dependencies?.[dep], `npm dependency missing: ${dep}`);
@@ -2451,7 +2539,7 @@ await test("profile-store never activates a partially failed parallel revision a
 });
 
 await test("Approach 3 service worker is same-origin only, build-precache aware and deferred until cloud readiness", () => {
-  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.2"'), "service-worker cache generation is stale");
+  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.4"'), "service-worker cache generation is stale");
   ok(!serviceWorkerSource.includes("skipWaiting"), "service worker still forces activation and can invalidate lazy chunks in an already-open old client");
   ok(serviceWorkerSource.includes('url.origin !== self.location.origin'), "service worker can intercept external Firebase/Gemini traffic");
   ok(serviceWorkerSource.includes("PRECACHE_URLS.map"), "service worker does not support build-generated shell precaching");

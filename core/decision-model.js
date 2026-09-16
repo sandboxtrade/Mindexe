@@ -82,6 +82,7 @@ export function createDecisionSession({
     lockedAt: null,
     linkedTradeId: null,
     chartImageAttached: false,
+    psychologySynthesis: null,
     postDecisionNote: "",
     postReview: null
   };
@@ -149,6 +150,28 @@ export function normalizeDecisionPostReview(raw, session = null) {
     createdAt: Number(raw.createdAt) || Date.now(),
     updatedAt: Number(raw.updatedAt) || Number(raw.createdAt) || Date.now()
   };
+}
+
+export function normalizeDecisionPsychologySynthesis(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const clean = (value, max = 1800) => cleanText(value, max);
+  const normalized = {
+    version: 1,
+    inputHash: cleanId(raw.inputHash),
+    generatedAt: Number(raw.generatedAt) || Date.now(),
+    sideASummary: clean(raw.sideASummary, 1500),
+    sideBSummary: clean(raw.sideBSummary, 1500),
+    neutralSummary: clean(raw.neutralSummary, 1200),
+    strongPattern: clean(raw.strongPattern, 1600),
+    weakPattern: clean(raw.weakPattern, 1600),
+    mainConflict: clean(raw.mainConflict, 1600),
+    selfQuestion: clean(raw.selfQuestion, 700)
+  };
+  if (!normalized.inputHash || !normalized.sideASummary || !normalized.sideBSummary ||
+      !normalized.strongPattern || !normalized.weakPattern || !normalized.mainConflict || !normalized.selfQuestion) {
+    return null;
+  }
+  return normalized;
 }
 
 export function normalizeDecisionSession(raw) {
@@ -226,6 +249,7 @@ export function normalizeDecisionSession(raw) {
     lockedAt: raw.lockedAt ?? null,
     linkedTradeId: cleanId(raw.linkedTradeId) || null,
     chartImageAttached: raw.chartImageAttached === true,
+    psychologySynthesis: normalizeDecisionPsychologySynthesis(raw.psychologySynthesis),
     postDecisionNote: cleanText(raw.postDecisionNote, 2000),
     postReview: normalizeDecisionPostReview(raw.postReview, { arguments: normalizedArgs })
   };
@@ -236,6 +260,7 @@ export function setDecisionTranscript(session, text, now = Date.now()) {
   if (!s || s.status !== "draft") throw new Error("decision_not_editable");
   return {
     ...s,
+    psychologySynthesis: null,
     updatedAt: Number(now) || Date.now(),
     rawInput: {
       ...s.rawInput,
@@ -263,6 +288,7 @@ export function addDecisionTranscriptSegment(session, text, source = "text", now
   const combinedTranscript = [s.rawInput.combinedTranscript, clean].map((v) => cleanText(v, 30000)).filter(Boolean).join("\n").slice(0, 30000);
   return {
     ...s,
+    psychologySynthesis: null,
     updatedAt: Number(now) || Date.now(),
     rawInput: {
       ...s.rawInput,
@@ -277,7 +303,19 @@ export function setDecisionArguments(session, args, now = Date.now()) {
   const s = normalizeDecisionSession(session);
   if (!s || s.status !== "draft") throw new Error("decision_not_editable");
   const normalized = (Array.isArray(args) ? args : []).slice(0, 14).map((arg, i) => normalizeDecisionArgument(arg, s.mode, i));
-  return { ...s, arguments: normalized, updatedAt: Number(now) || Date.now() };
+  return { ...s, arguments: normalized, psychologySynthesis: null, updatedAt: Number(now) || Date.now() };
+}
+
+export function setDecisionPsychologySynthesis(session, synthesis, inputHash, now = Date.now()) {
+  const s = normalizeDecisionSession(session);
+  if (!s || s.status !== "draft") throw new Error("decision_not_editable");
+  const normalized = normalizeDecisionPsychologySynthesis({
+    ...(synthesis || {}),
+    inputHash,
+    generatedAt: Number(now) || Date.now()
+  });
+  if (!normalized) throw new Error("decision_psychology_invalid");
+  return { ...s, psychologySynthesis: normalized, updatedAt: Number(now) || Date.now() };
 }
 
 export function validateDecisionForLock(session) {
@@ -345,6 +383,7 @@ export function decisionLockedSnapshot(session) {
     conditions: s.conditions,
     finalDecision: s.finalDecision,
     chartImageAttached: s.chartImageAttached === true,
+    psychologySynthesis: s.psychologySynthesis,
     lockedAt: s.lockedAt
   };
 }

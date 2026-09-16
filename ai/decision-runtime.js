@@ -8,6 +8,7 @@ let runtimeModelName = null;
 let organizerModel = null;
 let transcriptionModel = null;
 let transcriptPolishModel = null;
+let psychologyModel = null;
 
 const ORGANIZER_SYSTEM = `You are the structuring engine inside MIND.EXE Decision Lab.
 Your ONLY job is to reorganize the trader's own words into a clean decision map.
@@ -29,6 +30,7 @@ export function configureDecisionAi({ aiLogic, modelName }) {
   organizerModel = null;
   transcriptionModel = null;
   transcriptPolishModel = null;
+  psychologyModel = null;
 }
 
 function requireRuntime() {
@@ -57,6 +59,30 @@ export function getDecisionTranscriptionModel() {
     });
   }
   return transcriptionModel;
+}
+
+const PSYCHOLOGY_SYSTEM = `You are the psychological synthesis engine inside MIND.EXE Decision Lab.
+You analyze only the structure of the user's own reasoning. You are NOT a market analyst.
+Treat every market-related statement as a subjective statement made by the user, never as a fact to verify.
+Never analyze a chart, infer a signal, judge whether LONG/SHORT/entry is objectively correct, or provide trading advice.
+Never suggest waiting for confirmation, entering, exiting, changing a stop, changing a target, or modifying strategy.
+Never add arguments or market facts that the user did not provide.
+
+Your job is to identify internal coherence, contradiction, uncertainty, hypothetical wording, self-assigned logical weight,
+emotional pull, and the central conflict in the user's thinking. If one side has more weight, you may only describe the
+deterministic balance supplied by the application; never calculate your own probabilities or scores.
+Return only the requested JSON. No markdown and no commentary.`;
+
+export function getDecisionPsychologyModel() {
+  requireRuntime();
+  if (!psychologyModel) {
+    psychologyModel = getGenerativeModel(runtimeAiLogic, {
+      model: runtimeModelName,
+      systemInstruction: PSYCHOLOGY_SYSTEM,
+      generationConfig: { temperature: 0.12, maxOutputTokens: 2200 }
+    });
+  }
+  return psychologyModel;
 }
 
 

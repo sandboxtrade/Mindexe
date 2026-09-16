@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import {
   Brain, Mic, Square, ChevronRight, ChevronLeft, Plus, Trash2, Check,
-  RotateCcw, Clock3, AlertTriangle, Sparkles, History, SlidersHorizontal, X, BarChart3, ImagePlus
+  RotateCcw, Clock3, AlertTriangle, Sparkles, History, SlidersHorizontal, X, BarChart3, ImagePlus, ChevronDown
 } from "lucide-react";
 import { BASE, WIN, LOSS } from "../../config/app-config.js";
 import { ScreenshotImage, requestAppConfirm } from "../../ui/primitives.js";
@@ -16,6 +16,7 @@ import {
   lockDecisionSession,
   decisionClarityDelta,
   setDecisionTranscript,
+  setDecisionPsychologySynthesis,
   buildDecisionIndexRow
 } from "../../core/decision-model.js";
 import {
@@ -29,6 +30,8 @@ import { createDecisionDraftCache } from "../../core/decision-draft-cache.js";
 import { createAudioRecorder } from "../../audio/audio-recorder.js";
 import { transcribeDecisionAudio } from "../../ai/transcription-service.js";
 import { organizeDecisionTranscript } from "../../ai/decision-organizer.js";
+import { synthesizeDecisionPsychology } from "../../ai/decision-psychology.js";
+import { calculateDecisionThoughtBalance, decisionPsychologyInputHash } from "../../core/decision-psychology.js";
 import { DecisionAnalyticsView } from "./decision-analytics-ui.js";
 
 const UI = {
@@ -85,6 +88,25 @@ const UI = {
     newDecision: "Новый разбор",
     strongest: "Самый весомый аргумент",
     emotional: "Самая эмоциональная мысль",
+    psychologyTitle: "Разбор твоего мышления",
+    psychologyHint: "Gemini анализирует только структуру твоих мыслей и эмоций. Рынок, график и стратегию он не оценивает.",
+    psychologyLoading: "Собираю психологический разбор…",
+    psychologyError: "Не удалось собрать психологический разбор.",
+    psychologyRetry: "Повторить разбор",
+    psychologySkip: "Продолжить без него",
+    logicalBalance: "Логический перевес",
+    emotionalBalance: "Эмоциональный перевес",
+    neutralShare: "Неопределённая часть",
+    insufficientBalance: "Недостаточно оценённых аргументов для перевеса",
+    sideLongThinking: "Как LONG существует в твоих рассуждениях",
+    sideShortThinking: "Как SHORT существует в твоих рассуждениях",
+    sideForEntryThinking: "Как аргументы ЗА ВХОД существуют в твоих рассуждениях",
+    sideAgainstEntryThinking: "Как аргументы ПРОТИВ ВХОДА существуют в твоих рассуждениях",
+    neutralThinking: "Где остаётся неопределённость",
+    strongThinking: "Что в твоём рассуждении выглядит сильным",
+    weakThinking: "Что выглядит слабым или неустойчивым",
+    mainConflict: "Главный внутренний конфликт",
+    selfQuestion: "Вопрос себе",
     noSymbol: "Без тикера",
     wait: "Ждать",
     skip: "Отказаться",
@@ -183,6 +205,25 @@ const UI = {
     newDecision: "New decision",
     strongest: "Strongest logical argument",
     emotional: "Most emotional thought",
+    psychologyTitle: "Your reasoning synthesis",
+    psychologyHint: "Gemini analyzes only the structure of your own thoughts and emotions. It does not evaluate the market, chart, or strategy.",
+    psychologyLoading: "Building psychological synthesis…",
+    psychologyError: "Could not build the psychological synthesis.",
+    psychologyRetry: "Retry synthesis",
+    psychologySkip: "Continue without it",
+    logicalBalance: "Logical balance",
+    emotionalBalance: "Emotional balance",
+    neutralShare: "Uncertain share",
+    insufficientBalance: "Not enough rated arguments to calculate a balance",
+    sideLongThinking: "How LONG exists in your reasoning",
+    sideShortThinking: "How SHORT exists in your reasoning",
+    sideForEntryThinking: "How FOR ENTRY exists in your reasoning",
+    sideAgainstEntryThinking: "How AGAINST ENTRY exists in your reasoning",
+    neutralThinking: "Where uncertainty remains",
+    strongThinking: "What is internally strong in your reasoning",
+    weakThinking: "What looks weak or unstable",
+    mainConflict: "Main internal conflict",
+    selfQuestion: "Question to yourself",
     noSymbol: "No ticker",
     wait: "WAIT",
     skip: "SKIP",
@@ -281,6 +322,117 @@ function SliderField({ label, value, rated = true, onChange, accent, hintLeft = 
   ] });
 }
 
+function AppSelect({ value, onChange, options = [] }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = options.find((option) => option.value === value) || options[0] || null;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (!rootRef.current?.contains(event.target)) setOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
+  return jsxs("div", { ref: rootRef, className: "relative", children: [
+    jsxs("button", {
+      type: "button",
+      onClick: () => setOpen((current) => !current),
+      className: "w-full min-h-10 rounded-[10px] px-3 flex items-center justify-between gap-3 text-left transition-colors",
+      style: { border: `1px solid ${open ? BASE.inkFaint : BASE.line}`, background: open ? "#0B0B0D" : "#080809", color: BASE.inkDim },
+      "aria-expanded": open,
+      children: [
+        jsx("span", { className: "text-[11px] leading-[1.35]", children: selected?.label || "—" }),
+        jsx(ChevronDown, { size: 14, className: `shrink-0 transition-transform ${open ? "rotate-180" : ""}`, style: { color: BASE.inkFaint } })
+      ]
+    }),
+    open && jsx("div", {
+      className: "absolute z-50 left-0 right-0 mt-1.5 max-h-[280px] overflow-y-auto rounded-[12px] p-1.5",
+      style: { background: "#0A0A0C", border: `1px solid ${BASE.line}`, boxShadow: "0 18px 50px rgba(0,0,0,.55)" },
+      children: options.map((option) => {
+        const active = option.value === value;
+        return jsxs("button", {
+          type: "button",
+          onClick: () => { onChange(option.value); setOpen(false); },
+          className: "w-full min-h-9 rounded-[8px] px-2.5 py-2 flex items-center justify-between gap-3 text-left",
+          style: { background: active ? BASE.surface2 : "transparent", color: active ? BASE.ink : BASE.inkDim },
+          children: [
+            jsx("span", { className: "text-[11px] leading-[1.35]", children: option.label }),
+            active ? jsx(Check, { size: 13, style: { color: BASE.ink } }) : jsx("span", { className: "w-[13px]" })
+          ]
+        }, option.value);
+      })
+    })
+  ] });
+}
+
+function ThoughtBalanceMeter({ title, balance, leftSide, rightSide, leftLabel, rightLabel, accent, l }) {
+  if (!balance?.available) {
+    return jsxs("div", { className: "py-3", children: [
+      jsx("div", { className: "text-[11px] mb-1.5", style: { color: BASE.inkDim }, children: title }),
+      jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: l.insufficientBalance })
+    ] });
+  }
+  const leftPct = Math.max(0, Math.min(100, Number(balance.leftPct) || 0));
+  const rightPct = Math.max(0, Math.min(100, Number(balance.rightPct) || 0));
+  return jsxs("div", { className: "py-3", children: [
+    jsxs("div", { className: "flex items-center justify-between gap-3 mb-2", children: [
+      jsx("div", { className: "text-[11px]", style: { color: BASE.inkDim }, children: title }),
+      jsx("div", { className: "text-[10px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: balance.neutralSharePct != null && balance.neutralSharePct > 0 ? `${l.neutralShare}: ${balance.neutralSharePct}%` : "" })
+    ] }),
+    jsxs("div", { className: "flex items-center justify-between text-[11px] mb-1.5", children: [
+      jsx("span", { style: { color: sideColor(leftSide, accent), fontWeight: 650 }, children: `${leftLabel} ${leftPct}%` }),
+      jsx("span", { style: { color: sideColor(rightSide, accent), fontWeight: 650 }, children: `${rightPct}% ${rightLabel}` })
+    ] }),
+    jsxs("div", { className: "h-2 rounded-full overflow-hidden flex", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [
+      jsx("div", { style: { width: `${leftPct}%`, background: sideColor(leftSide, accent), opacity: 0.8 } }),
+      jsx("div", { style: { width: `${rightPct}%`, background: sideColor(rightSide, accent), opacity: 0.8 } })
+    ] })
+  ] });
+}
+
+function PsychologySynthesisCard({ synthesis, balance, accent, lang, l }) {
+  if (!synthesis || !balance) return null;
+  const entry = balance.mode === "entry";
+  const leftLabel = entry ? (lang === "en" ? "FOR" : "ЗА") : "LONG";
+  const rightLabel = entry ? (lang === "en" ? "AGAINST" : "ПРОТИВ") : "SHORT";
+  const leftHeading = entry ? l.sideForEntryThinking : l.sideLongThinking;
+  const rightHeading = entry ? l.sideAgainstEntryThinking : l.sideShortThinking;
+  const textBlock = (title, text, strong = false) => text ? jsxs("div", { className: "pt-4", style: { borderTop: `1px solid ${BASE.line}` }, children: [
+    jsx("div", { className: "text-[11px] mb-1.5", style: { color: strong ? BASE.ink : BASE.inkFaint, fontWeight: strong ? 600 : 500 }, children: title }),
+    jsx("div", { className: "text-[13px] leading-[1.65]", style: { color: BASE.inkDim }, children: text })
+  ] }) : null;
+  return jsxs(Panel, { className: "mb-3", children: [
+    jsxs("div", { className: "flex items-start gap-3 mb-1", children: [
+      jsx("div", { className: "w-8 h-8 rounded-[10px] shrink-0 flex items-center justify-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: jsx(Brain, { size: 15 }) }),
+      jsxs("div", { children: [
+        jsx("div", { className: "text-[15px]", style: { color: BASE.ink, fontWeight: 650 }, children: l.psychologyTitle }),
+        jsx("div", { className: "text-[11px] leading-[1.5] mt-1", style: { color: BASE.inkFaint }, children: l.psychologyHint })
+      ] })
+    ] }),
+    jsx(ThoughtBalanceMeter, { title: l.logicalBalance, balance: balance.logical, leftSide: balance.sides.left, rightSide: balance.sides.right, leftLabel, rightLabel, accent, l }),
+    jsx(ThoughtBalanceMeter, { title: l.emotionalBalance, balance: balance.emotional, leftSide: balance.sides.left, rightSide: balance.sides.right, leftLabel, rightLabel, accent, l }),
+    jsx("div", { className: "grid gap-3 sm:grid-cols-2 mt-1", children: [
+      jsxs("div", { className: "rounded-[13px] p-3.5", style: { background: "#050506", border: `1px solid ${BASE.line}` }, children: [jsx("div", { className: "text-[11px] mb-1.5", style: { color: sideColor(balance.sides.left, accent), fontWeight: 600 }, children: leftHeading }), jsx("div", { className: "text-[13px] leading-[1.6]", style: { color: BASE.inkDim }, children: synthesis.sideASummary })] }),
+      jsxs("div", { className: "rounded-[13px] p-3.5", style: { background: "#050506", border: `1px solid ${BASE.line}` }, children: [jsx("div", { className: "text-[11px] mb-1.5", style: { color: sideColor(balance.sides.right, accent), fontWeight: 600 }, children: rightHeading }), jsx("div", { className: "text-[13px] leading-[1.6]", style: { color: BASE.inkDim }, children: synthesis.sideBSummary })] })
+    ] }),
+    synthesis.neutralSummary && textBlock(l.neutralThinking, synthesis.neutralSummary),
+    textBlock(l.strongThinking, synthesis.strongPattern, true),
+    textBlock(l.weakThinking, synthesis.weakPattern),
+    textBlock(l.mainConflict, synthesis.mainConflict, true),
+    synthesis.selfQuestion && jsxs("div", { className: "mt-4 rounded-[13px] p-4", style: { background: BASE.surface2, border: `1px solid ${BASE.line}` }, children: [jsx("div", { className: "text-[10px] mb-1.5", style: { color: BASE.inkFaint }, children: l.selfQuestion }), jsx("div", { className: "text-[14px] leading-[1.55]", style: { color: BASE.ink, fontWeight: 550 }, children: synthesis.selfQuestion })] })
+  ] });
+}
+
 function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rating = false, decisiveCount = 0, notify }) {
   const l = UI[lang] || UI.ru;
   const sides = mode === "entry"
@@ -316,16 +468,13 @@ function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rat
     }, id)) }),
     jsxs("div", { className: "mt-2", children: [
       jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: l.chooseFactor }),
-      jsx("select", {
+      jsx(AppSelect, {
         value: arg.factorId || "other",
-        onChange: (e) => {
-          const id = e.target.value;
+        onChange: (id) => {
           const row = DECISION_FACTORS[id] || DECISION_FACTORS.other;
           onChange({ ...arg, factorId: id, factorGroup: row.group, factorLabel: null, userEdited: true });
         },
-        className: "w-full h-9 rounded-[9px] px-2 text-[10px] bg-transparent outline-none",
-        style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim },
-        children: Object.entries(DECISION_FACTORS).map(([id, row]) => jsx("option", { value: id, children: row[lang === "en" ? "en" : "ru"] }, id))
+        options: Object.entries(DECISION_FACTORS).map(([id, row]) => ({ value: id, label: row[lang === "en" ? "en" : "ru"] }))
       })
     ] }),
     rating && jsxs("div", { className: "mt-2 text-[9px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [arg.weightRated ? `${arg.weight}%` : "—", " · ", arg.emotionRated ? `${arg.emotionIntensity}%` : "—", emotionLabel ? ` · ${emotionLabel}` : ""] }),
@@ -433,8 +582,12 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
   const [analyticsSessions, setAnalyticsSessions] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
   const [startPromptMode, setStartPromptMode] = useState(null);
+  const [conditionDrafts, setConditionDrafts] = useState({ sessionId: null, first: "", second: "" });
   const [chartMedia, setChartMedia] = useState(null);
   const [chartBusy, setChartBusy] = useState(false);
+  const [psychologyBusy, setPsychologyBusy] = useState(false);
+  const [psychologyError, setPsychologyError] = useState(null);
+  const [psychologySkipKey, setPsychologySkipKey] = useState(null);
 
   const recorderRef = useRef(null);
   const timerRef = useRef(null);
@@ -446,6 +599,7 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
   const syncTimerRef = useRef(null);
   const saveChainRef = useRef(Promise.resolve());
   const organizerGenerationRef = useRef(0);
+  const psychologyGenerationRef = useRef(0);
   const deletedSessionIdsRef = useRef(new Set());
   const recordingChunksRef = useRef([]);
   const recordingAudioIdRef = useRef(null);
@@ -455,6 +609,25 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
   const draftCache = useMemo(() => createDecisionDraftCache(), []);
 
   useEffect(() => { activeRef.current = active; }, [active]);
+
+  useEffect(() => {
+    psychologyGenerationRef.current += 1;
+    setPsychologyBusy(false);
+    setPsychologyError(null);
+    setPsychologySkipKey(null);
+  }, [active?.id]);
+
+  useEffect(() => {
+    if (!active?.id || active.status !== "draft" || active.flowStep !== "conditions") return;
+    const currentConditions = active.conditions || {};
+    const firstKey = active.mode === "entry" ? "entryRemainsValidIf" : "longBecomesValidIf";
+    const secondKey = active.mode === "entry" ? "invalidation" : "shortBecomesValidIf";
+    setConditionDrafts({
+      sessionId: active.id,
+      first: linesText(currentConditions[firstKey]),
+      second: linesText(currentConditions[secondKey])
+    });
+  }, [active?.id, active?.flowStep, active?.mode]);
 
   const upsertIndex = (session) => {
     if (!session) return;
@@ -699,11 +872,27 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
   };
 
   const patchActive = (patch) => mutateActive((prev) => ({ ...prev, ...patch }));
+  const commitConditionDrafts = (field = null) => {
+    const current = activeRef.current;
+    if (!current || current.status !== "draft") return current;
+    const currentConditions = current.conditions || {};
+    const firstKey = current.mode === "entry" ? "entryRemainsValidIf" : "longBecomesValidIf";
+    const secondKey = current.mode === "entry" ? "invalidation" : "shortBecomesValidIf";
+    const drafts = conditionDrafts.sessionId === current.id
+      ? conditionDrafts
+      : { first: linesText(currentConditions[firstKey]), second: linesText(currentConditions[secondKey]) };
+    const nextConditions = { ...currentConditions };
+    if (!field || field === "first") nextConditions[firstKey] = lines(drafts.first);
+    if (!field || field === "second") nextConditions[secondKey] = lines(drafts.second);
+    const changed = JSON.stringify(nextConditions) !== JSON.stringify(currentConditions);
+    return patchActive(changed ? { conditions: nextConditions, psychologySynthesis: null } : { conditions: nextConditions });
+  };
   const updateArgument = (id, next) => mutateActive((prev) => ({
     ...prev,
-    arguments: prev.arguments.map((arg) => arg.id === id ? normalizeDecisionArgument(next, prev.mode) : arg)
+    arguments: prev.arguments.map((arg) => arg.id === id ? normalizeDecisionArgument(next, prev.mode) : arg),
+    psychologySynthesis: null
   }));
-  const deleteArgument = (id) => mutateActive((prev) => ({ ...prev, arguments: prev.arguments.filter((arg) => arg.id !== id) }));
+  const deleteArgument = (id) => mutateActive((prev) => ({ ...prev, arguments: prev.arguments.filter((arg) => arg.id !== id), psychologySynthesis: null }));
   const decisiveCount = active?.arguments?.filter((arg) => arg.isDecisive).length || 0;
   const allArgumentsRated = !!active?.arguments?.length && active.arguments.every((arg) => arg.weightRated && arg.weight != null && arg.emotionRated && arg.emotionIntensity != null);
 
@@ -942,9 +1131,72 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       aiGeneratedStructure: false,
       userEdited: true
     }, current.mode, current.arguments.length);
-    applyLocal({ ...current, arguments: [...current.arguments, arg].slice(0, 14) });
+    applyLocal({ ...current, arguments: [...current.arguments, arg].slice(0, 14), psychologySynthesis: null });
     setNewArgText("");
   };
+
+  const runPsychologySynthesis = async (candidate = activeRef.current, { force = false } = {}) => {
+    if (!candidate || candidate.status !== "draft" || candidate.flowStep !== "decision") return null;
+    let inputHash;
+    try { inputHash = decisionPsychologyInputHash(candidate); } catch { return null; }
+    if (!force && candidate.psychologySynthesis?.inputHash === inputHash) return candidate.psychologySynthesis;
+    const generation = ++psychologyGenerationRef.current;
+    const sessionId = candidate.id;
+    setPsychologyBusy(true);
+    setPsychologyError(null);
+    setPsychologySkipKey(null);
+    try {
+      const result = await synthesizeDecisionPsychology({ session: candidate, lang });
+      const latest = activeRef.current;
+      if (!latest || latest.id !== sessionId || latest.status !== "draft") return null;
+      const latestHash = decisionPsychologyInputHash(latest);
+      if (generation !== psychologyGenerationRef.current || latestHash !== inputHash) {
+        notify?.(lang === "en" ? "Your reasoning changed while the synthesis was running. Rebuilding is required." : "Пока шёл разбор, аргументы изменились. Нужно собрать его заново.");
+        return null;
+      }
+      const next = setDecisionPsychologySynthesis(latest, result, inputHash);
+      next.flowStep = "decision";
+      applyLocal(next);
+      return next.psychologySynthesis;
+    } catch (e) {
+      setPsychologyError(e);
+      return null;
+    } finally {
+      if (generation === psychologyGenerationRef.current) setPsychologyBusy(false);
+    }
+  };
+
+  const enterDecisionStep = () => {
+    const committed = commitConditionDrafts() || activeRef.current;
+    if (!committed) return;
+    let psychologySynthesis = null;
+    try {
+      const hash = decisionPsychologyInputHash(committed);
+      if (committed.psychologySynthesis?.inputHash === hash) psychologySynthesis = committed.psychologySynthesis;
+    } catch (_) {
+    }
+    const next = applyLocal({ ...committed, flowStep: "decision", psychologySynthesis });
+    setPsychologyError(null);
+    setPsychologySkipKey(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const skipPsychologySynthesis = () => {
+    const current = activeRef.current;
+    if (!current) return;
+    const hash = decisionPsychologyInputHash(current);
+    if (current.psychologySynthesis) applyLocal({ ...current, psychologySynthesis: null });
+    setPsychologySkipKey(`${current.id}:${hash}`);
+  };
+
+  useEffect(() => {
+    if (!active?.id || active.status !== "draft" || active.flowStep !== "decision" || psychologyBusy || psychologyError) return;
+    let hash;
+    try { hash = decisionPsychologyInputHash(active); } catch { return; }
+    if (active.psychologySynthesis?.inputHash === hash || psychologySkipKey === `${active.id}:${hash}`) return;
+    const timer = setTimeout(() => runPsychologySynthesis(activeRef.current).catch(() => {}), 0);
+    return () => clearTimeout(timer);
+  }, [active?.id, active?.flowStep, active?.psychologySynthesis?.inputHash, psychologyBusy, psychologyError, psychologySkipKey]);
 
   const lock = async () => {
     clearTimeout(syncTimerRef.current);
@@ -1130,9 +1382,9 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
     const secondKey = active.mode === "entry" ? "invalidation" : "shortBecomesValidIf";
     return jsxs("div", { children: [
       jsx(StepHeader, { title: l.conditions, onBack: setBack("rate"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
-      jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.entryValid : l.longValid }), jsx("textarea", { value: linesText(c[firstKey]), onChange: (e) => patchActive({ conditions: { ...c, [firstKey]: lines(e.target.value) } }), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
-      jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.invalidation : l.shortValid }), jsx("textarea", { value: linesText(c[secondKey]), onChange: (e) => patchActive({ conditions: { ...c, [secondKey]: lines(e.target.value) } }), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
-      jsx(PrimaryButton, { accent, onClick: () => goStep("decision"), children: l.continue })
+      jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.entryValid : l.longValid }), jsx("textarea", { value: conditionDrafts.sessionId === active.id ? conditionDrafts.first : linesText(c[firstKey]), onChange: (e) => setConditionDrafts((prev) => ({ sessionId: active.id, first: e.target.value, second: prev.sessionId === active.id ? prev.second : linesText(c[secondKey]) })), onBlur: () => commitConditionDrafts("first"), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
+      jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.invalidation : l.shortValid }), jsx("textarea", { value: conditionDrafts.sessionId === active.id ? conditionDrafts.second : linesText(c[secondKey]), onChange: (e) => setConditionDrafts((prev) => ({ sessionId: active.id, first: prev.sessionId === active.id ? prev.first : linesText(c[firstKey]), second: e.target.value })), onBlur: () => commitConditionDrafts("second"), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
+      jsx(PrimaryButton, { accent, onClick: enterDecisionStep, children: l.continue })
     ] });
   }
 
@@ -1140,6 +1392,11 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
     const strongest = [...active.arguments].filter((a) => a.weightRated && a.weight != null).sort((a, b) => b.weight - a.weight)[0] || null;
     const emotional = [...active.arguments].filter((a) => a.emotionRated && a.emotionIntensity != null).sort((a, b) => b.emotionIntensity - a.emotionIntensity)[0] || null;
     const choices = active.mode === "entry" ? [["enter", l.enter], ["wait", l.wait], ["skip", l.skip]] : [["long", l.long], ["short", l.short], ["wait", l.wait]];
+    const psychologyHash = decisionPsychologyInputHash(active);
+    const psychology = active.psychologySynthesis?.inputHash === psychologyHash ? active.psychologySynthesis : null;
+    const psychologyBalance = calculateDecisionThoughtBalance(active);
+    const psychologySkipped = psychologySkipKey === `${active.id}:${psychologyHash}`;
+    const psychologyReady = !!psychology || psychologySkipped;
     const finalRatingsReady = active.preDecisionState.clarityAfterRated && active.preDecisionState.clarityAfter != null && active.preDecisionState.decisionConfidenceRated && active.preDecisionState.decisionConfidence != null;
     return jsxs("div", { children: [
       jsx(StepHeader, { title: l.final, onBack: setBack("conditions"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
@@ -1147,11 +1404,31 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
         strongest && jsxs("div", { className: "mb-4", children: [jsx(SectionTitle, { children: l.strongest }), jsx("div", { className: "text-[14px] mb-1", style: { color: BASE.ink }, children: strongest.normalizedText }), jsx("div", { className: "text-[12px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${strongest.weight}%` })] }),
         emotional && jsxs("div", { children: [jsx(SectionTitle, { children: l.emotional }), jsx("div", { className: "text-[14px] mb-1", style: { color: BASE.ink }, children: emotional.normalizedText }), jsx("div", { className: "text-[12px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${emotional.emotionIntensity}%${emotional.emotionTag ? ` · ${DECISION_EMOTION_LABELS[emotional.emotionTag]?.[lang] || emotional.emotionTag}` : ""}` })] })
       ] }),
-      jsxs(Panel, { className: "mb-3", children: [jsx(SliderField, { label: l.clarityAfter, value: active.preDecisionState.clarityAfter, rated: active.preDecisionState.clarityAfterRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityAfter: value, clarityAfterRated: true } }), accent, hintLeft: lang === "en" ? "unclear" : "неясно", hintRight: lang === "en" ? "clear" : "ясно" }), jsx(SliderField, { label: l.confidence, value: active.preDecisionState.decisionConfidence, rated: active.preDecisionState.decisionConfidenceRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, decisionConfidence: value, decisionConfidenceRated: true } }), accent, hintLeft: lang === "en" ? "not sure" : "не уверен", hintRight: lang === "en" ? "sure of process" : "уверен в решении" })] }),
-      jsx(SectionTitle, { children: l.chooseDecision }),
-      jsx("div", { className: "grid grid-cols-3 gap-2 mb-3", children: choices.map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ finalDecision: id }), className: "h-12 rounded-[12px] text-[11px] font-semibold", style: { border: `1px solid ${active.finalDecision === id ? sideColor(id, accent) + "66" : BASE.line}`, background: active.finalDecision === id ? `${sideColor(id, accent)}0e` : BASE.surface, color: active.finalDecision === id ? sideColor(id, accent) : BASE.inkDim }, children: label }, id)) }),
+      psychology && jsx(PsychologySynthesisCard, { synthesis: psychology, balance: psychologyBalance, accent, lang, l }),
+      !psychology && jsxs(Panel, { className: "mb-3", children: [
+        jsxs("div", { className: "flex items-start gap-3", children: [
+          jsx("div", { className: "w-8 h-8 rounded-[10px] shrink-0 flex items-center justify-center", style: { background: BASE.surface2, border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: jsx(Brain, { size: 15 }) }),
+          jsxs("div", { className: "min-w-0 flex-1", children: [
+            jsx("div", { className: "text-[15px]", style: { color: BASE.ink, fontWeight: 650 }, children: l.psychologyTitle }),
+            jsx("div", { className: "text-[11px] leading-[1.5] mt-1", style: { color: BASE.inkFaint }, children: l.psychologyHint })
+          ] })
+        ] }),
+        psychologyBusy && jsx("div", { className: "mt-5 text-[12px] animate-pulse", style: { color: BASE.inkDim }, children: l.psychologyLoading }),
+        psychologyError && jsxs("div", { className: "mt-5", children: [
+          jsx("div", { className: "text-[12px] mb-3", style: { color: LOSS }, children: l.psychologyError }),
+          jsx("div", { className: "grid grid-cols-2 gap-2", children: [
+            jsx("button", { type: "button", onClick: () => runPsychologySynthesis(activeRef.current, { force: true }), className: "h-10 rounded-[11px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: BASE.ink }, children: l.psychologyRetry }),
+            jsx("button", { type: "button", onClick: skipPsychologySynthesis, className: "h-10 rounded-[11px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: l.psychologySkip })
+          ] })
+        ] }),
+        !psychologyBusy && !psychologyError && !psychologySkipped && jsx("button", { type: "button", onClick: () => runPsychologySynthesis(activeRef.current, { force: true }), className: "mt-5 h-10 px-4 rounded-[11px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: BASE.ink }, children: l.psychologyRetry })
+      ] }),
+      psychologySkipped && !psychology && jsx("div", { className: "text-[10px] mb-3 text-center", style: { color: BASE.inkFaint }, children: lang === "en" ? "Psychological synthesis skipped for this decision." : "Психологический разбор пропущен для этого решения." }),
+      psychologyReady && jsxs(Panel, { className: "mb-3", children: [jsx(SliderField, { label: l.clarityAfter, value: active.preDecisionState.clarityAfter, rated: active.preDecisionState.clarityAfterRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityAfter: value, clarityAfterRated: true } }), accent, hintLeft: lang === "en" ? "unclear" : "неясно", hintRight: lang === "en" ? "clear" : "ясно" }), jsx(SliderField, { label: l.confidence, value: active.preDecisionState.decisionConfidence, rated: active.preDecisionState.decisionConfidenceRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, decisionConfidence: value, decisionConfidenceRated: true } }), accent, hintLeft: lang === "en" ? "not sure" : "не уверен", hintRight: lang === "en" ? "sure of process" : "уверен в решении" })] }),
+      psychologyReady && jsx(SectionTitle, { children: l.chooseDecision }),
+      psychologyReady && jsx("div", { className: "grid grid-cols-3 gap-2 mb-3", children: choices.map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ finalDecision: id }), className: "h-12 rounded-[12px] text-[11px] font-semibold", style: { border: `1px solid ${active.finalDecision === id ? sideColor(id, accent) + "66" : BASE.line}`, background: active.finalDecision === id ? `${sideColor(id, accent)}0e` : BASE.surface, color: active.finalDecision === id ? sideColor(id, accent) : BASE.inkDim }, children: label }, id)) }),
       cloudSyncing && jsx("div", { className: "text-center text-[9px] mb-2", style: { color: BASE.inkFaint }, children: l.syncPending }),
-      jsx(PrimaryButton, { accent, disabled: saving || !active.finalDecision || !allArgumentsRated || !finalRatingsReady, onClick: lock, icon: Check, children: l.lock })
+      psychologyReady && jsx(PrimaryButton, { accent, disabled: saving || !active.finalDecision || !allArgumentsRated || !finalRatingsReady, onClick: lock, icon: Check, children: l.lock })
     ] });
   }
 
@@ -1175,6 +1452,7 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       jsx(ScreenshotImage, { src: chartMedia.dataUrl, alt: locked.symbol ? `${locked.symbol} · ${l.chartShot}` : l.chartShot, className: "w-full max-h-[340px] object-contain rounded-[12px]", style: { background: "#030304", border: `1px solid ${BASE.line}` } }),
       jsx("div", { className: "text-[10px] mt-2", style: { color: BASE.inkFaint }, children: l.chartShotLocked })
     ] }),
+    locked.psychologySynthesis && jsx(PsychologySynthesisCard, { synthesis: locked.psychologySynthesis, balance: calculateDecisionThoughtBalance(locked), accent, lang, l }),
     ...groups.map(([side, label]) => {
       const args = locked.arguments.filter((arg) => arg.side === side);
       if (!args.length) return null;
