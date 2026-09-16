@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import vm from "node:vm";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ const firestoreStoragePath = path.join(root, "core", "firestore-storage.js");
 const journalMediaPath = path.join(root, "core", "journal-media.js");
 const profileStorePath = path.join(root, "core", "profile-store.js");
 const strategyStorePath = path.join(root, "core", "strategy-store.js");
+const strategyMathPath = path.join(root, "core", "strategy-math.js");
 const appConfigPath = path.join(root, "config", "app-config.js");
 const stringsPath = path.join(root, "i18n", "strings.js");
 const traderAnalyticsPath = path.join(root, "analytics", "trader-analytics.js");
@@ -31,6 +33,11 @@ const settingsUiPath = path.join(root, "features", "settings", "settings-ui.js")
 const coachUiPath = path.join(root, "features", "coach", "coach-ui.js");
 const calibrationUiPath = path.join(root, "features", "calibration", "calibration-ui.js");
 const dashboardUiPath = path.join(root, "features", "dashboard", "dashboard-ui.js");
+const dashboardDataPath = path.join(root, "features", "dashboard", "dashboard-data.js");
+const packagePath = path.join(root, "package.json");
+const viteConfigPath = path.join(root, "vite.config.js");
+const stylesPath = path.join(root, "styles.css");
+const serviceWorkerPath = path.join(root, "public", "sw.js");
 const authUiPath = path.join(root, "features", "auth", "auth-ui.js");
 const appShellPath = path.join(root, "ui", "app-shell.js");
 const appSource = fs.readFileSync(appPath, "utf8");
@@ -42,6 +49,7 @@ const firestoreStorageSource = fs.readFileSync(firestoreStoragePath, "utf8");
 const journalMediaSource = fs.readFileSync(journalMediaPath, "utf8");
 const profileStoreSource = fs.readFileSync(profileStorePath, "utf8");
 const strategyStoreSource = fs.readFileSync(strategyStorePath, "utf8");
+const strategyMathSource = fs.readFileSync(strategyMathPath, "utf8");
 const appConfigSource = fs.readFileSync(appConfigPath, "utf8");
 const stringsSource = fs.readFileSync(stringsPath, "utf8");
 const traderAnalyticsSource = fs.readFileSync(traderAnalyticsPath, "utf8");
@@ -58,9 +66,14 @@ const settingsUiSource = fs.readFileSync(settingsUiPath, "utf8");
 const coachUiSource = fs.readFileSync(coachUiPath, "utf8");
 const calibrationUiSource = fs.readFileSync(calibrationUiPath, "utf8");
 const dashboardUiSource = fs.readFileSync(dashboardUiPath, "utf8");
+const dashboardDataSource = fs.readFileSync(dashboardDataPath, "utf8");
+const packageSource = fs.readFileSync(packagePath, "utf8");
+const viteConfigSource = fs.readFileSync(viteConfigPath, "utf8");
+const stylesSource = fs.readFileSync(stylesPath, "utf8");
+const serviceWorkerSource = fs.readFileSync(serviceWorkerPath, "utf8");
 const authUiSource = fs.readFileSync(authUiPath, "utf8");
 const appShellSource = fs.readFileSync(appShellPath, "utf8");
-const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}\n${dashboardUiSource}\n${authUiSource}\n${appShellSource}`;
+const source = `${appSource}\n${tradeMathSource}\n${statsSource}\n${journalModelSource}\n${firestoreStorageSource}\n${journalMediaSource}\n${profileStoreSource}\n${strategyStoreSource}\n${strategyMathSource}\n${appConfigSource}\n${stringsSource}\n${traderAnalyticsSource}\n${uiPrimitivesSource}\n${calibrationReviewSource}\n${journalUiSource}\n${strategyLabSource}\n${mediaUtilsSource}\n${aiTradeToolsSource}\n${aiContextSource}\n${aiServiceSource}\n${brandUiSource}\n${settingsUiSource}\n${coachUiSource}\n${calibrationUiSource}\n${dashboardUiSource}\n${dashboardDataSource}\n${authUiSource}\n${appShellSource}`;
 
 let passed = 0;
 const failures = [];
@@ -281,12 +294,13 @@ await test("stage 5-7 feature modules stay extracted from app.js", () => {
   ]) ok(!appSource.includes(token), `feature implementation drifted back into app.js: ${token}`);
 
   for (const token of [
-    'from "./features/journal/journal-ui.js?v=4.9.0"',
-    'from "./features/strategy/strategy-lab.js?v=4.9.0"',
-    'from "./ai/context.js?v=4.9.0"',
-    'from "./ai/ai-service.js?v=4.9.0"',
-    'from "./ai/trade-tools.js?v=4.9.0"'
+    'from "./features/journal/journal-ui.js"',
+    'from "./core/strategy-math.js"',
+    'from "./ai/context.js"',
+    'from "./ai/ai-service.js"',
+    'from "./ai/trade-tools.js"'
   ]) ok(appSource.includes(token), `feature module import missing: ${token}`);
+  ok(appSource.includes('lazy(() => import("./features/strategy/strategy-lab.js")'), "Strategy Lab is not code-split");
 });
 
 await test("stage 8 feature UI stays extracted from app.js", () => {
@@ -299,12 +313,12 @@ await test("stage 8 feature UI stays extracted from app.js", () => {
     "function DecodeText("
   ]) ok(!appSource.includes(token), `stage 8 implementation drifted back into app.js: ${token}`);
 
-  for (const token of [
-    'from "./ui/brand.js?v=4.9.0"',
-    'from "./features/settings/settings-ui.js?v=4.9.0"',
-    'from "./features/coach/coach-ui.js?v=4.9.0"',
-    'from "./features/calibration/calibration-ui.js?v=4.9.0"'
-  ]) ok(appSource.includes(token), `stage 8 module import missing: ${token}`);
+  ok(appSource.includes('from "./ui/brand.js"'), "brand module import missing");
+  for (const feature of [
+    "./features/settings/settings-ui.js",
+    "./features/coach/coach-ui.js",
+    "./features/calibration/calibration-ui.js"
+  ]) ok(appSource.includes(`lazy(() => import("${feature}")`), `stage 8 lazy feature missing: ${feature}`);
 });
 
 
@@ -319,12 +333,14 @@ await test("modular extraction keeps every moved runtime dependency local or imp
 
   ok(journal.includes("useEffect") && journal.includes("const softLift") && journal.includes("function relTime"), "journal module lost extracted helpers");
   ok(journal.includes("export function pointToEmotions"), "pointToEmotions is not exported for analytics UI");
-  ok(strategy.includes('import { LogoSpinner }') && strategy.includes("export function normalizeStrategyResultByCloseType") && strategy.includes("export function strategyResultOutcome"), "strategy module lost shared runtime helpers");
+  ok(strategy.includes('import { LogoSpinner }') && strategy.includes('from "../../core/strategy-math.js"'), "strategy module lost shared runtime helpers");
+  ok(strategyMathSource.includes("export function normalizeStrategyResultByCloseType") && strategyMathSource.includes("export function strategyResultOutcome") && strategyMathSource.includes("export function calculateStrategyStats"), "strategy math extraction is incomplete");
   ok(calibration.includes("function useAnimatedNumber") && !calibration.includes("storageGet(HOME_ADVICE_KEY"), "calibration module contains unresolved app-level cache dependencies");
   ok(aiContext.includes("entriesWithRealizedRR") && aiContext.includes("st_median"), "AI context imports are incomplete");
   ok(review.includes("function emotionImpactStats") && review.includes("const EMOTION_IMPACT_HIGH"), "review module lost emotion-impact helpers");
   ok(strings.includes("function pluralRu"), "localized formatter dependency missing");
-  ok(dashboardUiSource.includes("async function getHomeAdvice") && dashboardUiSource.includes("async function getMarketSnapshot") && dashboardUiSource.includes("export function configureDashboardData"), "dashboard module lost Home cache helpers/storage adapter");
+  ok(dashboardUiSource.includes("async function getHomeAdvice") && dashboardUiSource.includes("async function getMarketSnapshot") && dashboardUiSource.includes('from "./dashboard-data.js"'), "dashboard module lost Home cache helpers/storage bridge");
+  ok(dashboardDataSource.includes("export function configureDashboardData") && dashboardDataSource.includes("export function dashboardStorageGet") && dashboardDataSource.includes("export function dashboardStorageSet"), "dashboard storage adapter extraction is incomplete");
   ok(appSource.includes("journalMediaStore.keys.entry(userId, id)"), "legacy media migration bypasses journal-media key adapter");
 });
 
@@ -336,10 +352,11 @@ await test("stage 9-11 dashboard/auth/shell UI stays extracted from app.js", () 
     "class AppErrorBoundary extends Component"
   ]) ok(!appSource.includes(token), `stage 9-11 implementation drifted back into app.js: ${token}`);
 
+  ok(appSource.includes('lazy(() => import("./features/dashboard/dashboard-ui.js")'), "dashboard UI is not code-split");
   for (const token of [
-    'from "./features/dashboard/dashboard-ui.js?v=4.9.0"',
-    'from "./features/auth/auth-ui.js?v=4.9.0"',
-    'from "./ui/app-shell.js?v=4.9.0"'
+    'from "./features/dashboard/dashboard-data.js"',
+    'from "./features/auth/auth-ui.js"',
+    'from "./ui/app-shell.js"'
   ]) ok(appSource.includes(token), `stage 9-11 module import missing: ${token}`);
 
   ok(appSource.includes("configureDashboardData({ storageGet, storageSet });"), "dashboard storage adapter is not configured");
@@ -348,12 +365,12 @@ await test("stage 9-11 dashboard/auth/shell UI stays extracted from app.js", () 
 await test("stage 9-11 moved modules keep their runtime dependencies explicit", () => {
   for (const token of [
     'import { useState, useMemo, useEffect, useRef } from "react"',
-    'from "../../core/trade-math.js?v=4.9.0"',
-    'from "../../core/journal-model.js?v=4.9.0"',
-    'from "../../analytics/trader-analytics.js?v=4.9.0"',
-    'from "../../ai/ai-service.js?v=4.9.0"',
-    'from "../../ai/context.js?v=4.9.0"',
-    'from "../journal/journal-ui.js?v=4.9.0"',
+    'from "../../core/trade-math.js"',
+    'from "../../core/journal-model.js"',
+    'from "../../analytics/trader-analytics.js"',
+    'from "../../ai/ai-service.js"',
+    'from "../../ai/context.js"',
+    'from "../journal/journal-ui.js"',
     "function calculateCalendarStats",
     "function useAnimatedNumber",
     "const outcomeColor",
@@ -362,9 +379,9 @@ await test("stage 9-11 moved modules keep their runtime dependencies explicit", 
 
   for (const token of [
     'import { Component, useState, useRef, useEffect } from "react"',
-    'from "../core/trade-math.js?v=4.9.0"',
-    'from "./brand.js?v=4.9.0"',
-    'from "./primitives.js?v=4.9.0"',
+    'from "../core/trade-math.js"',
+    'from "./brand.js"',
+    'from "./primitives.js"',
     "const relTime",
     "var SPLASH_POSTER_IMG",
     "function WalletSheet",
@@ -373,7 +390,7 @@ await test("stage 9-11 moved modules keep their runtime dependencies explicit", 
 
   for (const token of [
     'import { useState, useEffect } from "react"',
-    'from "../../ui/brand.js?v=4.9.0"',
+    'from "../../ui/brand.js"',
     "function AuthScreen",
     "function LegacyMigratePrompt",
     "function BootIntro"
@@ -508,6 +525,8 @@ await test("profile-store chunks journal + coin ledger and reconstructs the exac
   };
 
   const saved = await store.save("u1", profile);
+  eq(saved.profile.journal.entries.length, entries.length, "save() returned a chunk-stripped journal shadow");
+  eq(saved.profile.wallet.coinLedger.length, coinLedger.length, "save() returned a chunk-stripped ledger shadow");
   ok(saved.journalChunkCount > 1, "large journal was not chunked");
   ok(saved.ledgerChunkCount > 1, "large coin ledger was not chunked");
   ok(!docs.has("mind-exe-journal-state:u1"), "legacy whole-profile document was written");
@@ -1360,7 +1379,7 @@ await test("journal/full reset handlers are cloud-first and full reset clears au
 });
 
 await test("app routes Strategy index and direct-trade writes through revisioned Strategy store", () => {
-  ok(appSource.includes('from "./core/strategy-store.js?v=4.9.0"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/strategy-store.js"'), "strategy-store import missing");
   const loadStart = appSource.indexOf("async function loadStrategyLabState");
   const loadEnd = appSource.indexOf("async function saveStrategyTradeRecord", loadStart);
   const block = appSource.slice(loadStart, loadEnd);
@@ -1438,10 +1457,15 @@ await test("profile revision conflict freezes cloud writes and requires reload",
   ok(block.includes("canPersistRef.current = false;"), "conflict does not freeze further writes");
 });
 
-await test("profile load failure remains blocking instead of showing an empty journal", () => {
-  ok(source.includes('setProfileDataError({ kind: "load"'), "load error state missing");
-  ok(source.includes("!profileDataError && introResolved && !showBootIntro"), "main app not guarded");
-  ok(appShellSource.includes("function ProfileLoadErrorScreen"), "load-error screen missing");
+await test("cached profile bootstrap stays read-only until cloud revision is verified", () => {
+  ok(appSource.includes("readDirectProfileShadow(userId, { requireConfirmed: true })"), "fast local profile bootstrap does not require a cloud-confirmed shadow");
+  ok(appSource.includes('setProfileBootstrapSource("shadow")'), "local shadow is not identified as a bootstrap source");
+  ok(appSource.includes("canPersistRef.current = false;"), "profile writes are not disabled before cloud verification");
+  ok(appSource.includes("setCloudProfileReady(true)"), "cloud verification never unlocks the profile");
+  ok(appSource.includes('setProfileDataError({ kind: "load"') && appSource.includes("cached: bootstrapLoaded"), "cloud failure does not preserve a verified cached read-only view");
+  ok(appSource.includes("cachedReadOnly") && appSource.includes('className: "fixed inset-0 z-[110]"'), "cached profile has no interaction blocker");
+  ok(appSource.includes("!cloudProfileReady") && appSource.includes('profileBootstrapSource === "shadow"'), "read-only state is not tied to cloud readiness");
+  ok(appShellSource.includes("function ProfileLoadErrorScreen"), "blocking load-error screen missing for users without a shadow");
 });
 
 await test("uncertain cloud write still freezes newer writes in the session", () => {
@@ -1490,13 +1514,13 @@ await test("core logic stays extracted instead of drifting back into app.js", ()
     "function migrateEntry(",
     "function normalizeEmotions("
   ]) ok(!appSource.includes(token), `core implementation drifted back into app.js: ${token}`);
-  ok(appSource.includes('from "./core/trade-math.js?v=4.9.0"'), "trade-math import missing");
-  ok(appSource.includes('from "./core/stats.js?v=4.9.0"'), "stats import missing");
-  ok(appSource.includes('from "./core/journal-model.js?v=4.9.0"'), "journal-model import missing");
-  ok(appSource.includes('from "./core/firestore-storage.js?v=4.9.0"'), "firestore-storage import missing");
-  ok(appSource.includes('from "./core/journal-media.js?v=4.9.0"'), "journal-media import missing");
-  ok(appSource.includes('from "./core/profile-store.js?v=4.9.0"'), "profile-store import missing");
-  ok(appSource.includes('from "./core/strategy-store.js?v=4.9.0"'), "strategy-store import missing");
+  ok(appSource.includes('from "./core/trade-math.js"'), "trade-math import missing");
+  ok(appSource.includes('from "./core/stats.js"'), "stats import missing");
+  ok(appSource.includes('from "./core/journal-model.js"'), "journal-model import missing");
+  ok(appSource.includes('from "./core/firestore-storage.js"'), "firestore-storage import missing");
+  ok(appSource.includes('from "./core/journal-media.js"'), "journal-media import missing");
+  ok(appSource.includes('from "./core/profile-store.js"'), "profile-store import missing");
+  ok(appSource.includes('from "./core/strategy-store.js"'), "strategy-store import missing");
   ok(!appSource.includes("async function loadMedia("), "journal media loader drifted back into app.js");
   ok(!appSource.includes("async function saveMedia("), "journal media writer drifted back into app.js");
   ok(!/^(?!\s*\/\/).*__mediaReadyIds/m.test(appSource), "journal media private cache leaked back into app.js");
@@ -1506,28 +1530,934 @@ await test("final runtime extraction dependencies are explicit", () => {
   ok(!appSource.includes("SPLASH_BLACKHOLE_MASK"), "dead splash mask reference returned to app.js");
   ok(!appShellSource.includes("SPLASH_BLACKHOLE_MASK"), "dead splash mask payload returned to app shell");
   ok(authUiSource.includes('import { Fragment, jsx, jsxs } from "react/jsx-runtime"'), "auth Fragment import missing");
-  ok(authUiSource.includes('import { Card } from "../../ui/primitives.js?v=4.9.0"'), "auth Card import missing");
-  ok(dashboardUiSource.includes('import { JournalReview } from "../calibration/calibration-ui.js?v=4.9.0"'), "dashboard JournalReview import missing");
+  ok(authUiSource.includes('import { Card } from "../../ui/primitives.js"'), "auth Card import missing");
+  ok(dashboardUiSource.includes('import { JournalReview } from "../calibration/calibration-ui.js"'), "dashboard JournalReview import missing");
 });
 
-await test("final typography and cache generation stay consolidated", () => {
-  ok(indexSource.includes("family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700"), "final font preload missing");
-  ok(appSource.includes("--font-display: 'Inter'"), "UI font is not Inter");
-  ok(appSource.includes("--font-mono: 'IBM Plex Mono'"), "numeric font is not IBM Plex Mono");
-  ok(indexSource.includes('./app.js?v=4.9.0-final'), "final app cache generation missing");
-  const localImports = source.match(/from ["'](?:\.\.?\/)[^"']+\.js(?:\?v=[^"']+)?["']/g) || [];
-  const stale = localImports.filter((spec) => !spec.includes("?v=4.9.0"));
-  ok(stale.length === 0, `local module cache generations are mixed: ${stale.slice(0, 8).join(", ")}`);
+await test("final typography and static production CSS stay consolidated", () => {
+  ok(appSource.includes("--font-display: 'Inter'"), "UI font stack lost Inter/system fallback");
+  ok(appSource.includes("--font-mono: 'IBM Plex Mono'"), "numeric font stack lost IBM Plex Mono/system fallback");
+  ok(indexSource.includes('rel="stylesheet" href="./styles.css"'), "compiled stylesheet is not loaded by the app shell");
+  ok(!indexSource.includes("fonts.googleapis.com"), "startup still blocks on Google Fonts");
+  ok(!indexSource.includes("cdn.tailwindcss.com"), "runtime Tailwind CDN returned");
+  const localImports = source.match(/(?:from\s+|import\()\s*["'](?:\.\.?\/)[^"']+\.js(?:\?[^"']+)?["']/g) || [];
+  const versioned = localImports.filter((spec) => spec.includes("?v="));
+  ok(versioned.length === 0, `local module imports still depend on manual cache-buster versions: ${versioned.slice(0, 8).join(", ")}`);
+  ok(stylesSource.length > 20000 && stylesSource.length < 250000, "compiled Tailwind CSS size is implausible");
 });
 
 await test("final startup shell fails visibly and splash assets stay external", () => {
   ok(indexSource.includes('id="boot-fallback"'), "pre-React boot fallback missing");
   ok(indexSource.includes('__mindExeBootTimer'), "boot failure timer missing");
   ok(appSource.includes('window.__mindExeStarted = true'), "React startup acknowledgement missing");
-  ok(indexSource.includes('./manifest.json?v=4.9.0'), "manifest cache generation not bumped");
-  ok(appShellSource.includes('var SPLASH_POSTER_IMG = "./splash-poster.jpg?v=4.9.0";'), "splash poster is not an external release asset");
-  ok(appShellSource.includes('var SPLASH_VIDEO_SRC = "./splash.mp4?v=4.9.0";'), "splash video cache generation is stale");
+  ok(indexSource.includes('rel="manifest" href="%BASE_URL%manifest.json"'), "manifest link missing");
+  ok(appShellSource.includes('var SPLASH_POSTER_IMG = "./splash-poster.jpg";'), "splash poster is not an external release asset");
+  ok(appShellSource.includes('var SPLASH_VIDEO_SRC = "./splash.mp4";'), "splash video is not an external release asset");
   ok(!appShellSource.includes('data:image/jpeg;base64,'), "large splash poster drifted back into JavaScript");
+});
+
+await test("Decision Lab model keeps logical weight and emotion independent and locks the pre-trade snapshot", async () => {
+  const mod = await import(new URL("../core/decision-model.js?v=test", import.meta.url));
+  let s = mod.createDecisionSession({ id: "d1", mode: "direction", now: 1000, clarityBefore: 20 });
+  s = mod.setDecisionArguments(s, [{
+    id: "a1", rawText: "старший тф вниз", normalizedText: "Старший ТФ вниз",
+    side: "short", factorGroup: "market_structure", factorId: "higher_timeframe_trend",
+    weight: 90, weightRated: true, emotionIntensity: 15, emotionRated: true, emotionTag: "calm", isDecisive: true
+  }], 1100);
+  s = { ...s, preDecisionState: { ...s.preDecisionState, clarityAfter: 80, clarityAfterRated: true, decisionConfidence: 70, decisionConfidenceRated: true }, finalDecision: "short" };
+  const locked = mod.lockDecisionSession(s, 1200);
+  eq(locked.arguments[0].weight, 90, "logical weight changed while locking");
+  eq(locked.arguments[0].emotionIntensity, 15, "emotion intensity changed while locking");
+  eq(mod.decisionClarityDelta(locked), 60, "clarity delta is wrong");
+  let threw = false;
+  try {
+    mod.assertDecisionMutationAllowed(locked, { ...locked, arguments: [{ ...locked.arguments[0], weight: 10 }] });
+  } catch (e) {
+    threw = e?.message === "decision_locked_snapshot_mutation";
+  }
+  ok(threw, "locked decision snapshot can be rewritten after the fact");
+});
+
+await test("Decision Lab cloud store uses per-session CAS and atomically updates its index", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=test", import.meta.url));
+  const { createDecisionSession } = await import(new URL("../core/decision-model.js?v=test", import.meta.url));
+  const docs = new Map();
+  const ref = (key) => ({ key });
+  const snap = (key) => ({ exists: () => docs.has(key), data: () => docs.get(key) });
+  const store = createDecisionStore({
+    storageGet: async (key) => docs.has(key) ? { value: docs.get(key).value, updatedAt: docs.get(key).updatedAt } : null,
+    storageDelete: async (key) => { docs.delete(key); },
+    getDocRef: (key) => ref(key),
+    runTransaction: async (_db, fn) => fn({
+      get: async (r) => snap(r.key),
+      set: (r, value) => docs.set(r.key, value)
+    }),
+    db: {},
+    now: (() => { let t = 1000; return () => ++t; })()
+  });
+  const created = await store.saveSession("u1", createDecisionSession({ id: "d1", mode: "direction", now: 500 }));
+  eq(created.persistenceRevision, 1, "first Decision revision is not 1");
+  const stale = structuredClone(created);
+  const newer = await store.saveSession("u1", { ...created, symbol: "BTCUSDT" });
+  eq(newer.persistenceRevision, 2, "Decision revision did not increment");
+  let conflict = false;
+  try { await store.saveSession("u1", { ...stale, symbol: "ETHUSDT" }); }
+  catch (e) { conflict = e?.message === "decision_revision_conflict"; }
+  ok(conflict, "stale Decision client overwrote a newer session");
+  const index = await store.loadIndex("u1");
+  eq(index.sessions.length, 1, "Decision index did not receive session row");
+  eq(index.sessions[0].symbol, "BTCUSDT", "Decision index does not reflect committed session");
+});
+
+await test("Decision organizer validator cannot invent taxonomy ids, weights or emotions", async () => {
+  const { validateDecisionOrganizerResponse } = await import(new URL("../core/decision-organizer-model.js?v=test", import.meta.url));
+  const rows = validateDecisionOrganizerResponse({ arguments: [{
+    rawText: "глобально вниз",
+    normalizedText: "Глобальный тренд вниз",
+    side: "short",
+    factorGroup: "made_up_group",
+    factorId: "made_up_factor",
+    weight: 100, weightRated: true, emotionIntensity: 99, emotionRated: true
+  }] }, "direction", "voice");
+  eq(rows.length, 1, "valid organizer row disappeared");
+  eq(rows[0].factorId, "other", "unknown AI factor id escaped taxonomy");
+  eq(rows[0].factorGroup, "other", "unknown AI factor group escaped taxonomy");
+  eq(rows[0].weight, null, "AI was allowed to assign logical weight");
+  eq(rows[0].weightRated, false, "AI marked logical weight as user-rated");
+  eq(rows[0].emotionIntensity, null, "AI was allowed to assign emotion intensity");
+  eq(rows[0].emotionRated, false, "AI marked emotion as user-rated");
+});
+
+await test("Decision analytics separates factor performance by emotional intensity without mixing non-R results", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=test", import.meta.url));
+  const analyticsMod = await import(new URL("../core/decision-analytics.js?v=test", import.meta.url));
+  const sessions = [];
+  const trades = [];
+  for (let i = 0; i < 10; i++) {
+    let s = model.createDecisionSession({ id: `d${i}`, mode: "direction", now: 1000 + i, clarityBefore: 30 });
+    s = model.setDecisionArguments(s, [{
+      id: `a${i}`, rawText: "старший тф вниз", normalizedText: "Старший ТФ вниз",
+      side: "short", factorGroup: "market_structure", factorId: "higher_timeframe_trend",
+      weight: 90, weightRated: true, emotionIntensity: i < 5 ? 10 : 90, emotionRated: true, emotionTag: i < 5 ? "calm" : "fear",
+      isDecisive: true
+    }]);
+    s = model.lockDecisionSession({ ...s, preDecisionState: { clarityBefore: 30, clarityBeforeRated: true, clarityAfter: 80, clarityAfterRated: true, decisionConfidence: 70 , decisionConfidenceRated: true }, finalDecision: "short" });
+    sessions.push({ ...s, linkedTradeId: `t${i}`, status: "linked" });
+    trades.push({ id: `t${i}`, status: "closed", outcome: i < 5 ? "Win" : "Loss", realizedRR: i < 5 ? 1 : -1, resultMode: "R", r: i < 5 ? 1 : -1 });
+  }
+  const result = analyticsMod.buildDecisionAnalytics(sessions, trades, "ru");
+  const factor = result.factors.find((f) => f.factorId === "higher_timeframe_trend");
+  ok(factor, "factor analytics missing");
+  eq(factor.emotionBands.low.sample, 5, "low-emotion sample wrong");
+  eq(factor.emotionBands.high.sample, 5, "high-emotion sample wrong");
+  eq(factor.emotionBands.low.averageR, 1, "low-emotion R wrong");
+  eq(factor.emotionBands.high.averageR, -1, "high-emotion R wrong");
+  ok(analyticsMod.buildDecisionInsights(result, "ru").length >= 1, "emotion/factor gap was not surfaced after sufficient sample");
+});
+
+await test("Decision Lab stays modular and links to Journal with only decisionSessionId", () => {
+  ok(appSource.includes('lazy(() => import("./features/decision-lab/decision-lab-ui.js")'), "Decision Lab UI is not lazy-loaded as a feature module");
+  ok(appSource.includes('from "./core/decision-store.js"'), "Decision store is not isolated in core");
+  ok(appSource.includes("decisionStore.linkTrade"), "Decision-to-Journal link is missing");
+  ok(journalUiSource.includes("decisionSessionId: prefill?.decisionSessionId || null"), "Journal entry does not preserve Decision link id");
+  ok(!appSource.includes("function DecisionLab("), "Decision Lab implementation drifted into app.js");
+});
+
+
+await test("Decision post-review reweights arguments without rewriting the locked pre-trade snapshot", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=post-review-test", import.meta.url));
+  let s = model.createDecisionSession({ id: "post1", mode: "direction", now: 1000, clarityBefore: 25 });
+  s = model.setDecisionArguments(s, [{
+    id: "a1", rawText: "старший тф вниз", normalizedText: "Старший ТФ вниз",
+    side: "short", factorGroup: "market_structure", factorId: "higher_timeframe_trend",
+    weight: 90, weightRated: true, emotionIntensity: 80, emotionRated: true, emotionTag: "fear", isDecisive: true
+  }], 1100);
+  s = model.lockDecisionSession({ ...s, preDecisionState: { clarityBefore: 25, clarityBeforeRated: true, clarityAfter: 75, clarityAfterRated: true, decisionConfidence: 70 , decisionConfidenceRated: true }, finalDecision: "short" }, 1200);
+  s = { ...s, status: "linked", linkedTradeId: "t1" };
+  const reviewed = model.setDecisionPostReview(s, {
+    outcomeAssessment: "logic_invalid",
+    note: "Переоценил старший ТФ",
+    argumentReviews: [{ argumentId: "a1", weightAfter: 55, emotionAfter: 25, assessment: "overestimated" }]
+  }, 1300);
+  eq(reviewed.status, "reviewed", "post-review did not move session to reviewed status");
+  eq(reviewed.arguments[0].weight, 90, "post-review rewrote original weight");
+  eq(reviewed.arguments[0].emotionIntensity, 80, "post-review rewrote original emotion");
+  eq(reviewed.postReview.argumentReviews[0].weightAfter, 55, "post-review weightAfter missing");
+  model.assertDecisionMutationAllowed(s, reviewed);
+});
+
+await test("Decision analytics tracks post-review over/under-weighting separately from pre-trade data", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=review-analytics-test", import.meta.url));
+  const analyticsMod = await import(new URL("../core/decision-analytics.js?v=review-analytics-test", import.meta.url));
+  const sessions = [];
+  const trades = [];
+  for (let i = 0; i < 5; i++) {
+    let s = model.createDecisionSession({ id: `r${i}`, mode: "direction", now: 2000 + i, clarityBefore: 30 });
+    s = model.setDecisionArguments(s, [{
+      id: `a${i}`, rawText: "уровень", normalizedText: "Уровень поддержки",
+      side: "long", factorGroup: "price_level", factorId: "support",
+      weight: 85, weightRated: true, emotionIntensity: 20, emotionRated: true, emotionTag: "calm", isDecisive: true
+    }]);
+    s = model.lockDecisionSession({ ...s, preDecisionState: { clarityBefore: 30, clarityBeforeRated: true, clarityAfter: 70, clarityAfterRated: true, decisionConfidence: 65 , decisionConfidenceRated: true }, finalDecision: "long" });
+    s = { ...s, status: "linked", linkedTradeId: `tr${i}` };
+    s = model.setDecisionPostReview(s, {
+      outcomeAssessment: "logic_invalid",
+      argumentReviews: [{ argumentId: `a${i}`, weightAfter: 55, emotionAfter: 10, assessment: "overestimated" }]
+    });
+    sessions.push(s);
+    trades.push({ id: `tr${i}`, status: "closed", outcome: "Loss", realizedRR: -1, resultMode: "R", r: -1 });
+  }
+  const analytics = analyticsMod.buildDecisionAnalytics(sessions, trades, "ru");
+  const support = analytics.factors.find((f) => f.factorId === "support");
+  eq(support.postReview.sample, 5, "post-review sample missing from factor analytics");
+  eq(support.postReview.averageWeightDelta, -30, "post-review weight delta is wrong");
+  ok(analyticsMod.buildDecisionInsights(analytics, "ru").some((x) => x.type === "post_review_weight_gap"), "repeated post-review reweighting was not surfaced");
+});
+
+await test("Decision store can load all sessions, save post-review and restore missing backup sessions non-destructively", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=stage2-store-test", import.meta.url));
+  const model = await import(new URL("../core/decision-model.js?v=stage2-store-test", import.meta.url));
+  const docs = new Map();
+  const ref = (key) => ({ key });
+  const snap = (key) => ({ exists: () => docs.has(key), data: () => docs.get(key) });
+  const store = createDecisionStore({
+    storageGet: async (key) => docs.has(key) ? { value: docs.get(key).value, updatedAt: docs.get(key).updatedAt } : null,
+    storageDelete: async (key) => { docs.delete(key); },
+    getDocRef: (key) => ref(key),
+    runTransaction: async (_db, fn) => fn({ get: async (r) => snap(r.key), set: (r, value) => docs.set(r.key, value) }),
+    db: {},
+    now: (() => { let t = 3000; return () => ++t; })()
+  });
+  let s = model.createDecisionSession({ id: "restore1", mode: "direction", now: 1000 });
+  s = model.setDecisionArguments(s, [{ id: "a1", rawText: "btc слабый", normalizedText: "BTC слабый", side: "short", factorGroup: "market_context", factorId: "btc_weakness", weight: 80, weightRated: true, emotionIntensity: 10 , emotionRated: true}]);
+  s = model.lockDecisionSession({ ...s, preDecisionState: { clarityBefore: 40, clarityBeforeRated: true, clarityAfter: 75, clarityAfterRated: true, decisionConfidence: 65 , decisionConfidenceRated: true }, finalDecision: "short" });
+  const saved = await store.saveSession("u1", s);
+  const linked = await store.linkTrade("u1", saved.id, "trade1");
+  const reviewed = await store.savePostReview("u1", linked.id, { outcomeAssessment: "logic_valid", argumentReviews: [{ argumentId: "a1", weightAfter: 80, emotionAfter: 5, assessment: "accurate" }] });
+  const all = await store.loadAllSessions("u1", { strict: true });
+  eq(all.length, 1, "loadAllSessions lost session");
+  eq(all[0].status, "reviewed", "saved post-review not readable");
+  const restore = await store.restoreSessions("u2", [reviewed]);
+  eq(restore.created, 1, "backup restore did not create missing decision session");
+  const restoreAgain = await store.restoreSessions("u2", [{ ...reviewed, symbol: "MUTATED" }]);
+  eq(restoreAgain.skipped, 1, "existing decision snapshot was not protected during restore");
+  const existing = await store.loadSession("u2", reviewed.id);
+  ok(existing.symbol !== "MUTATED", "restore rewrote an existing immutable decision snapshot");
+});
+
+await test("Journal renders linked Decision snapshot and post-review through isolated Decision feature UI", () => {
+  const panelSource = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-trade-panel.js"), "utf8");
+  const analyticsUiSource = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-analytics-ui.js"), "utf8");
+  ok(journalUiSource.includes('from "../decision-lab/decision-trade-panel.js"'), "Journal does not use isolated Decision trade panel");
+  ok(journalUiSource.includes("e.decisionSessionId && decisionStore && decisionUserId"), "linked Decision panel is not rendered in Journal");
+  ok(panelSource.includes("store.savePostReview"), "post-review save path missing from Decision trade panel");
+  ok(panelSource.includes("store.linkTrade"), "Decision trade panel cannot retry a failed trade link");
+  ok(analyticsUiSource.includes("buildDecisionAnalytics") && analyticsUiSource.includes("buildDecisionInsights"), "Decision analytics UI is not backed by pure analytics engine");
+});
+
+await test("full backup exports/restores Decision Lab and journal import preserves decisionSessionId", () => {
+  const exportSection = appSource.slice(appSource.indexOf("const exportFullBackup"), appSource.indexOf("const importFullBackup"));
+  const importSection = appSource.slice(appSource.indexOf("const importFullBackup"), appSource.indexOf("const resetJournal"));
+  const sanitizeFn = extractFunction("sanitizeImportedEntry");
+  ok(exportSection.includes("payload.decisionLab"), "full backup does not export Decision Lab");
+  ok(exportSection.includes("decisionStore.loadAllSessions"), "Decision backup export does not load full session records");
+  ok(importSection.includes("decisionStore.restoreSessions"), "full backup restore ignores Decision Lab");
+  ok(sanitizeFn.includes("decisionSessionId"), "journal import drops Decision-to-trade link");
+});
+
+await test("Decision Lab Stage 2 stays modular and exposes analytics without growing app.js", () => {
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(decisionUi.includes('from "./decision-analytics-ui.js"'), "Decision analytics UI is not modularized");
+  ok(decisionUi.includes("store.loadAllSessions"), "Decision analytics cannot load persisted sessions");
+  ok(appSource.includes("trades: entries"), "Decision analytics does not receive Journal outcomes");
+  ok(appSource.split(/\r?\n/).length < 3100, "app.js grew back beyond the intended orchestration range");
+});
+
+
+await test("startup path no longer stacks long splash + intro and uses bounded profile retries", () => {
+  ok(appSource.includes("const STARTUP_SPLASH_FADE_MS = 1900;"), "short splash fade budget missing");
+  ok(appSource.includes("const STARTUP_SPLASH_HIDE_MS = 2500;"), "short splash hide budget missing");
+  ok(!appSource.includes("setSplashFading(true), 5500"), "legacy 5.5s splash delay returned");
+  ok(!appSource.includes("setShowSplash(false), 6400"), "legacy 6.4s splash delay returned");
+  ok(appSource.includes("showIntroAfterExplicitAuthRef"), "returning-session BootIntro gate missing");
+  ok(appSource.includes("const PROFILE_LOAD_TIMEOUT_MS = 10000;"), "profile timeout is not bounded to 10s");
+  ok(appSource.includes("const PROFILE_LOAD_MAX_RETRIES = 1;"), "profile load still retries too many times");
+  ok(indexSource.includes("window.__mindExePageStartedAt = performance.now()"), "navigation-relative splash timer missing");
+  ok(!indexSource.includes("esm.sh"), "runtime esm.sh dependency returned");
+  ok(!indexSource.includes("www.gstatic.com/firebasejs"), "runtime Firebase CDN dependency returned");
+  ok(!indexSource.includes('type="importmap"'), "runtime import map returned after Vite migration");
+  ok(fs.statSync(path.join(root, "splash.mp4")).size < 700 * 1024, "splash video is still too large for startup");
+});
+
+await test("profile-store reads immutable revision chunks concurrently without changing reconstruction", async () => {
+  const { createProfileStore } = await import(new URL("../core/profile-store.js?v=parallel-load-test", import.meta.url));
+  const docs = new Map();
+  const uid = "u-par";
+  const base = "mind-exe-journal-state";
+  const rev = "r1";
+  docs.set(`${base}:split:${uid}:manifest`, JSON.stringify({ version:1, activeRevision:rev, history:[], sequence:1, updatedAt:null, journalResetAt:null, fullResetAt:null }));
+  docs.set(`${base}:split:${uid}:rev:${rev}:core`, JSON.stringify({
+    version:1, revisionId:rev, schemaVersion:2, createdAt:"2026-01-01T00:00:00.000Z",
+    journalChunkCount:3, ledgerChunkCount:2, entryCount:3, ledgerCount:2,
+    profile:{ version:2, user:{name:"P"}, journal:{entries:[]}, settings:{}, progress:{}, wallet:{coinLedger:[]} }
+  }));
+  for (let i = 0; i < 3; i++) docs.set(`${base}:split:${uid}:rev:${rev}:journal:${i}`, JSON.stringify({version:1,revisionId:rev,kind:"journal",index:i,items:[{id:`e${i}`}]}));
+  for (let i = 0; i < 2; i++) docs.set(`${base}:split:${uid}:rev:${rev}:ledger:${i}`, JSON.stringify({version:1,revisionId:rev,kind:"ledger",index:i,items:[{id:`c${i}`}]}));
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const storageGet = async (key) => {
+    inFlight += 1;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise((r) => setTimeout(r, 8));
+    inFlight -= 1;
+    return docs.has(key) ? { key, value: docs.get(key) } : null;
+  };
+  const store = createProfileStore({
+    storageGet,
+    storageSet: async () => {},
+    storageDelete: async () => {},
+    getDocRef: (key) => ({key}),
+    runTransaction: async () => {},
+    db: {},
+    profileBaseKey: base,
+    schemaVersion: 2,
+    logger: {warn(){}}
+  });
+  const loaded = await store.load(uid);
+  eq(loaded.profile.journal.entries.map((x) => x.id).join(","), "e0,e1,e2", "parallel journal read changed order");
+  eq(loaded.profile.wallet.coinLedger.map((x) => x.id).join(","), "c0,c1", "parallel ledger read changed order");
+  ok(maxInFlight >= 5, `revision chunks were not loaded concurrently (max=${maxInFlight})`);
+});
+
+await test("Decision-linked journal cards lazy-load cloud snapshots only when expanded", () => {
+  const panelSource = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-trade-panel.js"), "utf8");
+  ok(panelSource.includes("const [expanded, setExpanded] = useState(false)"), "Decision trade panel still expands eagerly");
+  ok(!panelSource.includes("useEffect(() => { load(); }"), "Decision trade panel still fires a Firestore read on every Journal mount");
+  ok(panelSource.includes("if (next && !session && !loading) load();"), "Decision snapshot is not loaded on demand");
+});
+
+await test("MediaRecorder failures always release microphone tracks", async () => {
+  const { createAudioRecorder } = await import(new URL("../audio/audio-recorder.js?v=cleanup-test", import.meta.url));
+  let stopped = 0;
+  const stream = { getTracks: () => [{ stop: () => { stopped += 1; } }] };
+  class FailingRecorder {
+    static isTypeSupported() { return true; }
+    constructor() { this.state = "inactive"; this.mimeType = "audio/mp4"; this.error = new Error("recorder_fail"); }
+    start() { this.state = "recording"; }
+    stop() { this.state = "inactive"; this.onerror?.(); }
+  }
+  const recorder = createAudioRecorder({
+    navigatorObj: { mediaDevices: { getUserMedia: async () => stream } },
+    MediaRecorderImpl: FailingRecorder,
+    now: (() => { let n = 0; return () => ++n; })()
+  });
+  await recorder.start();
+  let failed = false;
+  try { await recorder.stop(); } catch (e) { failed = e.message === "recorder_fail"; }
+  ok(failed, "failing recorder did not reject");
+  eq(stopped, 1, "microphone track was not released after recorder failure");
+});
+
+await test("Decision Lab UI is code-split out of the initial local module graph", () => {
+  ok(appSource.includes('lazy(() => import("./features/decision-lab/decision-lab-ui.js")'), "Decision Lab is not lazy-loaded");
+  ok(appSource.includes("jsx(Suspense"), "lazy Decision Lab has no Suspense boundary");
+});
+
+await test("Decision analytics counts one canonical factor observation per decision", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=dedupe-factor-test", import.meta.url));
+  const analyticsMod = await import(new URL("../core/decision-analytics.js?v=dedupe-factor-test", import.meta.url));
+  let s = model.createDecisionSession({ id: "dup-factor", mode: "direction", now: 1000, clarityBefore: 40 });
+  s = model.setDecisionArguments(s, [
+    { id:"a1", rawText:"дневка вниз", normalizedText:"Дневка вниз", side:"short", factorGroup:"market_structure", factorId:"higher_timeframe_trend", weight: 60, weightRated: true, emotionIntensity: 20 , emotionRated: true},
+    { id:"a2", rawText:"старший тф медвежий", normalizedText:"Старший ТФ медвежий", side:"short", factorGroup:"market_structure", factorId:"higher_timeframe_trend", weight: 90, weightRated: true, emotionIntensity: 10, emotionRated: true, isDecisive:true }
+  ]);
+  s = model.lockDecisionSession({ ...s, preDecisionState: { clarityBefore: 40, clarityBeforeRated: true, clarityAfter: 75, clarityAfterRated: true, decisionConfidence: 70 , decisionConfidenceRated: true }, finalDecision:"short" });
+  s = { ...s, status:"linked", linkedTradeId:"t1" };
+  const a = analyticsMod.buildDecisionAnalytics([s], [{ id:"t1", status:"closed", outcome:"Win", realizedRR:1, resultMode:"R", r:1 }], "ru");
+  const f = a.factors.find((x) => x.factorId === "higher_timeframe_trend");
+  eq(f.usageCount, 1, "canonical factor usage counted duplicate thoughts as separate decisions");
+  eq(f.argumentCount, 2, "raw argument count should still preserve both thoughts");
+  eq(f.performance.sample, 1, "one trade was counted multiple times in factor performance");
+  eq(f.averageWeight, 90, "representative factor reading did not prefer decisive/highest-weight argument");
+});
+
+
+
+await test("AI request runtime rejects duplicate in-flight operations and records privacy-safe timings", async () => {
+  const rt = await import(new URL("../core/ai-request-runtime.js?v=runtime-test", import.meta.url));
+  let release;
+  const gate = new Promise((r) => { release = r; });
+  const first = rt.runAiRequest({ key:"dup", operation:"TEST_AI", timeoutMs:1000, execute:()=>gate });
+  let duplicate = false;
+  try { await rt.runAiRequest({ key:"dup", operation:"TEST_AI", execute:async()=>"x" }); } catch (e) { duplicate = e.message === "ai_operation_in_progress"; }
+  ok(duplicate, "duplicate AI request was allowed");
+  release("ok"); eq(await first, "ok", "original AI request failed after duplicate rejection");
+});
+
+await test("Vision recognition gates low-confidence fields", () => {
+  const src = fs.readFileSync(path.join(root, "ai", "trade-tools.js"), "utf8");
+  ok(src.includes("const CONFIDENT = 0.72"), "vision has no confidence threshold");
+  ok(src.includes("uncertainFields"), "vision does not surface uncertain fields");
+});
+
+await test("Journal polish protects newer manual text and distinguishes unchanged output", () => {
+  const src = fs.readFileSync(path.join(root, "features", "journal", "journal-ui.js"), "utf8");
+  ok(src.includes("latestTextRef.current"), "polish can overwrite newer manual text");
+  ok(src.includes("Текст уже выглядит нормально"), "unchanged polish result is indistinguishable from failure");
+  ok(src.includes("ответ ИИ не применён"), "stale polish response has no safe user feedback");
+});
+
+await test("Settings exposes privacy-safe local performance diagnostics", () => {
+  const src = fs.readFileSync(path.join(root, "features", "settings", "settings-ui.js"), "utf8");
+  ok(src.includes("getPerformanceTrace"), "diagnostics trace is not exposed in settings");
+  ok(src.includes("Только локальные тайминги"), "diagnostics privacy explanation missing");
+});
+
+await test("Home defers non-critical AI/network work after initial interaction", () => {
+  const src = fs.readFileSync(path.join(root, "features", "dashboard", "dashboard-ui.js"), "utf8");
+  ok(src.includes("}, 1400)"), "market snapshot still starts immediately on Home mount");
+  ok(src.includes("}, 1800)"), "home advice still starts immediately on Home mount");
+});
+
+
+
+await test("Decision transcript corrections remain canonical when a later voice/text fragment is appended", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=transcript-hardening-test", import.meta.url));
+  let s = model.createDecisionSession({ id:"transcript1", mode:"direction", now:1000 });
+  s = model.addDecisionTranscriptSegment(s, "биткоин выглядит сильно", "voice", 1100);
+  s = model.setDecisionTranscript(s, "BTC выглядит слабо", 1200);
+  s = model.addDecisionTranscriptSegment(s, "Но старший ТФ направлен вниз", "voice", 1300);
+  ok(s.rawInput.combinedTranscript.startsWith("BTC выглядит слабо"), "manual transcript correction was rebuilt from stale source segments");
+  ok(s.rawInput.combinedTranscript.includes("Но старший ТФ направлен вниз"), "later transcript fragment was not appended");
+  ok(!s.rawInput.combinedTranscript.includes("биткоин выглядит сильно"), "stale pre-correction transcript resurfaced");
+  eq(s.rawInput.transcriptEdited, true, "manual transcript correction flag was lost");
+});
+
+await test("Decision lock refuses synthetic defaults and analytics excludes legacy unrated values", async () => {
+  const model = await import(new URL("../core/decision-model.js?v=rating-provenance-test", import.meta.url));
+  const analyticsMod = await import(new URL("../core/decision-analytics.js?v=rating-provenance-test", import.meta.url));
+  let draft = model.createDecisionSession({ id:"unrated-lock", mode:"direction", now:1000 });
+  draft = model.setDecisionArguments(draft, [{
+    id:"a1", rawText:"уровень", normalizedText:"Уровень поддержки", side:"long",
+    factorGroup:"price_level", factorId:"support", weight:null, emotionIntensity:null
+  }]);
+  draft = { ...draft, finalDecision:"long", preDecisionState:{
+    ...draft.preDecisionState,
+    clarityBefore:50, clarityBeforeRated:false,
+    clarityAfter:50, clarityAfterRated:false,
+    decisionConfidence:50, decisionConfidenceRated:false
+  }};
+  const checked = model.validateDecisionForLock(draft);
+  ok(!checked.ok, "unrated Decision draft was allowed to lock");
+
+  const legacy = model.normalizeDecisionSession({
+    id:"legacy-unrated", schemaVersion:1, mode:"direction", status:"linked", flowStep:"summary",
+    createdAt:1000, updatedAt:1100, lockedAt:1050, linkedTradeId:"t1", finalDecision:"long",
+    rawInput:{combinedTranscript:"", transcriptSegments:[], inputMethod:"text"},
+    preDecisionState:{clarityBefore:50, clarityAfter:80, decisionConfidence:90},
+    arguments:[{id:"a1",rawText:"уровень",normalizedText:"Уровень поддержки",side:"long",factorGroup:"price_level",factorId:"support",weight:50,emotionIntensity:0,isDecisive:true}],
+    conditions:{longBecomesValidIf:[],shortBecomesValidIf:[]}
+  });
+  eq(legacy.arguments[0].weight, 50, "legacy numeric weight was not preserved for backwards-readable data");
+  eq(legacy.arguments[0].weightRated, false, "legacy synthetic weight was incorrectly marked as explicit");
+  const analytics = analyticsMod.buildDecisionAnalytics([legacy], [{id:"t1",status:"closed",outcome:"Win",realizedRR:1}], "ru");
+  const factor = analytics.factors.find((row) => row.factorId === "support");
+  eq(factor.averageWeight, null, "legacy unrated weight polluted factor average");
+  eq(factor.averageEmotionIntensity, null, "legacy unrated emotion polluted factor average");
+  eq(analytics.averageClarityDelta, null, "legacy unrated clarity polluted clarity analytics");
+  eq(analytics.confidenceBands.extreme.sample, 0, "legacy unrated confidence polluted confidence analytics");
+});
+
+await test("Decision local draft cache preserves unsynced text state with a cloud base revision", async () => {
+  const { createDecisionDraftCache } = await import(new URL("../core/decision-draft-cache.js?v=draft-cache-test", import.meta.url));
+  const { createDecisionSession, setDecisionTranscript } = await import(new URL("../core/decision-model.js?v=draft-cache-test", import.meta.url));
+  const map = new Map();
+  const storage = {
+    setItem:(k,v)=>map.set(k,String(v)),
+    getItem:(k)=>map.has(k)?map.get(k):null,
+    removeItem:(k)=>map.delete(k)
+  };
+  const cache = createDecisionDraftCache(storage);
+  let s = createDecisionSession({id:"local-draft",mode:"direction",now:1000});
+  s = setDecisionTranscript(s,"Исправленный локальный текст",1100);
+  const record = cache.save("u1", s, 7);
+  eq(record.baseRevision, 7, "draft cache lost cloud base revision");
+  const loaded = cache.load("u1","local-draft");
+  eq(loaded.session.rawInput.combinedTranscript, "Исправленный локальный текст", "unsynced Decision transcript was not recovered locally");
+  eq(loaded.baseRevision, 7, "recovered draft lost revision guard");
+  eq(cache.list("u1").length, 1, "draft manifest did not index cached draft");
+  cache.remove("u1","local-draft");
+  eq(cache.load("u1","local-draft"), null, "removed local draft remained recoverable");
+});
+
+await test("Decision index no longer truncates history and bulk session reads are concurrency-bounded", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=bounded-read-test", import.meta.url));
+  const uid = "bulk-user";
+  const indexKey = `mind-exe-decision-index:${uid}`;
+  const rows = Array.from({length:510}, (_,i)=>({id:`d${i}`,createdAt:i+1,updatedAt:i+1,mode:"direction",status:"draft"}));
+  const values = new Map([[indexKey, JSON.stringify({version:1,revision:3,sessions:rows})]]);
+  for (let i=0;i<12;i++) values.set(`mind-exe-decision-session:${uid}:d${i}`, JSON.stringify({id:`d${i}`,mode:"direction",status:"draft",createdAt:i+1,updatedAt:i+1}));
+  let inFlight=0, maxInFlight=0;
+  const store = createDecisionStore({
+    storageGet: async (key) => {
+      if (key.includes("mind-exe-decision-session")) {
+        inFlight++; maxInFlight=Math.max(maxInFlight,inFlight);
+        await new Promise((r)=>setTimeout(r,4));
+        inFlight--;
+      }
+      return values.has(key) ? {value:values.get(key)} : null;
+    },
+    storageDelete:async()=>{}, getDocRef:(key)=>({key}), runTransaction:async()=>{}, db:{}
+  });
+  const index = await store.loadIndex(uid);
+  eq(index.sessions.length, 510, "Decision index still silently drops sessions after 500");
+  const page = await store.loadSessionsPage(uid,{offset:498,limit:12,concurrency:3});
+  eq(page.sessions.length, 12, "paged Decision loader did not load the requested tail page");
+  ok(maxInFlight <= 3, `Decision bulk loader exceeded configured concurrency (${maxInFlight})`);
+  ok(maxInFlight >= 2, "Decision bulk loader did not use bounded parallelism");
+});
+
+await test("Decision-to-Journal reconciliation repairs missing links but never overwrites a conflicting trade link", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=reconcile-test", import.meta.url));
+  const model = await import(new URL("../core/decision-model.js?v=reconcile-test", import.meta.url));
+  const docs = new Map();
+  const ref = (key)=>({key});
+  const snap = (key)=>({exists:()=>docs.has(key),data:()=>docs.get(key)});
+  const store = createDecisionStore({
+    storageGet: async (key)=>docs.has(key)?{value:docs.get(key).value,updatedAt:docs.get(key).updatedAt}:null,
+    storageDelete:async(key)=>docs.delete(key), getDocRef:ref,
+    runTransaction:async(_db,fn)=>fn({get:async(r)=>snap(r.key),set:(r,v)=>docs.set(r.key,v)}), db:{},
+    now:(()=>{let n=2000;return()=>++n;})()
+  });
+  let s = model.createDecisionSession({id:"reconcile1",mode:"direction",clarityBefore:30,now:1000});
+  s = model.setDecisionArguments(s,[{id:"a1",rawText:"тренд",normalizedText:"Тренд вниз",side:"short",factorGroup:"market_structure",factorId:"higher_timeframe_trend",weight:80,weightRated:true,emotionIntensity:20,emotionRated:true,isDecisive:true}]);
+  s = model.lockDecisionSession({...s,preDecisionState:{clarityBefore:30,clarityBeforeRated:true,clarityAfter:75,clarityAfterRated:true,decisionConfidence:70,decisionConfidenceRated:true},finalDecision:"short"});
+  const saved = await store.saveSession("u1",s);
+  const result = await store.reconcileTradeLinks("u1",[{id:"trade1",decisionSessionId:saved.id}],{concurrency:2});
+  eq(result.linked,1,"Journal reconciliation did not repair missing Decision link");
+  const linked = await store.loadSession("u1",saved.id);
+  eq(linked.linkedTradeId,"trade1","reconciled Decision does not point at Journal trade");
+  let conflict=false;
+  try { await store.linkTrade("u1",saved.id,"trade2"); } catch(e) { conflict=e?.message==="decision_trade_link_conflict"; }
+  ok(conflict,"Decision link was silently moved from one Journal trade to another");
+});
+
+await test("Decision audio recorder exposes checkpoint chunks for durable iPhone/PWA recovery", async () => {
+  const { createAudioRecorder } = await import(new URL("../audio/audio-recorder.js?v=checkpoint-test", import.meta.url));
+  let stopped=0;
+  const stream={getTracks:()=>[{stop:()=>{stopped++;}}]};
+  class ChunkRecorder {
+    static isTypeSupported(){return true;}
+    constructor(){this.state="inactive";this.mimeType="audio/mp4";}
+    start(timeslice){
+      this.timeslice=timeslice; this.state="recording";
+      queueMicrotask(()=>this.ondataavailable?.({data:new Blob(["abc"],{type:"audio/mp4"})}));
+    }
+    requestData(){}
+    stop(){this.state="inactive"; this.onstop?.();}
+  }
+  const chunks=[];
+  let clock=1000;
+  const recorder=createAudioRecorder({
+    navigatorObj:{mediaDevices:{getUserMedia:async()=>stream}}, MediaRecorderImpl:ChunkRecorder,
+    now:()=>{clock+=100;return clock;}, timesliceMs:2000,
+    onChunk:(blob,meta)=>chunks.push({size:blob.size,count:meta.chunkCount,duration:meta.durationMs})
+  });
+  await recorder.start();
+  await new Promise((r)=>setTimeout(r,0));
+  const result=await recorder.stop();
+  eq(chunks.length,1,"audio chunk checkpoint callback was not emitted");
+  eq(chunks[0].count,1,"audio checkpoint chunk count is wrong");
+  ok(result.blob.size>0,"final audio blob lost checkpointed data");
+  eq(stopped,1,"microphone track was not released after successful recording");
+});
+
+await test("Decision Lab hardening keeps drafts local-first and prevents stale taxonomy/rating data", () => {
+  const ui = fs.readFileSync(path.join(root,"features","decision-lab","decision-lab-ui.js"),"utf8");
+  const model = fs.readFileSync(path.join(root,"core","decision-model.js"),"utf8");
+  const store = fs.readFileSync(path.join(root,"core","decision-store.js"),"utf8");
+  const audioStore = fs.readFileSync(path.join(root,"audio","audio-draft-store.js"),"utf8");
+  ok(ui.includes("createDecisionDraftCache"),"Decision drafts are not cached locally before cloud sync");
+  ok(ui.includes("scheduleDraftSync(normalized, seq)"),"Decision local edits are not background-synced");
+  ok(ui.includes("next >= 180"),"voice recording has no 3-minute safety limit");
+  ok(ui.includes('factorId: "other", factorGroup: "other"'),"manual argument edits can leave stale AI taxonomy behind");
+  ok(ui.includes("DECISION_FACTORS"),"user cannot correct the normalized factor taxonomy");
+  ok(model.includes("weightRated") && model.includes("emotionRated") && model.includes("clarityBeforeRated"),"explicit Decision rating provenance is missing");
+  ok(audioStore.includes("transcriptText"),"transcribed audio text is not durable before cloud sync");
+  ok(store.includes("mapWithConcurrency"),"Decision history/analytics reads are still unbounded");
+  ok(appSource.includes("reconcileTradeLinks"),"Journal does not background-reconcile Decision links");
+});
+
+
+
+await test("Decision reconciliation refuses ambiguous duplicate Journal ownership", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=duplicate-link-test", import.meta.url));
+  const model = await import(new URL("../core/decision-model.js?v=duplicate-link-test", import.meta.url));
+  const docs = new Map();
+  const ref=(key)=>({key});
+  const snap=(key)=>({exists:()=>docs.has(key),data:()=>docs.get(key)});
+  const store=createDecisionStore({
+    storageGet:async(key)=>docs.has(key)?{value:docs.get(key).value}:null,
+    storageDelete:async()=>{},getDocRef:ref,
+    runTransaction:async(_db,fn)=>fn({get:async(r)=>snap(r.key),set:(r,v)=>docs.set(r.key,v)}),db:{}
+  });
+  let d=model.createDecisionSession({id:"dup-owner",mode:"direction",clarityBefore:40,now:1000});
+  d=model.setDecisionArguments(d,[{id:"a1",rawText:"тренд",normalizedText:"Тренд",side:"long",factorGroup:"market_structure",factorId:"local_trend",weight:80,weightRated:true,emotionIntensity:10,emotionRated:true}]);
+  d=model.lockDecisionSession({...d,preDecisionState:{clarityBefore:40,clarityBeforeRated:true,clarityAfter:70,clarityAfterRated:true,decisionConfidence:65,decisionConfidenceRated:true},finalDecision:"long"});
+  await store.saveSession("u1",d);
+  const result=await store.reconcileTradeLinks("u1",[
+    {id:"t1",decisionSessionId:"dup-owner"},
+    {id:"t2",decisionSessionId:"dup-owner"}
+  ]);
+  eq(result.conflicts,1,"ambiguous duplicate Journal ownership was not reported");
+  const unchanged=await store.loadSession("u1","dup-owner");
+  eq(unchanged.linkedTradeId,null,"reconciliation guessed a Journal owner for an ambiguous Decision");
+});
+
+await test("Decision audio drafts can be cleared per user without touching another account", async () => {
+  const { createAudioDraftStore } = await import(new URL("../audio/audio-draft-store.js?v=audio-user-clear-test", import.meta.url));
+  const store=createAudioDraftStore(null);
+  await store.save({id:"a-u1",sessionId:"s1",userId:"u1",blob:new Blob(["1"],{type:"audio/mp4"})});
+  await store.save({id:"a-u2",sessionId:"s2",userId:"u2",blob:new Blob(["2"],{type:"audio/mp4"})});
+  await store.clearUser("u1");
+  eq(await store.get("a-u1"),null,"full reset left current user's audio draft behind");
+  ok(await store.get("a-u2"),"clearing one user's Decision audio deleted another user's draft");
+});
+
+await test("Decision analytics cloud loading skips draft and abandoned sessions before document reads", async () => {
+  const { createDecisionStore } = await import(new URL("../core/decision-store.js?v=status-filter-test", import.meta.url));
+  const uid="filter-user";
+  const indexKey=`mind-exe-decision-index:${uid}`;
+  const rows=[
+    {id:"draft1",createdAt:1,updatedAt:1,mode:"direction",status:"draft"},
+    {id:"abandoned1",createdAt:2,updatedAt:2,mode:"direction",status:"abandoned"},
+    {id:"locked1",createdAt:3,updatedAt:3,mode:"direction",status:"locked"},
+    {id:"linked1",createdAt:4,updatedAt:4,mode:"direction",status:"linked"}
+  ];
+  const values=new Map([[indexKey,JSON.stringify({version:1,revision:1,sessions:rows})]]);
+  for (const row of rows) values.set(`mind-exe-decision-session:${uid}:${row.id}`,JSON.stringify({...row,flowStep:"summary"}));
+  const readIds=[];
+  const store=createDecisionStore({
+    storageGet:async(key)=>{ if(key.includes("mind-exe-decision-session")) readIds.push(key); return values.has(key)?{value:values.get(key)}:null; },
+    storageDelete:async()=>{},getDocRef:(key)=>({key}),runTransaction:async()=>{},db:{}
+  });
+  const loaded=await store.loadAllSessions(uid,{statuses:["locked","linked","reviewed"],concurrency:2});
+  eq(loaded.length,2,"analytics status filtering returned non-analytic drafts");
+  eq(readIds.length,2,"analytics still fetched draft/abandoned session documents");
+  ok(readIds.every((key)=>key.endsWith("locked1")||key.endsWith("linked1")),"analytics fetched an excluded Decision status");
+});
+
+
+await test("Approach 1 re-audit routes all major Gemini operations through the common AI runtime", () => {
+  const service = fs.readFileSync(path.join(root,"ai","ai-service.js"),"utf8");
+  const tools = fs.readFileSync(path.join(root,"ai","trade-tools.js"),"utf8");
+  const organizer = fs.readFileSync(path.join(root,"ai","decision-organizer.js"),"utf8");
+  const transcription = fs.readFileSync(path.join(root,"ai","transcription-service.js"),"utf8");
+  ok(service.includes('runAiRequest'),"general AI service bypasses the shared request runtime");
+  ok(service.includes('AI_COACH_ANALYZE') && service.includes('AI_COACH_CHAT'),"Coach AI operations are not individually traceable");
+  ok(service.includes('AI_HOME_ADVICE') && service.includes('AI_MARKET_GROUNDED') && service.includes('AI_CALIBRATION'),"background AI operations are not routed through the shared runtime");
+  ok(!service.includes('caWithTimeout(model.generateContent'),"general AI service still has an untracked direct model timeout");
+  ok(tools.includes('AI_STRATEGY_ANALYSIS'),"Strategy analysis bypasses shared AI diagnostics");
+  ok(!tools.includes('caWithTimeout(model.generateContent'),"trade AI tools still bypass the shared runtime");
+  ok(organizer.includes('runAiRequest') && transcription.includes('runAiRequest'),"Decision AI operations bypass shared runtime");
+});
+
+await test("AI runtime releases a timed-out operation and retries transient failures only once when configured", async () => {
+  const rt = await import(new URL("../core/ai-request-runtime.js?v=runtime-reaudit-test", import.meta.url));
+  let timedOut=false;
+  try { await rt.runAiRequest({key:"timeout-release",operation:"TEST_TIMEOUT",timeoutMs:20,execute:()=>new Promise(()=>{})}); } catch(e) { timedOut=/timeout/i.test(e?.message||e?.code||""); }
+  ok(timedOut,"AI runtime did not surface its timeout");
+  eq(await rt.runAiRequest({key:"timeout-release",operation:"TEST_AFTER_TIMEOUT",timeoutMs:100,execute:async()=>"ok"}),"ok","timed-out AI key remained permanently locked");
+  let calls=0;
+  const value=await rt.runAiRequest({key:"retry-once",operation:"TEST_RETRY",timeoutMs:200,retries:1,retryDelayMs:1,execute:async()=>{ calls++; if(calls===1) throw new Error("temporary_network_failure"); return "recovered"; }});
+  eq(value,"recovered","configured transient retry did not recover");
+  eq(calls,2,"AI runtime retried an unexpected number of times");
+});
+
+await test("Screenshot compression avoids synchronous toDataURL and keeps an iOS-safe decode fallback", () => {
+  const src = fs.readFileSync(path.join(root,"ui","media-utils.js"),"utf8");
+  ok(src.includes('createImageBitmap'),"screenshot compression does not use asynchronous bitmap decode when available");
+  ok(src.includes('canvas.toBlob'),"screenshot compression does not use asynchronous canvas encoding");
+  ok(!src.includes('canvas.toDataURL'),"large screenshot compression still performs synchronous toDataURL encoding");
+  ok(src.includes('new Image()'),"image compression lost its Safari/iOS fallback decoder");
+});
+
+await test("Vision recognition never overwrites fields edited while AI is running and exposes slow/error states", () => {
+  const src = fs.readFileSync(path.join(root,"features","journal","journal-ui.js"),"utf8");
+  ok(src.includes('recognitionFieldsRef.current'),"vision has no latest-field guard");
+  ok(src.includes('ИИ их не перезаписал'),"vision does not tell the trader when manual edits were protected");
+  ok(src.includes('Анализ занимает больше времени'),"vision has no slow-request UI state");
+  ok(src.includes('/timeout/i.test(msg)'),"vision timeout is indistinguishable from a generic recognition error");
+});
+
+await test("Performance diagnostics cover auth, profile, module delay and interactive readiness", () => {
+  const app = fs.readFileSync(path.join(root,"app.js"),"utf8");
+  const trace = fs.readFileSync(path.join(root,"core","performance-trace.js"),"utf8");
+  const settings = fs.readFileSync(path.join(root,"features","settings","settings-ui.js"),"utf8");
+  ok(app.includes('AUTH_RESOLVE'),"auth resolution timing is absent from diagnostics");
+  ok(app.includes('PROFILE_LOAD') && app.includes('retry_start'),"profile retries are not distinguishable in diagnostics");
+  ok(app.includes('INTERACTIVE'),"time-to-interactive is absent from diagnostics");
+  ok(app.includes('__mindExePageStartedAt'),"module timing is not navigation-relative");
+  ok(trace.includes('replace(/https?:\\/\\/\\S+/gi, "url")'),"diagnostics error codes are not privacy-sanitized");
+  ok(settings.includes('Скопировать журнал'),"diagnostic log cannot be copied from Settings");
+});
+
+await test("Home auto AI work is idle-scheduled and no longer wraps an AI call in a second timeout", () => {
+  const src = fs.readFileSync(path.join(root,"features","dashboard","dashboard-ui.js"),"utf8");
+  ok(src.includes('requestIdleCallback'),"Home background AI/network work is only delayed, not idle-scheduled");
+  ok(src.includes('scheduleBackgroundTask'),"Home has no shared background scheduling helper");
+  ok(!src.includes('caWithTimeout(aiGenerateHomeAdvice'),"Home advice is still double-wrapped by two independent timeouts");
+});
+
+
+await test("Approach 3 uses a Vite/npm production graph with no runtime dependency CDN", () => {
+  const pkg = JSON.parse(packageSource);
+  eq(pkg.version, "5.3.2", "package release version not bumped");
+  ok(pkg.scripts?.build?.includes("vite build"), "production build does not use Vite");
+  for (const dep of ["react", "react-dom", "firebase", "lucide-react", "recharts"]) {
+    ok(pkg.dependencies?.[dep], `npm dependency missing: ${dep}`);
+  }
+  ok(pkg.devDependencies?.vite && pkg.devDependencies?.tailwindcss, "Vite/Tailwind build dependencies missing");
+  ok(viteConfigSource.includes('base: "./"'), "relative deployment base is missing");
+  ok(viteConfigSource.includes('vendor-firebase') && viteConfigSource.includes('vendor-charts'), "vendor chunk plan missing");
+  ok(indexSource.includes('<script type="module" src="./app.js"></script>'), "Vite source entry is missing");
+  for (const forbidden of ["type=\"importmap\"", "https://esm.sh", "cdn.tailwindcss.com", "www.gstatic.com/firebasejs"]) {
+    ok(!indexSource.includes(forbidden), `runtime CDN/import-map dependency remains: ${forbidden}`);
+  }
+});
+
+await test("Approach 3 static Tailwind build contains critical responsive and arbitrary utilities", () => {
+  for (const token of [
+    ".flex", ".grid", ".rounded-\\[18px\\]", ".grid-cols-\\[1fr_auto_1fr\\]",
+    ".z-\\[120\\]", ".max-w-\\[calc\\(100\\%-24px\\)\\]", ".md\\:ml-\\[232px\\]"
+  ]) ok(stylesSource.includes(token), `compiled CSS lost utility: ${token}`);
+  ok(stylesSource.includes("mind.exe production shell"), "custom production shell CSS missing");
+  ok(!indexSource.includes("tailwind.config"), "runtime Tailwind configuration remains in index.html");
+});
+
+await test("Approach 3 code-splits heavy feature UI out of the startup module", () => {
+  for (const feature of [
+    "./features/dashboard/dashboard-ui.js",
+    "./features/strategy/strategy-lab.js",
+    "./features/settings/settings-ui.js",
+    "./features/coach/coach-ui.js",
+    "./features/calibration/calibration-ui.js",
+    "./features/decision-lab/decision-lab-ui.js"
+  ]) ok(appSource.includes(`lazy(() => import("${feature}")`), `heavy feature is eager: ${feature}`);
+  ok(!appSource.includes('from "recharts"'), "Recharts returned to the initial app module");
+  ok(!dashboardDataSource.includes("recharts"), "lightweight dashboard data bridge pulls chart code into startup");
+  ok(appSource.includes("FeatureSuspense"), "lazy features have no shared Suspense boundary");
+});
+
+await test("Approach 3 fast profile bootstrap trusts only a cloud-confirmed full local snapshot", () => {
+  ok(appSource.includes('PROFILE_SHADOW_CONFIRMED_VERSION = "full-v1"'), "confirmed-shadow format marker missing");
+  ok(appSource.includes("requireConfirmed: true"), "startup accepts legacy/unconfirmed local shadows");
+  ok(appSource.includes("removeItem(directShadowConfirmedKey(userId))"), "optimistic local writes do not invalidate confirmed-shadow status");
+  ok(appSource.includes("writeDirectProfileShadow(userId, committedProfile, { confirmed: true })"), "committed saves do not re-confirm the local snapshot");
+  ok(appSource.includes("if (profile) writeDirectProfileShadow(userId, profile, { confirmed: true })"), "successful cloud load does not refresh the full confirmed snapshot");
+  ok(appSource.includes("canPersistRef.current = true") && appSource.includes("setCloudProfileReady(true)"), "writes are not unlocked after cloud verification");
+  ok(appSource.indexOf("canPersistRef.current = false;") < appSource.indexOf("const shadow = readDirectProfileShadow"), "writes are not disabled before local bootstrap");
+});
+
+await test("profile-store writes immutable revision documents concurrently before manifest activation", async () => {
+  const { createProfileStore } = await import(new URL("../core/profile-store.js?v=parallel-write-test", import.meta.url));
+  let active = 0, maxActive = 0, writesFinished = 0, manifestObservedFinished = -1;
+  const docs = new Map();
+  let manifestValue = null;
+  const store = createProfileStore({
+    storageGet: async (key) => key.endsWith(":manifest") ? (manifestValue ? { value: manifestValue } : null) : (docs.has(key) ? { value: docs.get(key) } : null),
+    storageSet: async (key, value) => {
+      active += 1; maxActive = Math.max(maxActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      docs.set(key, value); writesFinished += 1; active -= 1;
+    },
+    storageDelete: async (key) => { docs.delete(key); },
+    getDocRef: (key) => ({ key }),
+    runTransaction: async (_db, fn) => {
+      manifestObservedFinished = writesFinished;
+      let pending = null;
+      await fn({
+        get: async () => ({ exists: () => manifestValue != null, data: () => ({ value: manifestValue }) }),
+        set: (_ref, payload) => { pending = payload; }
+      });
+      if (pending) manifestValue = pending.value;
+    },
+    db: {}, profileBaseKey: "mind-exe-journal-state", schemaVersion: 2,
+    revisionIdFactory: () => "parallel-r1", logger: { warn() {} }
+  });
+  await store.load("u-par-write");
+  const entries = Array.from({ length: 240 }, (_, i) => ({ id: `e${i}`, note: "x".repeat(5000) }));
+  const result = await store.save("u-par-write", { version:2,user:{},journal:{entries},settings:{},progress:{},wallet:{coinLedger:Array.from({length:210},(_,i)=>({id:`c${i}`,note:"y".repeat(3000)}))} });
+  ok(result.journalChunkCount > 1 && result.ledgerChunkCount > 1, "parallel-write fixture did not create multiple chunks");
+  ok(maxActive > 1, "immutable revision documents still write sequentially");
+  eq(manifestObservedFinished, writesFinished, "manifest transaction began before all immutable writes completed");
+});
+
+await test("profile-store never activates a partially failed parallel revision and cleans its keys", async () => {
+  const { createProfileStore } = await import(new URL("../core/profile-store.js?v=parallel-failure-test", import.meta.url));
+  const deleted = [];
+  let txCalls = 0;
+  const store = createProfileStore({
+    storageGet: async () => null,
+    storageSet: async (key) => {
+      if (key.includes(":journal:1")) throw new Error("simulated_chunk_failure");
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    },
+    storageDelete: async (key) => { deleted.push(key); },
+    getDocRef: (key) => ({ key }),
+    runTransaction: async () => { txCalls += 1; },
+    db: {}, profileBaseKey: "mind-exe-journal-state", schemaVersion: 2,
+    revisionIdFactory: () => "failed-r1", logger: { warn() {} }
+  });
+  await store.load("u-fail-write");
+  let failed = false;
+  try {
+    await store.save("u-fail-write", { version:2,user:{},journal:{entries:Array.from({length:220},(_,i)=>({id:`e${i}`,note:"z".repeat(5000)}))},settings:{},progress:{},wallet:{coinLedger:[]} });
+  } catch (e) { failed = e.message === "simulated_chunk_failure"; }
+  ok(failed, "parallel chunk failure was swallowed");
+  eq(txCalls, 0, "manifest transaction ran after an incomplete revision write");
+  ok(deleted.some((key) => key.endsWith(":core")) && deleted.some((key) => key.includes(":journal:1")), "failed revision keys were not comprehensively cleaned");
+});
+
+await test("Approach 3 service worker is same-origin only, build-precache aware and deferred until cloud readiness", () => {
+  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.3.2"'), "service-worker cache generation is stale");
+  ok(!serviceWorkerSource.includes("skipWaiting"), "service worker still forces activation and can invalidate lazy chunks in an already-open old client");
+  ok(serviceWorkerSource.includes('url.origin !== self.location.origin'), "service worker can intercept external Firebase/Gemini traffic");
+  ok(serviceWorkerSource.includes("PRECACHE_URLS.map"), "service worker does not support build-generated shell precaching");
+  ok(viteConfigSource.includes("service worker precache marker") && viteConfigSource.includes("PRECACHE_EXTENSIONS"), "Vite build does not inject hashed shell assets into the service worker");
+  ok(appSource.includes('if (!cloudProfileReady || !import.meta.env?.PROD'), "service worker registration is not gated by cloud profile readiness/production");
+  ok(appSource.includes('scheduleIdleTask(() =>') && appSource.includes('navigator.serviceWorker.register("./sw.js")'), "service worker registration competes directly with critical startup work");
+});
+
+
+await test("Final QA pins the Node runtime to versions supported by Vite 7", () => {
+  const pkg = JSON.parse(packageSource);
+  eq(pkg.engines?.node, "^20.19.0 || >=22.12.0", "Node engine range admits unsupported Vite 7 runtimes");
+  ok(!viteConfigSource.includes('from "vite"'), "Vite config cannot be smoke-tested without installing the bundler");
+});
+
+await test("Final QA ships a complete installable PWA manifest and icon set", () => {
+  const manifestPath = path.join(root, "manifest.json");
+  ok(fs.existsSync(manifestPath), "manifest.json is missing from the source release");
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+  eq(manifest.start_url, "./", "PWA start_url is not subdirectory-safe");
+  eq(manifest.scope, "./", "PWA scope is not subdirectory-safe");
+  eq(manifest.display, "standalone", "PWA no longer installs as a standalone app");
+  for (const size of [16, 32, 180, 192, 512]) {
+    const iconPath = path.join(root, `icon-${size}.png`);
+    ok(fs.existsSync(iconPath), `PWA icon missing: icon-${size}.png`);
+    const png = fs.readFileSync(iconPath);
+    ok(png.length > 24 && png.toString("hex", 1, 4) === "504e47", `PWA icon is not a PNG: icon-${size}.png`);
+    eq(png.readUInt32BE(16), size, `PWA icon width mismatch: icon-${size}.png`);
+    eq(png.readUInt32BE(20), size, `PWA icon height mismatch: icon-${size}.png`);
+  }
+  const manifestIconSizes = new Set((manifest.icons || []).map((row) => row.sizes));
+  ok(manifestIconSizes.has("192x192") && manifestIconSizes.has("512x512"), "manifest lacks required install icons");
+  ok(indexSource.includes('%BASE_URL%manifest.json') && indexSource.includes('%BASE_URL%icon-180.png'), "index.html no longer points at packaged PWA assets");
+});
+
+await test("Final QA build hook copies PWA assets and injects only real hashed shell files", async () => {
+  const mod = await import(new URL(`../vite.config.js?qa=${Date.now()}`, import.meta.url));
+  const config = mod.default;
+  const plugin = (config.plugins || []).find((row) => row?.name === "mind-exe-copy-root-pwa-assets");
+  ok(plugin && typeof plugin.closeBundle === "function", "PWA closeBundle hook is missing");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mindexe-build-hook-"));
+  const previousCwd = process.cwd();
+  try {
+    fs.mkdirSync(path.join(tmp, "dist", "assets"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "manifest.json"), fs.readFileSync(path.join(root, "manifest.json")));
+    fs.writeFileSync(path.join(tmp, "icon-192.png"), fs.readFileSync(path.join(root, "icon-192.png")));
+    fs.writeFileSync(path.join(tmp, "dist", "sw.js"), 'const PRECACHE_URLS = ["./"];\n');
+    fs.writeFileSync(path.join(tmp, "dist", "index.html"), "<html></html>");
+    fs.writeFileSync(path.join(tmp, "dist", "assets", "main-abc123.js"), "console.log(1)");
+    fs.writeFileSync(path.join(tmp, "dist", "assets", "main-def456.css"), "body{}");
+    fs.writeFileSync(path.join(tmp, "dist", "splash.mp4"), "video");
+    process.chdir(tmp);
+    await plugin.closeBundle();
+    const sw = fs.readFileSync(path.join(tmp, "dist", "sw.js"), "utf8");
+    ok(fs.existsSync(path.join(tmp, "dist", "manifest.json")), "build hook did not copy manifest.json");
+    ok(fs.existsSync(path.join(tmp, "dist", "icon-192.png")), "build hook did not copy root icon");
+    ok(sw.includes("./assets/main-abc123.js") && sw.includes("./assets/main-def456.css"), "hashed JS/CSS assets were not injected into precache");
+    ok(sw.includes("./index.html") && sw.includes("./manifest.json"), "shell metadata was not injected into precache");
+    ok(!sw.includes("./splash.mp4"), "large splash video was accidentally added to install-time precache");
+  } finally {
+    process.chdir(previousCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+await test("Final QA local module graph stays acyclic", () => {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (["node_modules", "dist", ".git"].includes(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith(".js")) files.push(full);
+    }
+  };
+  walk(root);
+  const fileSet = new Set(files.map((file) => path.resolve(file)));
+  const graph = new Map();
+  const importRe = /(?:from\s*["']|import\s*\(\s*["'])(\.[^"']+)["']/g;
+  for (const file of files) {
+    const deps = [];
+    const text = fs.readFileSync(file, "utf8");
+    for (const match of text.matchAll(importRe)) {
+      let target = path.resolve(path.dirname(file), match[1]);
+      if (!path.extname(target)) target += ".js";
+      if (fileSet.has(target)) deps.push(target);
+    }
+    graph.set(path.resolve(file), deps);
+  }
+  const state = new Map();
+  const stack = [];
+  const visit = (node) => {
+    state.set(node, 1); stack.push(node);
+    for (const dep of graph.get(node) || []) {
+      if (!state.get(dep)) visit(dep);
+      else if (state.get(dep) === 1) {
+        const i = stack.indexOf(dep);
+        throw new Error(`local import cycle: ${[...stack.slice(i), dep].map((x) => path.relative(root, x)).join(" -> ")}`);
+      }
+    }
+    stack.pop(); state.set(node, 2);
+  };
+  for (const file of graph.keys()) if (!state.get(file)) visit(file);
+});
+
+await test("Approach 3 defers Strategy and Decision reconciliation until the cloud profile is ready", () => {
+  ok(appSource.includes('if (authStatus !== "authenticated" || !cloudProfileReady || !userId || migrateFor'), "Strategy load is not gated by cloud profile readiness");
+  ok(appSource.includes('scheduleIdleTask(() => load(), tab === "strategies" ? 100 : 1200)'), "Strategy background load is not idle-scheduled");
+  ok(appSource.includes('if (!loaded || !cloudProfileReady || authStatus !== "authenticated" || !userId || !decisionStore?.reconcileTradeLinks) return;'), "Decision reconciliation still competes with initial profile verification");
+});
+
+
+await test("Release hardening ships owner-only Firestore rules", () => {
+  const rules = fs.readFileSync(path.join(root, "firestore.rules"), "utf8");
+  const firebaseJson = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
+  eq(firebaseJson.firestore?.rules, "firestore.rules", "firebase.json does not deploy the checked-in rules");
+  ok(rules.includes("match /users/{userId}/data/{document=**}"), "canonical user data path is not covered");
+  ok(rules.includes("request.auth != null") && rules.includes("request.auth.uid == userId"), "owner-only UID guard is missing");
+  ok(rules.includes("allow read, write: if false"), "default-deny fallback is missing");
+  ok(rules.includes("market-snapshot:crypto") && rules.includes("market-snapshot:forex") && rules.includes("market-snapshot:stocks"), "intended shared market cache is not narrowly allowlisted");
+  ok(rules.includes("value.size() <= 20000") && rules.includes("allow delete: if false"), "shared market cache validation is too broad");
+});
+
+await test("Release hardening keeps a long-lived Firebase auth listener", () => {
+  ok(appSource.includes("const unsubscribe = onAuthStateChanged("), "useAuth no longer owns a persistent auth subscription");
+  ok(appSource.includes("return unsubscribe;"), "auth subscription is not cleaned up on unmount");
+  ok(appSource.includes('"AUTH_STATE_CHANGE"'), "long-lived auth changes are not traced");
+});
+
+await test("Release hardening prefers Enterprise App Check without breaking legacy deployments", () => {
+  ok(appSource.includes("ReCaptchaEnterpriseProvider"), "Enterprise App Check provider is not imported");
+  ok(appSource.includes("VITE_RECAPTCHA_ENTERPRISE_SITE_KEY"), "Enterprise key is not deployment-configurable");
+  ok(appSource.includes("ReCaptchaV3Provider(APP_CHECK_LEGACY_V3_SITE_KEY)"), "safe legacy fallback was removed before Enterprise provisioning");
+});
+
+await test("Release hardening uses the current stable Flash-Lite model", () => {
+  ok(appSource.includes('AI_MODEL = "gemini-3.5-flash-lite"'), "AI model was not updated to Gemini 3.5 Flash-Lite");
 });
 
 console.log(`\n${passed} regression checks passed.`);

@@ -1,10 +1,10 @@
 // mind.exe — calibration and journal-review engine.
 // Questionnaire construction/scoring only; no React UI or persistence writes.
 
-import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js?v=4.9.0";
-import { patternEngineV2 } from "./trader-analytics.js?v=4.9.0";
-import { WIN, LOSS, WARN } from "../config/app-config.js?v=4.9.0";
-import { emotionClampPct, emotionConflict, emotionScaleKeys, normalizeEmotions } from "../core/journal-model.js?v=4.9.0";
+import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js";
+import { patternEngineV2 } from "./trader-analytics.js";
+import { WIN, LOSS, WARN } from "../config/app-config.js";
+import { emotionClampPct, emotionConflict, emotionScaleKeys, normalizeEmotions } from "../core/journal-model.js";
 
 function pluralRu(n, one, few, many) {
   const abs = Math.abs(Number(n) || 0) % 100;

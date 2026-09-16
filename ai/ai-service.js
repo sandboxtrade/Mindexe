@@ -2,7 +2,8 @@
 // Network/model calls only. Context construction, persistence and React UI live elsewhere.
 
 import { getGenerativeModel } from "firebase/ai";
-import { caWithTimeout, CALIBRATION_SCALE_TYPES } from "../analytics/calibration-review.js?v=4.9.0";
+import { CALIBRATION_SCALE_TYPES } from "../analytics/calibration-review.js";
+import { runAiRequest } from "../core/ai-request-runtime.js";
 
 let runtimeAiLogic = null;
 let runtimeModelName = null;
@@ -125,19 +126,24 @@ export function aiGetModel() {
 // сети промис может не резолвиться никогда, и вызывающий экран остаётся в состоянии загрузки
 // навсегда (та же причина, что чинилась для калибровки в V0.2). Таймаут стоит здесь, в одной
 // точке, поэтому его получают все потребители: анализ и чат в Coach, совет на Главной, vision.
-export async function aiCallGemini(prompt) {
+export async function aiCallGemini(prompt, { key = "ai_general", operation = "AI_GENERAL", timeoutMs = 30000, retries = 0, slowMs = 6000 } = {}) {
   const model = aiGetModel();
-  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_request_timeout");
-  const text = result?.response?.text?.();
-  if (!text || !text.trim()) throw new Error("ai_empty_response");
-  return text.trim();
+  return runAiRequest({
+    key, operation, timeoutMs, retries, slowMs,
+    execute: async () => {
+      const result = await model.generateContent(prompt);
+      const text = result?.response?.text?.();
+      if (!text || !text.trim()) throw new Error("ai_model_empty_response");
+      return text.trim();
+    }
+  });
 }
 export async function aiGenerateInsight(context) {
   const prompt = `${AI_INSIGHT_TASK}
 
 AGGREGATED_CONTEXT:
 ${JSON.stringify(context)}`;
-  return aiCallGemini(prompt);
+  return aiCallGemini(prompt, { key: "coach_analysis", operation: "AI_COACH_ANALYZE", timeoutMs: 25000 });
 }
 export async function aiChatReply(context, recentTrades, history, question) {
   const historyText = (history || []).slice(-10).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
@@ -154,7 +160,7 @@ ${historyText || "(none yet)"}
 
 USER_QUESTION:
 ${question}`;
-  return aiCallGemini(prompt);
+  return aiCallGemini(prompt, { key: "coach_chat", operation: "AI_COACH_CHAT", timeoutMs: 30000 });
 }
 
 // ---- aiService.js: Journal review --------------------------------------------
@@ -193,7 +199,7 @@ LANG: ${lang === "en" ? "en" : "ru"}
 
 REVIEW_FACTS:
 ${JSON.stringify(facts)}`;
-  const raw = await aiCallGemini(prompt);
+  const raw = await aiCallGemini(prompt, { key: "journal_review_questions", operation: "AI_REVIEW_QUESTIONS", timeoutMs: 22000 });
   const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
   if (!Array.isArray(parsed)) throw new Error("ai_review_bad_shape");
   const allowed = new Set(facts.map((f) => f.id));
@@ -238,7 +244,7 @@ LANG: ${lang === "en" ? "en" : "ru"}
 
 REVIEW_RESULT:
 ${JSON.stringify(facts)}`;
-  return aiCallGemini(prompt);
+  return aiCallGemini(prompt, { key: "journal_review_summary", operation: "AI_REVIEW_SUMMARY", timeoutMs: 22000 });
 }
 // ---- aiService.js: Market snapshot (hourly, Google Search-grounded) -----------
 // Separate model instance from aiGetModel(): the journal-analysis model's system instruction
@@ -305,29 +311,34 @@ Hard requirements for "summary" and "facts":
 Return ONLY this JSON, no markdown fences, no commentary, no extra keys:
 {"moodLabel":"<one or two words in ${langName}, e.g. 'Reactive'/'Calm'/'Volatile'>","summary":"<1-2 sentences in ${langName}, each with a concrete number, level or named event>","facts":["<up to 3 short factual strings in ${langName}, each with a number or a named event>"],"btcDominance":<number 0-100 or null${assetClass !== "crypto" ? " (null unless directly relevant)" : ""}>,"sentimentScore":<number 0-100, general market risk sentiment, or null>,"sentimentLabel":"<short label in ${langName} matching sentimentScore, or null>"}`;
 }
-async function aiRunMarketModel(model, prompt) {
-  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_market_timeout");
-  const text = result?.response?.text?.();
-  if (!text || !text.trim()) throw new Error("ai_empty_response");
-  const cleaned = text.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
-  const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
-  return {
-    moodLabel: typeof parsed.moodLabel === "string" && parsed.moodLabel.trim() ? parsed.moodLabel.trim() : null,
-    summary: typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : null,
-    // V0.3 — факты нужны второму слою (персональная связка); в UI напрямую не выводятся.
-    facts: Array.isArray(parsed.facts) ? parsed.facts.filter((f) => typeof f === "string" && f.trim()).map((f) => f.trim()).slice(0, 3) : [],
-    btcDominance: num(parsed.btcDominance),
-    sentimentScore: num(parsed.sentimentScore),
-    sentimentLabel: typeof parsed.sentimentLabel === "string" && parsed.sentimentLabel.trim() ? parsed.sentimentLabel.trim() : null
-  };
+async function aiRunMarketModel(model, prompt, { key, operation }) {
+  return runAiRequest({
+    key, operation, timeoutMs: 30000, retries: 0, slowMs: 6500,
+    execute: async () => {
+      const result = await model.generateContent(prompt);
+      const text = result?.response?.text?.();
+      if (!text || !text.trim()) throw new Error("ai_model_empty_response");
+      const cleaned = text.replace(/```json|```/g, "").trim();
+      let parsed;
+      try { parsed = JSON.parse(cleaned); } catch { throw new Error("ai_market_bad_json"); }
+      const num = (v) => typeof v === "number" && isFinite(v) ? v : null;
+      return {
+        moodLabel: typeof parsed.moodLabel === "string" && parsed.moodLabel.trim() ? parsed.moodLabel.trim() : null,
+        summary: typeof parsed.summary === "string" && parsed.summary.trim() ? parsed.summary.trim() : null,
+        facts: Array.isArray(parsed.facts) ? parsed.facts.filter((f) => typeof f === "string" && f.trim()).map((f) => f.trim()).slice(0, 3) : [],
+        btcDominance: num(parsed.btcDominance),
+        sentimentScore: num(parsed.sentimentScore),
+        sentimentLabel: typeof parsed.sentimentLabel === "string" && parsed.sentimentLabel.trim() ? parsed.sentimentLabel.trim() : null
+      };
+    }
+  });
 }
 export async function aiFetchMarketSnapshot(assetClass, lang) {
   try {
     // V0.3 — grounded: true означает, что сводка построена по реальным данным из веба.
     // При false (fallback ниже) UI показывает пометку "без свежих данных", а не выдаёт
     // догадку модели за актуальную картину рынка.
-    const snap = await aiRunMarketModel(aiGetMarketModel(), buildMarketPrompt(assetClass, lang, true));
+    const snap = await aiRunMarketModel(aiGetMarketModel(), buildMarketPrompt(assetClass, lang, true), { key: `market_grounded:${assetClass}`, operation: "AI_MARKET_GROUNDED" });
     return { ...snap, grounded: true };
   } catch (groundedErr) {
     // Google Search grounding (tools:[{googleSearch:{}}]) may not be supported for this
@@ -335,7 +346,7 @@ export async function aiFetchMarketSnapshot(assetClass, lang) {
     // a plain (non-grounded) call so the insight still updates with Gemini's own knowledge instead
     // of silently doing nothing. Logged clearly so the actual cause is visible in devtools.
     console.error("mind.exe market snapshot: grounded call failed, retrying without Search tool:", groundedErr);
-    const snap = await aiRunMarketModel(aiGetMarketModelPlain(), buildMarketPrompt(assetClass, lang, false));
+    const snap = await aiRunMarketModel(aiGetMarketModelPlain(), buildMarketPrompt(assetClass, lang, false), { key: `market_plain:${assetClass}`, operation: "AI_MARKET_FALLBACK" });
     return { ...snap, grounded: false };
   }
 }
@@ -371,7 +382,7 @@ export async function aiGenerateHomeAdvice(context) {
 
 AGGREGATED_CONTEXT:
 ${JSON.stringify(context)}`;
-  return aiCallGemini(prompt);
+  return aiCallGemini(prompt, { key: "home_advice", operation: "AI_HOME_ADVICE", timeoutMs: 20000 });
 }
 
 var AI_CALIBRATION_TASK = `You are generating a pre-session trading-psychology calibration for mind.exe. You will
@@ -429,7 +440,7 @@ export async function aiGenerateCalibrationQuestions(context) {
 
 ADAPTIVE_CONTEXT:
 ${JSON.stringify(context)}`;
-  const raw = await aiCallGemini(prompt);
+  const raw = await aiCallGemini(prompt, { key: "calibration_questions", operation: "AI_CALIBRATION", timeoutMs: 20000 });
   const cleaned = raw.replace(/```json|```/g, "").trim();
   const parsed = JSON.parse(cleaned);
   if (!Array.isArray(parsed)) throw new Error("ai_calibration_bad_shape");

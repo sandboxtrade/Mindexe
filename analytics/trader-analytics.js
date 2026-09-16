@@ -1,9 +1,9 @@
 // mind.exe — behavioral analytics + pattern engine.
 // Pure journal analysis only; no React UI, auth, persistence or Firestore writes.
 
-import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js?v=4.9.0";
-import { computeRRWinRateStats, st_mean, st_median, st_round2, st_stdev } from "../core/stats.js?v=4.9.0";
-import { isEntryClosed, normalizeEmotions } from "../core/journal-model.js?v=4.9.0";
+import { entriesWithRealizedRR, hasRealizedRR } from "../core/trade-math.js";
+import { computeRRWinRateStats, st_mean, st_median, st_round2, st_stdev } from "../core/stats.js";
+import { isEntryClosed, normalizeEmotions } from "../core/journal-model.js";
 
 function pluralRu(n, one, few, many) {
   const abs = Math.abs(Number(n) || 0) % 100;

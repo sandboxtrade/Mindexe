@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import { User, KeyRound, Eye, EyeOff } from "lucide-react";
-import { BASE, LOSS } from "../../config/app-config.js?v=4.9.0";
-import { LogoMark, Wordmark } from "../../ui/brand.js?v=4.9.0";
-import { Card } from "../../ui/primitives.js?v=4.9.0";
+import { BASE, LOSS } from "../../config/app-config.js";
+import { LogoMark, Wordmark } from "../../ui/brand.js";
+import { Card } from "../../ui/primitives.js";
 
 function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
   const [mode, setMode] = useState("login");

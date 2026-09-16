@@ -7,11 +7,11 @@ import {
   TrendingDown, Target, RotateCcw, Zap, Info
 } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, WIN, LOSS } from "../../config/app-config.js?v=4.9.0";
-import { Card } from "../../ui/primitives.js?v=4.9.0";
-import { DecodeText, LogoSpinner } from "../../ui/brand.js?v=4.9.0";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js?v=4.9.0";
-import { aiGenerateInsight, aiChatReply } from "../../ai/ai-service.js?v=4.9.0";
+import { BASE, WIN, LOSS } from "../../config/app-config.js";
+import { Card } from "../../ui/primitives.js";
+import { DecodeText, LogoSpinner } from "../../ui/brand.js";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries } from "../../ai/context.js";
+import { aiGenerateInsight, aiChatReply } from "../../ai/ai-service.js";
 
 const ring = (accent) => `0 0 0 1px ${accent}35`;
 

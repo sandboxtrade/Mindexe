@@ -1,5 +1,5 @@
-// mind.exe — V4.9.0 FINAL
-// Final QA / visual consolidation release.
+// mind.exe — V5.3.2 RELEASE HARDENING / Vite production architecture
+// Built on the v4.9.0 FINAL QA base.
 // - runtime dependencies repaired after modular extraction;
 // - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;
 // - startup failure fallback and stricter static regression checks added;
@@ -28,7 +28,7 @@ import {
   runTransaction
 } from "firebase/firestore";
 import { getAI, GoogleAIBackend } from "firebase/ai";
-import { initializeAppCheck, ReCaptchaV3Provider } from "firebase/app-check";
+import { initializeAppCheck, ReCaptchaEnterpriseProvider, ReCaptchaV3Provider } from "firebase/app-check";
 var firebaseConfig = {
   apiKey: "AIzaSyAPSGcQOPS09ytLKi8dk0WOh0U3WfLm4_E",
   authDomain: "mindexe-29adf.firebaseapp.com",
@@ -43,27 +43,36 @@ var fbAuth = getAuth(firebaseApp);
 var fbDb = getFirestore(firebaseApp);
 // ai/config.js — single place that controls which Gemini model is used everywhere in the app.
 // Gemini 2.0/2.5 Flash and Flash-Lite are being retired in 2026 (2.0 already shut down June 1,
-// 2.5 shuts down Oct 16) — 3.1 Flash-Lite is the current cheap/fast free-tier model recommended
-// as their replacement, so that's what's wired in by default. Swap the model by changing this one
+// 2.5 shuts down Oct 16) — 3.5 Flash-Lite is the current stable Flash-Lite model,
+// so that is wired in by default. Swap the model by changing this one
 // constant; nothing else in the file should hardcode a model name.
-var AI_MODEL = "gemini-3.1-flash-lite";
+var AI_MODEL = "gemini-3.5-flash-lite";
 // reCAPTCHA v3 site key for Firebase App Check (Web). Firebase AI Logic doesn't require App Check
 // yet, but Google has announced enforcement starting Nov 2, 2026 — create a reCAPTCHA v3 key in the
 // Firebase console (App Check section) and paste it here before that date. Left blank, App Check is
 // simply skipped and the app (including AI features) keeps working exactly as it does today.
-var AI_APP_CHECK_SITE_KEY = "6LebzJQtAAAAAAWWewd3EI6SbiY-xoTeAjRrmrNa";
-if (AI_APP_CHECK_SITE_KEY) {
+// Prefer reCAPTCHA Enterprise for App Check. The Enterprise key must also be registered
+// for this Web app in Firebase Console. Keep the existing v3 key as a compatibility
+// fallback until the Enterprise key is provisioned, so a deployment cannot lock out users.
+var APP_CHECK_ENTERPRISE_SITE_KEY = String(import.meta.env.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY || "").trim();
+var APP_CHECK_LEGACY_V3_SITE_KEY = "6LebzJQtAAAAAAWWewd3EI6SbiY-xoTeAjRrmrNa";
+var appCheckProvider = APP_CHECK_ENTERPRISE_SITE_KEY
+  ? new ReCaptchaEnterpriseProvider(APP_CHECK_ENTERPRISE_SITE_KEY)
+  : (APP_CHECK_LEGACY_V3_SITE_KEY ? new ReCaptchaV3Provider(APP_CHECK_LEGACY_V3_SITE_KEY) : null);
+if (appCheckProvider) {
   try {
     initializeAppCheck(firebaseApp, {
-      provider: new ReCaptchaV3Provider(AI_APP_CHECK_SITE_KEY),
+      provider: appCheckProvider,
       isTokenAutoRefreshEnabled: true
     });
-  } catch (_) {
+  } catch (error) {
+    traceEvent?.("APP_CHECK_INIT", { status: "error", code: error?.code || "app_check_init_failed" });
   }
 }
 var aiLogic = getAI(firebaseApp, { backend: new GoogleAIBackend() });
 configureAiService({ aiLogic, modelName: AI_MODEL });
 configureTradeAi({ aiLogic, modelName: AI_MODEL, getBaseModel: aiGetModel });
+configureDecisionAi({ aiLogic, modelName: AI_MODEL });
 var firestoreStorage = createFirestoreStorage({
   db: fbDb,
   auth: fbAuth,
@@ -80,20 +89,7 @@ var storageDelete = firestoreStorage.delete;
 configureDashboardData({ storageGet, storageSet });
 
 // mind-exe.tsx
-import { Component, useState, useMemo, useRef, useEffect } from "react";
-import {
-  ScatterChart,
-  Scatter,
-  XAxis,
-  YAxis,
-  ZAxis,
-  CartesianGrid,
-  ResponsiveContainer,
-  Cell,
-  Tooltip,
-  AreaChart,
-  Area
-} from "recharts";
+import { Component, useState, useMemo, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Sparkles,
   BookOpen,
@@ -161,14 +157,14 @@ import {
   resultEntriesForUnit,
   resultMatchesUnit,
   unitSymbol
-} from "./core/trade-math.js?v=4.9.0";
+} from "./core/trade-math.js";
 import {
   computeRRWinRateStats,
   st_mean,
   st_median,
   st_round2,
   st_stdev
-} from "./core/stats.js?v=4.9.0";
+} from "./core/stats.js";
 import {
   EMOTION_SCALE_KEYS,
   deriveEntryStatus,
@@ -178,39 +174,78 @@ import {
   isEntryClosed,
   migrateEntry,
   normalizeEmotions
-} from "./core/journal-model.js?v=4.9.0";
-import { createFirestoreStorage } from "./core/firestore-storage.js?v=4.9.0";
-import { createJournalMediaStore } from "./core/journal-media.js?v=4.9.0";
-import { createProfileStore } from "./core/profile-store.js?v=4.9.0";
-import { createStrategyStore } from "./core/strategy-store.js?v=4.9.0";
-import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js?v=4.9.0";
-import { STRINGS } from "./i18n/strings.js?v=4.9.0";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js?v=4.9.0";
+} from "./core/journal-model.js";
+import { createFirestoreStorage } from "./core/firestore-storage.js";
+import { createJournalMediaStore } from "./core/journal-media.js";
+import { createProfileStore } from "./core/profile-store.js";
+import { createStrategyStore } from "./core/strategy-store.js";
+import { createDecisionStore } from "./core/decision-store.js";
+import { createDecisionDraftCache } from "./core/decision-draft-cache.js";
+import { createAudioDraftStore } from "./audio/audio-draft-store.js";
+import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js";
+import { STRINGS } from "./i18n/strings.js";
+import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, CALIBRATION_SCALE_SETS, CALIBRATION_SCALE_TYPES,
   caWithTimeout, caScaleSet, scoreCalibrationDynamic, REVIEW_LIKERT, REVIEW_LIKERT_EN,
   buildReviewQuiz, scoreJournalReview
-} from "./analytics/calibration-review.js?v=4.9.0";
-import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js?v=4.9.0";
-import { LogoMark, Wordmark } from "./ui/brand.js?v=4.9.0";
-import { configureTradeAi } from "./ai/trade-tools.js?v=4.9.0";
+} from "./analytics/calibration-review.js";
+import { Pill, Card, Toast, ScreenshotPreviewHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js";
+import { LogoMark, Wordmark } from "./ui/brand.js";
+import { configureTradeAi } from "./ai/trade-tools.js";
+import { configureDecisionAi } from "./ai/decision-runtime.js";
+import { traceEvent } from "./core/performance-trace.js";
 import {
   configureAiService, aiGetModel, aiGenerateInsight, aiChatReply, aiReviewQuestions,
   aiReviewSummary, aiFetchMarketSnapshot, aiGenerateHomeAdvice, aiGenerateCalibrationQuestions
-} from "./ai/ai-service.js?v=4.9.0";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js?v=4.9.0";
+} from "./ai/ai-service.js";
+import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js";
 import {
   emotionStateText, emotionVerdict, emotionValuesText, emotionValuesColor,
   entryStateText, entryStateColor, EmotionScales,
   pointToEmotions, NewEntry, CloseTrade, EditTrade, Log
-} from "./features/journal/journal-ui.js?v=4.9.0";
-import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome, StrategyLab } from "./features/strategy/strategy-lab.js?v=4.9.0";
-import { Settings } from "./features/settings/settings-ui.js?v=4.9.0";
-import { Coach } from "./features/coach/coach-ui.js?v=4.9.0";
-import { Calibration, JournalReview } from "./features/calibration/calibration-ui.js?v=4.9.0";
-import { configureDashboardData, Home, Patterns, Challenge } from "./features/dashboard/dashboard-ui.js?v=4.9.0";
-import { AuthScreen, LegacyMigratePrompt, BootIntro } from "./features/auth/auth-ui.js?v=4.9.0";
-import { BootLoading, ProfileLoadErrorScreen, Splash, WalletBadge, ProfileBadge, MobileNavItem, MobileNavPrimaryButton, WalletSheet, DesktopSidebar, AppErrorBoundary } from "./ui/app-shell.js?v=4.9.0";
+} from "./features/journal/journal-ui.js";
+import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome } from "./core/strategy-math.js";
+import { configureDashboardData } from "./features/dashboard/dashboard-data.js";
+import { AuthScreen, LegacyMigratePrompt, BootIntro } from "./features/auth/auth-ui.js";
+import { BootLoading, ProfileLoadErrorScreen, Splash, WalletBadge, ProfileBadge, MobileNavItem, MobileNavPrimaryButton, WalletSheet, DesktopSidebar, AppErrorBoundary } from "./ui/app-shell.js";
+const DecisionLab = lazy(() => import("./features/decision-lab/decision-lab-ui.js")
+  .then((mod) => ({ default: mod.DecisionLab })));
+const DashboardHome = lazy(() => import("./features/dashboard/dashboard-ui.js")
+  .then((mod) => ({ default: mod.Home })));
+const Patterns = lazy(() => import("./features/dashboard/dashboard-ui.js")
+  .then((mod) => ({ default: mod.Patterns })));
+const Challenge = lazy(() => import("./features/dashboard/dashboard-ui.js")
+  .then((mod) => ({ default: mod.Challenge })));
+const StrategyLab = lazy(() => import("./features/strategy/strategy-lab.js")
+  .then((mod) => ({ default: mod.StrategyLab })));
+const Settings = lazy(() => import("./features/settings/settings-ui.js")
+  .then((mod) => ({ default: mod.Settings })));
+const Coach = lazy(() => import("./features/coach/coach-ui.js")
+  .then((mod) => ({ default: mod.Coach })));
+const Calibration = lazy(() => import("./features/calibration/calibration-ui.js")
+  .then((mod) => ({ default: mod.Calibration })));
+
+function FeatureSuspense({ lang, children }) {
+  return /* @__PURE__ */ jsx(Suspense, {
+    fallback: /* @__PURE__ */ jsx("div", {
+      className: "py-16 text-center text-[11px]",
+      style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" },
+      children: lang === "en" ? "Loading…" : "Загружаю…"
+    }),
+    children
+  });
+}
+function scheduleIdleTask(fn, timeout = 1600) {
+  if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(() => fn(), { timeout });
+    return () => window.cancelIdleCallback?.(id);
+  }
+  const id = setTimeout(fn, Math.min(timeout, 500));
+  return () => clearTimeout(id);
+}
+traceEvent("MODULE_READY", { status: "ready", durationMs: typeof performance !== "undefined" && Number.isFinite(Number(window.__mindExePageStartedAt)) ? Math.max(0, performance.now() - Number(window.__mindExePageStartedAt)) : null });
+
 // V3.0 — палитра переведена на референс: чистый чёрный фон, поверхности почти сливаются
 // с ним, линии существуют, но не читаются как рамки. Раньше фон был #0A0A0B, а карточка
 // #131315 с видимой границей #25252A — на OLED это выглядит как набор коробок, а не как
@@ -257,6 +292,7 @@ function sanitizeImportedEntry(e, fallbackIndex) {
     resultCurrency: normalizeResultCurrency(e.resultCurrency),
     tag: typeof e.tag === "string" && e.tag ? e.tag : "\u041E\u0431\u0449\u0435\u0435",
     strategyId: typeof e.strategyId === "string" && e.strategyId ? e.strategyId : null,
+    decisionSessionId: typeof e.decisionSessionId === "string" && e.decisionSessionId ? e.decisionSessionId : null,
     x: clampCoord(e.x),
     y: clampCoord(e.y),
     exitX: clampCoord(e.exitX),
@@ -281,13 +317,18 @@ var SCHEMA_VERSION = 2;
 var PROFILE_KEY = "mind-exe-journal-state";
 var MEDIA_KEY = "mind-exe-journal-media";
 var PROFILE_SHADOW_KEY = "mind-exe-cloud-shadow";
+var PROFILE_SHADOW_CONFIRMED_VERSION = "full-v1";
 var ANON_ID_KEY = "mind-exe-anon-id";
 var __lastProfileRecoverySource = null;
 function directShadowKey(userId) {
   return `${PROFILE_SHADOW_KEY}:${userId}`;
 }
-function readDirectProfileShadow(userId) {
+function directShadowConfirmedKey(userId) {
+  return `${PROFILE_SHADOW_KEY}:confirmed:${userId}`;
+}
+function readDirectProfileShadow(userId, { requireConfirmed = false } = {}) {
   try {
+    if (requireConfirmed && window.localStorage?.getItem(directShadowConfirmedKey(userId)) !== PROFILE_SHADOW_CONFIRMED_VERSION) return null;
     const value = window.localStorage?.getItem(directShadowKey(userId));
     if (!value) return null;
     const profile = parseStoredProfileValue(value);
@@ -295,16 +336,19 @@ function readDirectProfileShadow(userId) {
       key: directShadowKey(userId),
       profile,
       updatedAt: profile?.meta?.updatedAt ?? null,
-      local: true
+      local: true,
+      confirmed: window.localStorage?.getItem(directShadowConfirmedKey(userId)) === PROFILE_SHADOW_CONFIRMED_VERSION
     };
   } catch (_) {
     return null;
   }
 }
-function writeDirectProfileShadow(userId, profile) {
+function writeDirectProfileShadow(userId, profile, { confirmed = false } = {}) {
   if (!userId || !profile) return;
   try {
     window.localStorage?.setItem(directShadowKey(userId), JSON.stringify({ ...profile, version: SCHEMA_VERSION }));
+    if (confirmed) window.localStorage?.setItem(directShadowConfirmedKey(userId), PROFILE_SHADOW_CONFIRMED_VERSION);
+    else window.localStorage?.removeItem(directShadowConfirmedKey(userId));
   } catch (_) {
   }
 }
@@ -554,7 +598,7 @@ async function saveProfile(userId, profile) {
   const normalized = { ...profile, version: SCHEMA_VERSION };
   const saved = await profileStore.save(userId, normalized);
   const committedProfile = saved?.profile || normalized;
-  writeDirectProfileShadow(userId, committedProfile);
+  writeDirectProfileShadow(userId, committedProfile, { confirmed: true });
   try {
     await legacyStorageSet(`${PROFILE_SHADOW_KEY}:${userId}`, JSON.stringify(committedProfile), false);
   } catch (_) {
@@ -718,6 +762,17 @@ var strategyStore = createStrategyStore({
   indexSchemaVersion: STRATEGY_SCHEMA_VERSION,
   logger: console
 });
+var decisionStore = createDecisionStore({
+  storageGet,
+  storageDelete,
+  getDocRef: fsDocRef,
+  runTransaction,
+  db: fbDb,
+  indexBaseKey: "mind-exe-decision-index",
+  sessionBaseKey: "mind-exe-decision-session"
+});
+var decisionDraftCache = createDecisionDraftCache();
+var decisionAudioDraftStore = createAudioDraftStore();
 function normalizeStrategy(raw) {
   if (!raw || typeof raw !== "object" || !raw.id) return null;
   return {
@@ -936,6 +991,24 @@ async function clearAuxiliaryUserDataForFullReset(userId, knownTradeIds = []) {
   );
   const tradeCleanupFailed = tradeCleanup.reduce((sum, row) => sum + (row?.failed || 0), 0);
 
+  let decisionCleanupFailed = 0;
+  let decisionSessionIds = [];
+  try {
+    const decisionIndex = await decisionStore.loadIndex(userId);
+    decisionSessionIds = (decisionIndex?.sessions || []).map((row) => row.id).filter(Boolean);
+  } catch (_) {
+  }
+  try {
+    const decisionCleanup = await decisionStore.resetAll(userId);
+    decisionCleanupFailed = decisionCleanup?.failed || 0;
+  } catch (_) {
+    decisionCleanupFailed = 1;
+  }
+  // Full reset also clears unsynced local Decision text/audio so deleted reasoning cannot
+  // reappear on this device after the cloud reset has succeeded. Local cleanup is best-effort.
+  try { decisionDraftCache.clearUser(userId); } catch (_) {}
+  try { await decisionAudioDraftStore.clearUser(userId, decisionSessionIds); } catch (_) {}
+
   const jobs = [
     storageDelete(`${STRATEGY_INDEX_KEY}:backup:${userId}`, false),
     storageDelete(aiKey(userId), false),
@@ -951,7 +1024,7 @@ async function clearAuxiliaryUserDataForFullReset(userId, knownTradeIds = []) {
   return {
     strategyIndex: emptyStrategyIndex,
     tradeIds,
-    cleanupFailed: failed.length + tradeCleanupFailed
+    cleanupFailed: failed.length + tradeCleanupFailed + decisionCleanupFailed
   };
 }
 
@@ -1165,18 +1238,34 @@ function useAuth() {
   const [status, setStatus] = useState("checking");
   const [user, setUser] = useState(null);
   useEffect(() => {
-    let cancelled = false;
-    authService.getCurrentUser().then((u) => {
-      if (!cancelled) {
-        setUser(u);
-        setStatus(u ? "authenticated" : "unauthenticated");
+    let firstResolution = true;
+    const authStartedAt = Date.now();
+    traceEvent("AUTH_RESOLVE", { status: "start" });
+    const unsubscribe = onAuthStateChanged(
+      fbAuth,
+      (firebaseUser) => {
+        const nextUser = firebaseUser
+          ? { id: firebaseUser.uid, username: firebaseUser.displayName || emailToUsername(firebaseUser.email) }
+          : null;
+        setUser(nextUser);
+        setStatus(nextUser ? "authenticated" : "unauthenticated");
+        traceEvent(firstResolution ? "AUTH_RESOLVE" : "AUTH_STATE_CHANGE", {
+          status: nextUser ? "authenticated" : "unauthenticated",
+          ...(firstResolution ? { durationMs: Date.now() - authStartedAt } : {})
+        });
+        firstResolution = false;
+      },
+      (err) => {
+        setStatus("unauthenticated");
+        traceEvent(firstResolution ? "AUTH_RESOLVE" : "AUTH_STATE_CHANGE", {
+          status: "error",
+          ...(firstResolution ? { durationMs: Date.now() - authStartedAt } : {}),
+          code: err?.code || err?.message || "auth_listener_failed"
+        });
+        firstResolution = false;
       }
-    }).catch(() => {
-      if (!cancelled) setStatus("unauthenticated");
-    });
-    return () => {
-      cancelled = true;
-    };
+    );
+    return unsubscribe;
   }, []);
   const register = async (username, password) => {
     const u = await authService.register(username, password);
@@ -1203,11 +1292,21 @@ function useAuth() {
   };
   return { status, user, register, login, loginWithGoogle, logout };
 }
+const STARTUP_SPLASH_FADE_MS = 1900;
+const STARTUP_SPLASH_HIDE_MS = 2500;
+const PROFILE_LOAD_TIMEOUT_MS = 10000;
+traceEvent("APP_RUNTIME", { status: "start" });
+const PROFILE_LOAD_MAX_RETRIES = 1;
+
 function MindExe() {
   const [entries, setEntries] = useState([]);
   const [tab, setTab] = useState("home");
   const [closingId, setClosingId] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [decisionTradePrefill, setDecisionTradePrefill] = useState(null);
+  useEffect(() => {
+    if (tab !== "new" && decisionTradePrefill) setDecisionTradePrefill(null);
+  }, [tab]);
   // Startup must be neutral. Saved accentIndex replaces this after Firebase profile load.
   // Using terminal green here caused a visible green flash in logo/text before the profile arrived.
   const [accentPreset, setAccentPreset] = useState(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
@@ -1238,6 +1337,8 @@ function MindExe() {
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [cloudProfileReady, setCloudProfileReady] = useState(false);
+  const [profileBootstrapSource, setProfileBootstrapSource] = useState("none");
   const [profileDataError, setProfileDataError] = useState(null);
   const [profileLoadRetryNonce, setProfileLoadRetryNonce] = useState(0);
   const [showBootIntro, setShowBootIntro] = useState(false);
@@ -1252,6 +1353,10 @@ function MindExe() {
   // Never start a newer write in that same session: an old request finishing late could overwrite it.
   const profileWriteUncertainRef = useRef(false);
   const authLegacyGateRef = useRef(false);
+  // Returning sessions should open immediately after cloud state is confirmed. The terminal
+  // intro is reserved for an explicit sign-in/register action, so reloads do not add another
+  // artificial 1.4s wait on top of network time.
+  const showIntroAfterExplicitAuthRef = useRef(false);
   const strategyCanPersistRef = useRef(false);
   const strategyRawIndexRef = useRef(null);
   const strategyBackupPendingRef = useRef(false);
@@ -1265,12 +1370,15 @@ function MindExe() {
   // users/{uid}/data/mind-exe-journal-state:backup.
   const backupPendingRef = useRef(false);
   const audioContextRef = useRef(null);
+  const decisionReconcileKeyRef = useRef("");
+  const interactiveTraceUserRef = useRef(null);
   const { status: authStatus, user: authUser, register: authRegister, login: authLogin, loginWithGoogle: authLoginWithGoogle, logout: authLogout } = useAuth();
   const userId = authUser?.id || null;
   const [migrateFor, setMigrateFor] = useState(null);
   const accent = accentPreset.value;
   const resetInMemoryState = () => {
     setEntries([]);
+    setDecisionTradePrefill(null);
     setName("");
     setAccentPreset(ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
     setSoundOn(true);
@@ -1295,11 +1403,50 @@ function MindExe() {
     setCoinLedger([]);
     setLastDailyReward(null);
   };
+  const applyProfileSnapshot = (profile) => {
+    const user = profile?.user || {};
+    const journal = profile?.journal || {};
+    const settings = profile?.settings || {};
+    const progress = profile?.progress || {};
+    const wallet = profile?.wallet || {};
+    const rawEntries = Array.isArray(journal.entries) ? journal.entries : [];
+    const restoredEntries = rawEntries.map((e) => migrateEntry({
+      ...e,
+      date: new Date(e.date),
+      exitDate: e.exitDate ? new Date(e.exitDate) : null,
+      screenshots: [],
+      exitScreenshots: []
+    }));
+
+    setEntries(restoredEntries);
+    setName(user.name ?? "");
+    setAccentPreset(typeof settings.accentIndex === "number" ? (ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]) : (ACCENTS.find((a) => a.cosmic) || ACCENTS[0]));
+    setSoundOn(typeof settings.soundOn === "boolean" ? settings.soundOn : true);
+    setWeeklyGoal(typeof settings.weeklyGoal === "number" ? settings.weeklyGoal : 7);
+    setLang(settings.lang === "en" || settings.lang === "ru" ? settings.lang : "ru");
+    setMeasureMode(settings.measureMode || "R");
+    setCurrency(settings.currency || "USD");
+    setTradingAsset(settings.tradingAsset || null);
+    setStrategyNote(typeof settings.strategyNote === "string" ? settings.strategyNote : "");
+    setStartingCapital(typeof settings.startingCapital === "number" ? settings.startingCapital : 1e3);
+    setCustomInstruments(Array.isArray(settings.customInstruments) ? settings.customInstruments : []);
+    setCustomTags(Array.isArray(settings.customTags) ? settings.customTags : []);
+    setLastCalibration(progress.lastCalibration || null);
+    setMindCoins(typeof wallet.mindCoins === "number" ? wallet.mindCoins : 0);
+    setCoinLedger(Array.isArray(wallet.coinLedger) ? wallet.coinLedger : []);
+    setLastDailyReward(wallet.lastDailyReward || null);
+
+    return {
+      restoredEntries,
+      mediaIds: restoredEntries.map((e) => e?.id).filter(Boolean)
+    };
+  };
   const handleRegister = async (username, password) => {
     const hasLegacy = await checkLegacyDataAvailable();
     authLegacyGateRef.current = hasLegacy;
     try {
       const newUser = await authRegister(username, password);
+      showIntroAfterExplicitAuthRef.current = true;
       if (hasLegacy) setMigrateFor(newUser.id);
       return newUser;
     } catch (e) {
@@ -1309,12 +1456,14 @@ function MindExe() {
   };
   const handleLogin = async (username, password) => {
     await authLogin(username, password);
+    showIntroAfterExplicitAuthRef.current = true;
   };
   const handleGoogleLogin = async () => {
     const hasLegacy = await checkLegacyDataAvailable();
     authLegacyGateRef.current = hasLegacy;
     try {
       const newUser = await authLoginWithGoogle();
+      showIntroAfterExplicitAuthRef.current = true;
       if (hasLegacy) setMigrateFor(newUser.id);
       return newUser;
     } catch (e) {
@@ -1356,10 +1505,13 @@ function MindExe() {
     strategyRawIndexRef.current = null;
     backupPendingRef.current = false;
     profileWriteUncertainRef.current = false;
+    showIntroAfterExplicitAuthRef.current = false;
     setProfileDataError(null);
     journalMediaStore.reset();
     profileStore.reset();
     setLoaded(false);
+    setCloudProfileReady(false);
+    setProfileBootstrapSource("none");
     setIntroResolved(false);
     setShowBootIntro(false);
     resetInMemoryState();
@@ -1367,12 +1519,44 @@ function MindExe() {
   };
   useEffect(() => {
     if (authStatus !== "authenticated" || !loaded || migrateFor || !userId || introResolved) return;
-    setShowBootIntro(true);
+    if (showIntroAfterExplicitAuthRef.current) {
+      showIntroAfterExplicitAuthRef.current = false;
+      setShowBootIntro(true);
+    }
     setIntroResolved(true);
   }, [authStatus, loaded, migrateFor, userId, introResolved]);
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashFading(true), 5500);
-    const t2 = setTimeout(() => setShowSplash(false), 6400);
+    if (authStatus !== "authenticated" || !loaded || !cloudProfileReady || migrateFor || !userId || profileDataError || !introResolved || showBootIntro) return;
+    if (interactiveTraceUserRef.current === userId) return;
+    const startedAt = Number(window.__mindExePageStartedAt);
+    const durationMs = Number.isFinite(startedAt) && typeof performance !== "undefined" ? Math.max(0, performance.now() - startedAt) : null;
+    traceEvent("INTERACTIVE", { status: "ready", durationMs });
+    interactiveTraceUserRef.current = userId;
+  }, [authStatus, loaded, cloudProfileReady, migrateFor, userId, profileDataError, introResolved, showBootIntro]);
+  useEffect(() => {
+    if (!userId) interactiveTraceUserRef.current = null;
+  }, [userId]);
+  useEffect(() => {
+    if (!cloudProfileReady || !import.meta.env?.PROD || typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    return scheduleIdleTask(() => {
+      navigator.serviceWorker.register("./sw.js").catch((error) => {
+        console.warn("mind.exe: service worker registration failed", error);
+      });
+    }, 3000);
+  }, [cloudProfileReady]);
+  useEffect(() => {
+    // The old splash was hard-coded to 6.4s and was followed by BootIntro on every reload,
+    // so a healthy cached session still needed ~8s before the app became usable. Count the
+    // splash budget from navigation start instead: slow module/CDN startup consumes the same
+    // budget instead of being followed by another full animation.
+    const startedAt = Number(window.__mindExePageStartedAt);
+    const elapsed = Number.isFinite(startedAt) && typeof performance !== "undefined"
+      ? Math.max(0, performance.now() - startedAt)
+      : 0;
+    const fadeIn = Math.max(0, STARTUP_SPLASH_FADE_MS - elapsed);
+    const hideIn = Math.max(120, STARTUP_SPLASH_HIDE_MS - elapsed);
+    const t1 = setTimeout(() => setSplashFading(true), fadeIn);
+    const t2 = setTimeout(() => setShowSplash(false), hideIn);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -1381,7 +1565,12 @@ function MindExe() {
   useEffect(() => {
     if (authStatus !== "authenticated" || !userId || migrateFor || authLegacyGateRef.current) return;
     let cancelled = false;
+    let bootstrapLoaded = false;
+    let cancelBackupPrep = null;
+
     setLoaded(false);
+    setCloudProfileReady(false);
+    setProfileBootstrapSource("none");
     setProfileDataError(null);
     canPersistRef.current = false;
     profileWriteUncertainRef.current = false;
@@ -1390,6 +1579,23 @@ function MindExe() {
     journalMediaStore.reset();
     profileStore.reset();
     resetInMemoryState();
+
+    // Fast read-only bootstrap: show the last locally-confirmed cloud snapshot immediately while
+    // Firestore verifies the current revision. Writes stay disabled until the cloud load succeeds,
+    // so an old tab/device can never push a stale shadow back over a newer cloud revision.
+    const shadow = readDirectProfileShadow(userId, { requireConfirmed: true })?.profile || null;
+    if (shadow) {
+      try {
+        applyProfileSnapshot(shadow);
+        bootstrapLoaded = true;
+        setLoaded(true);
+        setProfileBootstrapSource("shadow");
+        traceEvent("PROFILE_BOOTSTRAP", { status: "shadow_ready", code: `entries_${profileEntryCount(shadow)}` });
+      } catch (e) {
+        traceEvent("PROFILE_BOOTSTRAP", { status: "shadow_rejected", code: e?.message || "shadow_unreadable" });
+      }
+    }
+
     const tryLoad = async (attempt = 0) => {
       if (cancelled) return;
       if (!fbAuth.currentUser) {
@@ -1399,68 +1605,56 @@ function MindExe() {
         }
         firstLoadRef.current = false;
         if (!cancelled) {
-          setProfileDataError({ kind: "load", reason: "auth_session_not_ready" });
-          setLoaded(false);
+          setCloudProfileReady(false);
+          setProfileDataError({ kind: "load", reason: "auth_session_not_ready", cached: bootstrapLoaded });
+          setLoaded(bootstrapLoaded);
         }
         return;
       }
+
+      const profileStartedAt = Date.now();
       try {
-        // V0.9 — getDoc не имеет собственного таймаута. Если запрос повисает (типичный случай
-        // для iOS PWA при плохой сети), промис не резолвится и не отклоняется, catch ниже не
-        // срабатывает, setLoaded(true) не вызывается никогда — и после сплэша остаётся чёрный
-        // экран. Таймаут переводит зависание в обычную ошибку: сработает retry, а затем
-        // штатный путь "загрузить не удалось" с тостом и отключённым автосейвом.
-        const profile = await caWithTimeout(loadProfile(userId), 15e3, "profile_load_timeout");
+        traceEvent("PROFILE_LOAD", { status: attempt ? "retry_start" : "start", code: `attempt_${attempt + 1}` });
+        const profile = await caWithTimeout(loadProfile(userId), PROFILE_LOAD_TIMEOUT_MS, "profile_load_timeout");
+        traceEvent("PROFILE_LOAD", { status: "success", durationMs: Date.now() - profileStartedAt });
         if (cancelled) return;
-        const mediaIds = Array.isArray(profile?.journal?.entries) ? profile.journal.entries.map((e) => e?.id).filter(Boolean) : [];
-        // V1.0 — медиа больше НЕ ждём здесь (см. шапку файла): скриншоты догружаются фоном
-        // после setLoaded(true), иначе стартовый экран висит на время скачивания всех base64.
-        if (profile) {
-          const { user = {}, journal = {}, settings = {}, progress = {}, wallet = {} } = profile;
-          const rawEntries = Array.isArray(journal.entries) ? journal.entries : [];
-          const restoredEntries = rawEntries.map((e) => migrateEntry({
-            ...e,
-            date: new Date(e.date),
-            exitDate: e.exitDate ? new Date(e.exitDate) : null,
-            screenshots: [],
-            exitScreenshots: []
-          }));
-          setEntries(restoredEntries);
-          if (user.name !== void 0) setName(user.name);
-          if (typeof settings.accentIndex === "number") setAccentPreset(ACCENTS[settings.accentIndex] || ACCENTS.find((a) => a.cosmic) || ACCENTS[0]);
-          if (typeof settings.soundOn === "boolean") setSoundOn(settings.soundOn);
-          if (typeof settings.weeklyGoal === "number") setWeeklyGoal(settings.weeklyGoal);
-          if (settings.lang === "en" || settings.lang === "ru") setLang(settings.lang);
-          if (settings.measureMode) setMeasureMode(settings.measureMode);
-          if (settings.currency) setCurrency(settings.currency);
-          if (settings.tradingAsset) setTradingAsset(settings.tradingAsset);
-          if (typeof settings.strategyNote === "string") setStrategyNote(settings.strategyNote);
-          if (typeof settings.startingCapital === "number") setStartingCapital(settings.startingCapital);
-          if (Array.isArray(settings.customInstruments)) setCustomInstruments(settings.customInstruments);
-          if (Array.isArray(settings.customTags)) setCustomTags(settings.customTags);
-          if (progress.lastCalibration) setLastCalibration(progress.lastCalibration);
-          if (typeof wallet.mindCoins === "number") setMindCoins(wallet.mindCoins);
-          if (Array.isArray(wallet.coinLedger)) setCoinLedger(wallet.coinLedger);
-          if (wallet.lastDailyReward) setLastDailyReward(wallet.lastDailyReward);
-          if (restoredEntries.length > 0) {
-            setTimeout(() => showToast("\u0414\u0430\u043D\u043D\u044B\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u044B"), firstLoadRef.current ? 6900 : 300);
-          }
+
+        const { restoredEntries, mediaIds } = applyProfileSnapshot(profile);
+        if (profile && restoredEntries.length > 0 && !bootstrapLoaded) {
+          setTimeout(() => showToast("Данные восстановлены"), firstLoadRef.current ? 900 : 300);
         }
-        // Firestore answered (with or without an existing profile) without throwing \u2014 that's the
-        // only condition under which we trust the in-memory state enough to let it overwrite the
-        // cloud copy. A thrown error below deliberately does NOT reach this line.
         if (__lastProfileRecoverySource && profileEntryCount(profile) > 0) {
-          setTimeout(() => showToast(lang === "en" ? "Cloud data recovered from backup" : "\u0414\u0430\u043D\u043D\u044B\u0435 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D\u044B \u0438\u0437 \u0440\u0435\u0437\u0435\u0440\u0432\u043D\u043E\u0439 \u043A\u043E\u043F\u0438\u0438"), 350);
+          setTimeout(() => showToast(lang === "en" ? "Cloud data recovered from backup" : "Данные восстановлены из резервной копии"), 350);
         }
+
         rawProfileRef.current = profile || null;
+        if (profile) writeDirectProfileShadow(userId, profile, { confirmed: true });
         backupPendingRef.current = !!profile;
         profileWriteUncertainRef.current = false;
         setProfileDataError(null);
         canPersistRef.current = true;
+        setCloudProfileReady(true);
+        setProfileBootstrapSource("cloud");
         firstLoadRef.current = false;
-        if (!cancelled) setLoaded(true);
-        // Progressive screenshot loading: newest trades first, at most 3 entry chains in flight.
-        // Small batches reach React state while older journal media keeps loading in the background.
+        setLoaded(true);
+
+        // Preparing the legacy safety copy is no longer allowed to delay the user's first save.
+        // On current split-profile revisions this is normally a no-op; on a migration it runs in
+        // idle time and the old synchronous fallback remains in persistNow if preparation fails.
+        if (profile) {
+          cancelBackupPrep = scheduleIdleTask(async () => {
+            if (cancelled || !backupPendingRef.current) return;
+            try {
+              await saveProfileBackupIfSafer(userId, profile);
+              backupPendingRef.current = false;
+              traceEvent("PROFILE_BACKUP_PREP", { status: "success" });
+            } catch (e) {
+              traceEvent("PROFILE_BACKUP_PREP", { status: "error", code: e?.message || "backup_prepare_failed" });
+            }
+          }, 1800);
+        }
+
+        // Progressive screenshots remain background-only; profile/UI readiness never waits for them.
         if (mediaIds.length === 0) {
           journalMediaStore.markAllLoaded(true);
         } else {
@@ -1493,33 +1687,36 @@ function MindExe() {
           });
         }
       } catch (err) {
-        // A network/permission hiccup here must never be allowed to fall through to the auto-save
-        // effect with whatever's currently in memory (freshly reset to empty by resetInMemoryState
-        // above) \u2014 that previously overwrote real cloud data with zeros. Retry a couple of times
-        // first; only after retries are exhausted do we mark the app "loaded" for the UI, and even
-        // then canPersistRef stays false so nothing auto-persists until a load actually succeeds.
-        if (attempt < 2 && !cancelled) {
+        traceEvent("PROFILE_LOAD", {
+          status: attempt < PROFILE_LOAD_MAX_RETRIES ? "retry" : "error",
+          durationMs: Date.now() - profileStartedAt,
+          code: err?.code || err?.message || "profile_load_failed"
+        });
+        if (attempt < PROFILE_LOAD_MAX_RETRIES && !cancelled) {
           setTimeout(() => tryLoad(attempt + 1), 800 * (attempt + 1));
           return;
         }
-        console.error("mind.exe: failed to load cloud profile after retries \u2014 auto-save disabled for this session until it succeeds", err);
+        console.error("mind.exe: failed to load cloud profile after retries — writes remain disabled", err);
         firstLoadRef.current = false;
         if (!cancelled) {
-          setLoaded(false);
-          setProfileDataError({ kind: "load", reason: err?.message || "profile_load_failed" });
+          setCloudProfileReady(false);
+          setProfileDataError({ kind: "load", reason: err?.message || "profile_load_failed", cached: bootstrapLoaded });
+          setLoaded(bootstrapLoaded);
         }
       }
     };
+
     tryLoad();
     return () => {
       cancelled = true;
+      cancelBackupPrep?.();
     };
   }, [authStatus, userId, migrateFor, profileLoadRetryNonce]);
   // Strategy Lab loads independently from the journal profile. A failure here never blocks the
   // journal, and — just like canPersistRef for the profile — strategyCanPersistRef stays false so an
   // empty in-memory Strategy Lab can never overwrite an existing cloud index after a failed read.
   useEffect(() => {
-    if (authStatus !== "authenticated" || !userId || migrateFor || authLegacyGateRef.current) return;
+    if (authStatus !== "authenticated" || !cloudProfileReady || !userId || migrateFor || authLegacyGateRef.current) return;
     let cancelled = false;
     setStrategyLoaded(false);
     strategyCanPersistRef.current = false;
@@ -1558,11 +1755,39 @@ function MindExe() {
         }
       }
     };
-    load();
+    const cancelIdleLoad = scheduleIdleTask(() => load(), tab === "strategies" ? 100 : 1200);
     return () => {
       cancelled = true;
+      cancelIdleLoad?.();
     };
-  }, [authStatus, userId, migrateFor]);
+  }, [authStatus, cloudProfileReady, userId, migrateFor]);
+
+  // Decision ↔ Journal reconciliation. The journal already owns decisionSessionId, so a transient
+  // failure while creating/linking a trade should heal in the background instead of waiting for
+  // the user to manually open the pre-trade reasoning panel.
+  useEffect(() => {
+    if (!loaded || !cloudProfileReady || authStatus !== "authenticated" || !userId || !decisionStore?.reconcileTradeLinks) return;
+    const linked = entries.filter((entry) => entry?.decisionSessionId && entry?.id);
+    if (!linked.length) return;
+    const signature = `${userId}:${linked.map((entry) => `${entry.id}:${entry.decisionSessionId}`).sort().join("|")}`;
+    if (decisionReconcileKeyRef.current === signature) return;
+    decisionReconcileKeyRef.current = signature;
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      decisionStore.reconcileTradeLinks(userId, linked, { concurrency: 2 }).then((result) => {
+        if (cancelled) return;
+        if (result?.failed || result?.conflicts) {
+          console.warn("mind.exe: Decision/Journal link reconciliation incomplete", result);
+        }
+      }).catch((e) => {
+        if (!cancelled) {
+          decisionReconcileKeyRef.current = "";
+          console.warn("mind.exe: Decision/Journal link reconciliation failed", e);
+        }
+      });
+    }, 1200);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [loaded, cloudProfileReady, authStatus, userId, entries]);
 
   const buildPayload = (overrides = {}) => {
     const prev = rawProfileRef.current || {};
@@ -2064,7 +2289,7 @@ function MindExe() {
     };
     reader.readAsText(file);
   };
-  const exportFullBackup = () => {
+  const exportFullBackup = async () => {
     try {
       const payload = buildPayload();
       payload.journal.entries = entries.map((e) => ({ ...e, date: e.date instanceof Date ? e.date.toISOString() : e.date, exitDate: e.exitDate instanceof Date ? e.exitDate.toISOString() : e.exitDate }));
@@ -2076,6 +2301,10 @@ function MindExe() {
           date: trade.date instanceof Date ? trade.date.toISOString() : trade.date,
           exitDate: trade.exitDate instanceof Date ? trade.exitDate.toISOString() : trade.exitDate
         }))
+      };
+      payload.decisionLab = {
+        version: 1,
+        sessions: userId ? await decisionStore.loadAllSessions(userId, { strict: true }) : []
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -2213,7 +2442,26 @@ function MindExe() {
             strategyRestoreFailed = true;
           }
         }
-        showToast(strategyRestoreFailed ? "\u0411\u044D\u043A\u0430\u043F \u0436\u0443\u0440\u043D\u0430\u043B\u0430 \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D, \u043D\u043E Strategy Lab \u043D\u0435 \u0437\u0430\u0433\u0440\u0443\u0437\u0438\u043B\u0441\u044F" : "\u0411\u044D\u043A\u0430\u043F \u0432\u043E\u0441\u0441\u0442\u0430\u043D\u043E\u0432\u043B\u0435\u043D");
+        let decisionRestoreFailed = false;
+        if (raw.decisionLab) {
+          if (!userId) {
+            decisionRestoreFailed = true;
+          } else {
+            try {
+              const restoredDecision = await decisionStore.restoreSessions(userId, raw.decisionLab.sessions || []);
+              decisionRestoreFailed = (restoredDecision?.failed || 0) > 0;
+            } catch (e) {
+              console.error("mind.exe: Decision Lab backup restore failed", e);
+              decisionRestoreFailed = true;
+            }
+          }
+        }
+        const restoreWarnings = [];
+        if (strategyRestoreFailed) restoreWarnings.push("Strategy Lab");
+        if (decisionRestoreFailed) restoreWarnings.push(lang === "en" ? "Decision Lab" : "Разбор решений");
+        showToast(restoreWarnings.length
+          ? (lang === "en" ? `Backup restored, but ${restoreWarnings.join(" + ")} had errors` : `Бэкап восстановлен, но есть ошибки: ${restoreWarnings.join(" + ")}`)
+          : (lang === "en" ? "Backup restored" : "Бэкап восстановлен"));
       } catch (e) {
         if (e?.message === "full_backup_profile_save_failed") {
           showToast(lang === "en"
@@ -2340,19 +2588,24 @@ function MindExe() {
     { id: "log", label: t.nav.log, icon: NotebookText },
     { id: "patterns", label: t.nav.patterns, icon: LineChartIcon },
     { id: "strategies", label: t.nav.strategies, icon: Target },
+    { id: "decision", label: lang === "en" ? "Decision Lab" : "Разбор", icon: Brain, desktopOnly: true },
     { id: "new", label: t.nav.new, icon: BookOpen, primary: true },
     { id: "challenge", label: t.nav.challenge, icon: Flame },
     { id: "coach", label: t.nav.coach, icon: Bot },
     { id: "settings", label: t.nav.settings, icon: User }
   ];
-  const mobileNav = nav.filter((n) => n.id !== "settings");
+  const mobileNav = nav.filter((n) => n.id !== "settings" && !n.desktopOnly);
   const mobilePrimaryNav = mobileNav.find((n) => n.primary) || null;
   const mobileSideNav = mobileNav.filter((n) => !n.primary);
   const mobileLeftNav = mobileSideNav.slice(0, Math.ceil(mobileSideNav.length / 2));
   const mobileRightNav = mobileSideNav.slice(Math.ceil(mobileSideNav.length / 2));
   const wideTab = ["home", "log", "patterns", "strategies"].includes(tab);
-  const formTab = ["new", "edit", "close"].includes(tab);
+  const formTab = ["new", "edit", "close", "decision"].includes(tab);
   const contentMaxWidth = wideTab ? "md:max-w-3xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl" : formTab ? "md:max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "md:max-w-2xl lg:max-w-4xl xl:max-w-5xl";
+  const blockingProfileError = !!profileDataError && !profileDataError.cached;
+  const cachedReadOnly = authStatus === "authenticated" && !migrateFor && loaded && !cloudProfileReady && profileBootstrapSource === "shadow";
+  const profileUiAllowed = !blockingProfileError && (!profileDataError || profileDataError.cached);
+
   return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "var(--font-display)" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
         /* V4.9 final typography: strict grotesk for UI copy, mono only for figures and technical data. */
@@ -2559,7 +2812,7 @@ function MindExe() {
         .stagger > *:nth-child(6) { animation-delay: 300ms; }
       ` }),
     showSplash && /* @__PURE__ */ jsx(Splash, { accent, fading: splashFading }),
-    !showSplash && authStatus === "authenticated" && !migrateFor && profileDataError && /* @__PURE__ */ jsx(ProfileLoadErrorScreen, {
+    !showSplash && authStatus === "authenticated" && !migrateFor && blockingProfileError && /* @__PURE__ */ jsx(ProfileLoadErrorScreen, {
       accent,
       lang,
       kind: profileDataError.kind,
@@ -2573,11 +2826,21 @@ function MindExe() {
       },
       onLogout: handleLogout
     }),
-    !showSplash && !profileDataError && (authStatus === "checking" || authStatus === "authenticated" && !migrateFor && !introResolved && !showBootIntro) && /* @__PURE__ */ jsx(BootLoading, { accent }),
+    !showSplash && !blockingProfileError && !cachedReadOnly && (authStatus === "checking" || authStatus === "authenticated" && !migrateFor && !introResolved && !showBootIntro) && /* @__PURE__ */ jsx(BootLoading, { accent }),
     !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin, onGoogle: handleGoogleLogin }),
     !showSplash && authStatus === "authenticated" && migrateFor && /* @__PURE__ */ jsx(LegacyMigratePrompt, { accent, onMigrate: handleMigrate, onSkip: handleSkipMigrate }),
-    !showSplash && authStatus === "authenticated" && !migrateFor && !profileDataError && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { accent, name, lang, onDone: () => setShowBootIntro(false) }),
-    !showSplash && authStatus === "authenticated" && !migrateFor && !profileDataError && introResolved && !showBootIntro && /* @__PURE__ */ jsxs(Fragment, { children: [
+    !showSplash && authStatus === "authenticated" && !migrateFor && profileUiAllowed && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { accent, name, lang, onDone: () => setShowBootIntro(false) }),
+    !showSplash && authStatus === "authenticated" && !migrateFor && profileUiAllowed && introResolved && !showBootIntro && /* @__PURE__ */ jsxs(Fragment, { children: [
+      cachedReadOnly && /* @__PURE__ */ jsxs("div", { className: "fixed top-3 left-1/2 -translate-x-1/2 z-[120] max-w-[calc(100%-24px)] rounded-full px-3 py-2 flex items-center gap-2", style: { background: "rgba(13,13,15,0.96)", border: `1px solid ${profileDataError?.cached ? LOSS + "66" : BASE.line}`, color: BASE.inkDim, backdropFilter: "blur(14px)" }, children: [
+        /* @__PURE__ */ jsx("span", { className: "text-[10px] whitespace-nowrap", style: { fontFamily: "var(--font-mono)" }, children: profileDataError?.cached ? (lang === "en" ? "Cloud unavailable · cached view" : "Облако недоступно · локальная копия") : (lang === "en" ? "Verifying cloud data…" : "Проверяю облачные данные…") }),
+        profileDataError?.cached && /* @__PURE__ */ jsx("button", { type: "button", className: "text-[10px] underline underline-offset-2", style: { color: accent }, onClick: () => {
+          profileWriteUncertainRef.current = false;
+          canPersistRef.current = false;
+          setProfileDataError(null);
+          setCloudProfileReady(false);
+          setProfileLoadRetryNonce((n) => n + 1);
+        }, children: lang === "en" ? "Retry" : "Повторить" })
+      ] }),
       /* @__PURE__ */ jsx("div", { className: "pointer-events-none fixed inset-0", style: { background: `radial-gradient(circle at 50% 0%, ${accent}0A 0%, transparent 55%)`, transition: "background 0.4s ease" } }),
       accentPreset.cosmic && /* @__PURE__ */ jsxs("div", { className: "pointer-events-none fixed inset-0 overflow-hidden", "aria-hidden": "true", children: [
         /* @__PURE__ */ jsx("div", { className: "cosmic-core" }),
@@ -2587,6 +2850,7 @@ function MindExe() {
       ] }),
       /* @__PURE__ */ jsx(Toast, { text: toast }),
       /* @__PURE__ */ jsx(ScreenshotPreviewHost, {}),
+      cachedReadOnly && /* @__PURE__ */ jsx("div", { className: "fixed inset-0 z-[110]", style: { background: "transparent", touchAction: "pan-y" }, "aria-hidden": "true" }),
       /* @__PURE__ */ jsx(WalletSheet, { open: walletOpen, onClose: () => setWalletOpen(false), balance: mindCoins, ledger: coinLedger, accent }),
       /* @__PURE__ */ jsx(DesktopSidebar, { nav, tab, setTab, accent, mindCoins, onWalletClick: () => setWalletOpen(true) }),
       /* @__PURE__ */ jsx("div", { className: "md:ml-[232px] md:flex md:justify-center", children: /* @__PURE__ */ jsxs("div", { className: `max-w-md ${contentMaxWidth} w-full mx-auto md:mx-0 px-5 md:px-10 pt-0 md:pt-10 pb-24 md:pb-16 relative`, children: [
@@ -2621,8 +2885,8 @@ function MindExe() {
             ]
           }
         ),
-        /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
-          tab === "home" && /* @__PURE__ */ jsx(Home, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify: showToast, strategyNote }),
+        /* @__PURE__ */ jsx(FeatureSuspense, { lang, children: /* @__PURE__ */ jsxs("div", { className: "tab-content", children: [
+          tab === "home" && /* @__PURE__ */ jsx(DashboardHome, { entries, goTo: setTab, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify: showToast, strategyNote }),
           tab === "new" && /* @__PURE__ */ jsx(
             NewEntry,
             {
@@ -2637,10 +2901,20 @@ function MindExe() {
               notify: showToast,
               t,
               lang,
+              prefill: decisionTradePrefill,
               onSave: async (e) => {
                 const next = [...entries, e];
                 const ok = await commitJournalEntries(next, "\u0417\u0430\u043F\u0438\u0441\u044C \u0441\u043E\u0445\u0440\u0430\u043D\u0435\u043D\u0430");
                 if (!ok) return false;
+                if (e.decisionSessionId && userId) {
+                  try {
+                    await decisionStore.linkTrade(userId, e.decisionSessionId, e.id);
+                  } catch (linkError) {
+                    console.error("mind.exe: Decision Lab trade link failed", linkError);
+                    showToast(lang === "en" ? "Trade saved. Decision link will need a retry." : "Сделка сохранена. Связь с разбором нужно будет повторить.");
+                  }
+                }
+                setDecisionTradePrefill(null);
                 playPing();
                 setTab("log");
                 return true;
@@ -2653,7 +2927,7 @@ function MindExe() {
           }, onEditTrade: (id) => {
             setEditingId(id);
             setTab("edit");
-          }, measureMode, currency, t }),
+          }, measureMode, currency, t, decisionStore, decisionUserId: userId, notify: showToast, lang }),
           tab === "close" && /* @__PURE__ */ jsx(CloseTrade, {
             entry: entries.find((e) => e.id === closingId) || null,
             accent,
@@ -2700,6 +2974,29 @@ function MindExe() {
               setTab("log");
               return true;
             }
+          }),
+          tab === "decision" && /* @__PURE__ */ jsx(Suspense, {
+            fallback: /* @__PURE__ */ jsx("div", { className: "py-16 text-center text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: lang === "en" ? "Loading Decision Lab…" : "Загружаю разбор…" }),
+            children: /* @__PURE__ */ jsx(DecisionLab, {
+              userId,
+              store: decisionStore,
+              accent,
+              lang,
+              notify: showToast,
+              trades: entries,
+              onCreateTrade: (session) => {
+                const direction = session.mode === "direction"
+                  ? session.finalDecision
+                  : session.consideredDirection;
+                if (!["long", "short"].includes(direction)) return;
+                setDecisionTradePrefill({
+                  instrument: session.symbol || "",
+                  direction: direction === "long" ? "Long" : "Short",
+                  decisionSessionId: session.id
+                });
+                setTab("new");
+              }
+            })
           }),
           tab === "patterns" && /* @__PURE__ */ jsx(Patterns, { entries, accent, measureMode, currency, analytics, t, lang }),
           tab === "strategies" && /* @__PURE__ */ jsx(StrategyLab, {
@@ -2760,7 +3057,7 @@ function MindExe() {
               t
             }
           )
-        ] }, tab)
+        ] }, tab) })
       ] }) }),
       /* V3.0 — нижняя панель. Была плавающая карточка со своей рамкой, фоном и подписями
          под каждой из семи иконок; подписи при семи вкладках всё равно обрезались
@@ -2785,3 +3082,4 @@ window.__mindExeStarted = true;
 if (window.__mindExeBootTimer) clearTimeout(window.__mindExeBootTimer);
 document.getElementById("boot-fallback")?.remove();
 createRoot(document.getElementById("root")).render(/* @__PURE__ */ jsx2(AppErrorBoundary, { children: /* @__PURE__ */ jsx2(MindExe, {}) }));
+

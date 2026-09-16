@@ -192,41 +192,46 @@ export function createProfileStore({
       throw new Error("profile_core_too_large");
     }
 
-    return { core, journalChunks, ledgerChunks };
+    return { core, journalChunks, ledgerChunks, profile: normalized };
   }
 
   async function writeRevision(userId, revisionId, profile, savedAt, sequence) {
     const built = buildRevision(profile, revisionId, savedAt, sequence);
-    const writtenKeys = [];
-
-    const write = async (key, value) => {
-      await storageSet(key, JSON.stringify(value), false);
-      writtenKeys.push(key);
-    };
-
-    await write(revisionCoreKey(userId, revisionId), built.core);
-
-    for (let i = 0; i < built.journalChunks.length; i++) {
-      await write(journalChunkKey(userId, revisionId, i), {
+    const records = [
+      [revisionCoreKey(userId, revisionId), built.core],
+      ...built.journalChunks.map((items, index) => [journalChunkKey(userId, revisionId, index), {
         version: PROFILE_STORE_VERSION,
         revisionId,
         kind: "journal",
-        index: i,
-        items: built.journalChunks[i]
-      });
-    }
-
-    for (let i = 0; i < built.ledgerChunks.length; i++) {
-      await write(ledgerChunkKey(userId, revisionId, i), {
+        index,
+        items
+      }]),
+      ...built.ledgerChunks.map((items, index) => [ledgerChunkKey(userId, revisionId, index), {
         version: PROFILE_STORE_VERSION,
         revisionId,
         kind: "ledger",
-        index: i,
-        items: built.ledgerChunks[i]
-      });
+        index,
+        items
+      }])
+    ];
+
+    // All revision documents are immutable and invisible until the manifest CAS activates this
+    // revision. Writing them in parallel removes one network round-trip per chunk without changing
+    // the atomic point of truth. If any write fails, remove every possible key before surfacing the
+    // error; the manifest is never touched, so the previous revision remains canonical.
+    const writeResults = await Promise.allSettled(
+      records.map(([key, value]) => storageSet(key, JSON.stringify(value), false))
+    );
+    const failedWrite = writeResults.find((result) => result.status === "rejected");
+    if (failedWrite) {
+      // Promise.all would reject as soon as the first chunk failed while other Firestore writes
+      // could still be in flight. Waiting for every immutable write to settle before cleanup
+      // prevents a slow successful write from recreating an orphan after its delete already ran.
+      await Promise.allSettled(records.map(([key]) => storageDelete(key, false)));
+      throw failedWrite.reason;
     }
 
-    return { ...built, writtenKeys };
+    return { ...built, writtenKeys: records.map(([key]) => key) };
   }
 
   async function loadChunk(key, revisionId, kind, index) {
@@ -252,15 +257,21 @@ export function createProfileStore({
 
     const journalCount = Math.max(0, Number(core.journalChunkCount) || 0);
     const ledgerCount = Math.max(0, Number(core.ledgerChunkCount) || 0);
-    const entries = [];
-    const ledger = [];
 
-    for (let i = 0; i < journalCount; i++) {
-      entries.push(...await loadChunk(journalChunkKey(userId, revisionId, i), revisionId, "journal", i));
-    }
-    for (let i = 0; i < ledgerCount; i++) {
-      ledger.push(...await loadChunk(ledgerChunkKey(userId, revisionId, i), revisionId, "ledger", i));
-    }
+    // Revision chunks are immutable once written. Reading them sequentially made startup latency
+    // grow almost linearly with journal size on mobile networks. Fetch each ordered chunk set in
+    // parallel; Promise.all preserves index order and any missing/corrupt chunk still rejects the
+    // whole revision exactly as before, so history fallback semantics stay unchanged.
+    const [journalRows, ledgerRows] = await Promise.all([
+      Promise.all(Array.from({ length: journalCount }, (_, i) =>
+        loadChunk(journalChunkKey(userId, revisionId, i), revisionId, "journal", i)
+      )),
+      Promise.all(Array.from({ length: ledgerCount }, (_, i) =>
+        loadChunk(ledgerChunkKey(userId, revisionId, i), revisionId, "ledger", i)
+      ))
+    ]);
+    const entries = journalRows.flat();
+    const ledger = ledgerRows.flat();
 
     if (Number.isFinite(Number(core.entryCount)) && entries.length !== Number(core.entryCount)) {
       throw new Error("profile_revision_incomplete");
@@ -280,10 +291,14 @@ export function createProfileStore({
   }
 
   async function load(userId) {
-    const resetRes = await storageGet(resetStateKey(userId), false);
+    // Independent metadata reads can happen together. On a cold iPhone/PWA start this removes one
+    // full Firestore round-trip before the active revision can even begin loading.
+    const [resetRes, manifestRes] = await Promise.all([
+      storageGet(resetStateKey(userId), false),
+      storageGet(manifestKey(userId), false)
+    ]);
     const resetState = resetRes?.value ? parseResetState(resetRes.value) : null;
 
-    const manifestRes = await storageGet(manifestKey(userId), false);
     if (!manifestRes?.value) {
       reset();
       lastResetState = resetState;
@@ -451,7 +466,7 @@ export function createProfileStore({
       revisionId,
       sequence: committedManifest.sequence,
       manifest: committedManifest,
-      profile: built.core.profile,
+      profile: built.profile,
       resetState: lastResetState,
       journalChunkCount: built.journalChunks.length,
       ledgerChunkCount: built.ledgerChunks.length

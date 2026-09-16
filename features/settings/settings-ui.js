@@ -6,8 +6,9 @@ import {
   AlertTriangle, Check, Download, LogOut, Trash2, Upload, User, Volume2, VolumeX
 } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, LOSS, ACCENTS } from "../../config/app-config.js?v=4.9.0";
-import { CURRENCIES } from "../../core/trade-math.js?v=4.9.0";
+import { BASE, LOSS, ACCENTS } from "../../config/app-config.js";
+import { CURRENCIES } from "../../core/trade-math.js";
+import { clearPerformanceTrace, formatPerformanceTrace, getPerformanceTrace } from "../../core/performance-trace.js";
 
 function SettingsSection({ children }) {
   return /* @__PURE__ */ jsx("div", { className: "mb-6 break-inside-avoid", children });
@@ -55,6 +56,9 @@ export function Settings({
 }) {
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmFullReset, setConfirmFullReset] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [diagnostics, setDiagnostics] = useState("");
+  const [diagnosticsCopied, setDiagnosticsCopied] = useState(false);
   const importInputRef = useRef(null);
   const importBackupInputRef = useRef(null);
   const [capitalDraft, setCapitalDraft] = useState(String(startingCapital));
@@ -262,6 +266,18 @@ export function Settings({
           t.settings.soundToggleLabel
         ] }),
         /* @__PURE__ */ jsx("span", { className: "w-9 h-5 rounded-full relative transition-all duration-200", style: { background: soundOn ? accent : BASE.line }, children: /* @__PURE__ */ jsx("span", { className: "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all duration-200", style: { left: soundOn ? "18px" : "2px" } }) })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsx(SettingsGroupTitle, { children: lang === "en" ? "Diagnostics" : "Диагностика" }),
+    /* @__PURE__ */ jsxs(Section, { children: [
+      /* @__PURE__ */ jsx("p", { className: "text-xs mb-3", style: { color: BASE.inkFaint }, children: lang === "en" ? "Local timings only. Journal text, screenshots and audio are never stored here." : "Только локальные тайминги. Текст журнала, скриншоты и аудио сюда не записываются." }),
+      /* @__PURE__ */ jsx("button", { type:"button", onClick: () => { const next=!showDiagnostics; setShowDiagnostics(next); if(next) setDiagnostics(formatPerformanceTrace(getPerformanceTrace())); }, className:"w-full px-4 py-3 rounded-xl text-sm text-left", style:{border:`1px solid ${BASE.line}`,background:BASE.surface,color:BASE.ink}, children: showDiagnostics ? (lang === "en" ? "Hide performance log" : "Скрыть журнал производительности") : (lang === "en" ? "Show performance log" : "Показать журнал производительности") }),
+      showDiagnostics && /* @__PURE__ */ jsxs("div", { className:"mt-3", children:[
+        /* @__PURE__ */ jsx("pre", { className:"text-[9px] leading-relaxed whitespace-pre-wrap max-h-56 overflow-auto p-3 rounded-xl", style:{background:BASE.bg,color:BASE.inkDim,border:`1px solid ${BASE.line}`}, children: diagnostics || (lang === "en" ? "No events yet" : "Событий пока нет") }),
+        /* @__PURE__ */ jsxs("div", { className:"flex items-center gap-4 mt-2", children:[
+          /* @__PURE__ */ jsx("button", { type:"button", onClick:async()=>{ try { await navigator.clipboard?.writeText(diagnostics || formatPerformanceTrace(getPerformanceTrace())); setDiagnosticsCopied(true); setTimeout(()=>setDiagnosticsCopied(false),1200); } catch {} }, className:"text-xs", style:{color:BASE.inkFaint}, children: diagnosticsCopied ? (lang === "en" ? "Copied" : "Скопировано") : (lang === "en" ? "Copy log" : "Скопировать журнал") }),
+          /* @__PURE__ */ jsx("button", { type:"button", onClick:()=>{ clearPerformanceTrace(); setDiagnostics(""); setDiagnosticsCopied(false); }, className:"text-xs", style:{color:BASE.inkFaint}, children: lang === "en" ? "Clear log" : "Очистить журнал" })
+        ] })
       ] })
     ] }),
     /* @__PURE__ */ jsx(SettingsGroupTitle, { children: t.settings.groupData }),

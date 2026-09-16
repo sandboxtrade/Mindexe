@@ -1,10 +1,10 @@
 import { Component, useState, useRef, useEffect } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import { X as XIcon, AlertTriangle, Coins, User, RotateCcw } from "lucide-react";
-import { BASE, WIN, LOSS } from "../config/app-config.js?v=4.9.0";
-import { groupThousands } from "../core/trade-math.js?v=4.9.0";
-import { LogoMark, Wordmark } from "./brand.js?v=4.9.0";
-import { EmptyState } from "./primitives.js?v=4.9.0";
+import { BASE, WIN, LOSS } from "../config/app-config.js";
+import { groupThousands } from "../core/trade-math.js";
+import { LogoMark, Wordmark } from "./brand.js";
+import { EmptyState } from "./primitives.js";
 
 const relTime = (date) => {
   const diff = Math.floor((Date.now() - date.getTime()) / 864e5);
@@ -14,14 +14,14 @@ const relTime = (date) => {
   return `${Math.floor(diff / 7)} нед. назад`;
 };
 
-var SPLASH_POSTER_IMG = "./splash-poster.jpg?v=4.9.0";
+var SPLASH_POSTER_IMG = "./splash-poster.jpg";
 // V4.6.13: новый splash-видеофон заменяет прежний «глаз». Сам каркас splash screen,
 // логотип, оверлеи, fade-out и общая анимационная логика сохранены без изменений.
 // Видео остаётся sibling-файлом рядом с index.html. Query string нужен как cache-buster:
 // iOS PWA иначе может продолжать показывать старый splash.mp4.
 // Встроенный SPLASH_POSTER_IMG — первый кадр этого же видео; если autoplay не сработает,
 // экран всё равно остаётся в новой визуальной концепции.
-var SPLASH_VIDEO_SRC = "./splash.mp4?v=4.9.0";
+var SPLASH_VIDEO_SRC = "./splash.mp4";
 // V0.9 — раньше между «сплэш закончился» и «профиль загрузился» не рендерилось НИЧЕГО: при
 // authStatus === "checking" (Firebase ещё не ответил, кто вошёл) или при authenticated с
 // loaded === false экран оставался просто чёрным. Теперь эти состояния показывают
@@ -97,7 +97,7 @@ function Splash({ accent, fading }) {
   const videoRef = useRef(null);
   const [flare, setFlare] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setFlare(true), 4600);
+    const t = setTimeout(() => setFlare(true), 1400);
     return () => clearTimeout(t);
   }, []);
   useEffect(() => {

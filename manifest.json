@@ -1,12 +1,15 @@
 {
-  "name": "mind.exe",
-  "short_name": "mind.exe",
   "id": "./",
+  "name": "MIND.EXE",
+  "short_name": "MIND.EXE",
+  "description": "Дневник трейдера: сделки, психология, решения и персональная аналитика.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#000000",
   "theme_color": "#000000",
+  "lang": "ru",
   "icons": [
     {
       "src": "./icon-192.png",

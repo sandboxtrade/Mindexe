@@ -1,94 +1,86 @@
-# MIND.EXE v4.9.0 FINAL QA — testing
+# MIND.EXE v5.3.2 — FINAL QA / production smoke matrix
 
-Run before every deployment:
+Before deployment:
 
 ```bash
+npm install
 npm test
+npm run test:syntax
+npm run build
 ```
 
-No npm dependencies are required for the regression suite. Expected final output:
+Expected source regression result:
 
 ```text
-68 regression checks passed.
+118 regression checks passed.
 MIND.EXE regression suite: OK
 ```
 
-## Automated coverage
+The production site must be deployed from `dist/`, not directly from source files.
 
-The suite checks:
+## A. Vite / production bundle
 
-- syntax of `app.js` and every local JS module;
-- all relative JS imports resolve to existing files;
-- static unresolved-identifier audit (`TS2304` / `TS2552`) when global `tsc` is available;
-- exact Firebase/profile/media/Strategy key invariants;
-- Firestore path shape;
-- Profile Store v2 chunk/revision reconstruction;
-- profile stale-client CAS and five-revision rollback;
-- Strategy index revisions/CAS/fallbacks;
-- direct Strategy trade CAS;
-- journal split-media manifest-last activation/readiness guards;
-- cloud-first journal mutations/import/reset/restore semantics;
-- uncertain write freeze and profile conflict gate;
-- result units, SL/TP/manual normalization and RR math;
-- R-only analytics isolation and Pattern Engine calculations;
-- modular dependency boundaries after the large `app.js` extraction;
-- passive second-device `anonId` regression;
-- final runtime dependencies (`Fragment`, `Card`, `JournalReview`, no dead splash mask);
-- Inter + IBM Plex Mono typography contract;
-- one `4.9.0` local module cache generation;
-- pre-React boot fallback;
-- external splash poster/video release assets.
+1. Run `npm run build` and confirm `dist/index.html` references hashed local JS/CSS assets rather than esm.sh, gstatic Firebase modules or Tailwind CDN.
+2. Open the deployed site with DevTools Network and verify React/Firebase/Lucide/Recharts are served from the same site/build, not runtime module CDNs.
+3. Hard-refresh several times. No `Failed to resolve module specifier`, missing chunk or stale `?v=` errors should occur.
+4. Open every lazy tab at least once: Home, Patterns, Challenge, Strategy, Settings, Coach, Calibration, Decision Lab. Each chunk must load and render.
+5. Verify packaged `manifest.json` and icon-16/32/180/192/512 assets are present in `dist/` after build.
 
-## Additional release checks already performed for v4.9.0
+## B. Cold / warm startup
 
-- `node --check` passes for every production `.js` file.
-- Static TypeScript audit reports no unresolved runtime identifiers (`TS2304` / `TS2552`).
-- Every relative local JS import uses the same `?v=4.9.0` cache generation.
-- `core/profile-store.js`, `core/journal-media.js`, `core/strategy-store.js` and `core/firestore-storage.js` are byte-for-byte identical to the tested v4.8.5.1 base.
+1. Fully close the installed iPhone PWA, reopen it on Wi-Fi, then repeat on mobile data.
+2. Settings → Diagnostics must show `MODULE_READY`, `AUTH_RESOLVE`, `PROFILE_LOAD`, `INTERACTIVE`.
+3. Repeat a warm reopen. It should not wait for the old 6–8 second splash sequence.
+4. Confirm Home/Strategy/Decision reconciliation do not start before the cloud profile is verified.
+5. Compare several launches rather than one; note any launch where `MODULE_READY` or `PROFILE_LOAD` is unusually slow.
 
-A full headless browser smoke could not be validated in the build container because its DNS cannot resolve the external runtime CDNs (`esm.sh`, Firebase gstatic, Tailwind CDN). That is why the following real-device matrix is mandatory after upload.
+## C. Confirmed local profile bootstrap
 
-## Mandatory post-deploy smoke matrix
+1. Complete one successful cloud load/save on v5.3.2, then fully close the PWA.
+2. Reopen with a throttled connection. The last cloud-confirmed profile may appear quickly while verification continues.
+3. While the banner says `Проверяю облачные данные…`, taps/edits must not create writes.
+4. After cloud verification completes, the banner/blocker disappears and normal editing works.
+5. Test cloud unavailable after a previously confirmed v5.3.2 snapshot. The app may show the cached snapshot as read-only; it must not silently become writable.
+6. Upgrade directly from v5.2.1 and throttle the first launch. An old v5.2.1 shadow must NOT be trusted for fast bootstrap; v5.3.2 should first obtain the full cloud profile and only then create its confirmed local snapshot.
+7. Use desktop + phone. A stale device must never upload its local snapshot before cloud revision verification.
 
-### Desktop
+## D. Profile save performance / safety
 
-- cold reload reaches login/app instead of ErrorBoundary;
-- login and logout work;
-- edit profile name/balance/currency and reload;
-- create an open journal trade;
-- attach entry screenshot;
-- edit it;
-- close it by TP / SL / manual on disposable trades;
-- verify Analytics and Journal Review open;
-- create/edit Strategy, add/close/delete a direct Strategy trade;
-- export backup.
+1. Use an account with a large Journal/coin ledger and save a normal edit.
+2. Verify save latency is improved or at least not worse; immutable profile chunks now write concurrently.
+3. Interrupt network during a save. The previous active manifest revision must remain readable after reload.
+4. Retry after network recovery. CAS conflict/uncertain-write protections must behave exactly as before.
+5. Confirm Journal entries and coin ledger remain present after save/reload; v5.3.2 specifically fixes the full local-shadow return shape after chunked saves.
 
-### iPhone / installed PWA
+## E. PWA service worker
 
-- fully close and relaunch PWA after deployment;
-- cold boot completes;
-- no infinite black/loading screen;
-- open journal, screenshots, Strategy Lab, Settings;
-- background the app during normal use, return and verify state;
-- reload and verify cloud data;
-- verify pinch zoom / normal iOS input behavior.
+1. After a successful cloud-ready launch, check that `sw.js` becomes registered in production.
+2. It must not register during the earliest critical profile-loading phase.
+3. Reload once so the worker controls the page, then inspect Cache Storage: the shell should contain the actual hashed build assets generated by Vite.
+4. Firebase/Gemini requests must continue to go directly to their external origins and must not appear in the MIND.EXE shell cache.
+5. Deploy a new build while the old version is still open. The new worker must wait; the old client must keep loading its lazy chunks. Close all old clients, reopen, then confirm the new worker activates and removes the old `mind-exe-shell-*` cache.
+6. Test a warm offline reopen only after the app has been loaded successfully online. The shell may open from cache; cloud data remains read-only/unavailable until Firebase is reachable.
 
-### Two-device
+## F. Existing Approach 1 reliability smoke
 
-- same account on desktop + phone;
-- leave phone idle;
-- edit profile/trade on desktop;
-- desktop must not get a false revision conflict from the idle phone;
-- reload phone and verify new cloud data;
-- intentionally edit from both sides to confirm stale-client conflict protection still blocks silent overwrite.
+1. Journal: write a note, press `Поправить текст`; one press must either edit, report unchanged text, or show a clear timeout/error.
+2. Change the note while copyedit is running. A late AI result must not overwrite the manual edit.
+3. Start screenshot recognition and manually change a field before AI returns. That field must remain untouched.
+4. Settings → Diagnostics should show named AI operation timings without note text, prompts, screenshots, transcripts or audio.
 
-### Network interruption
+## G. Decision Lab regression smoke
 
-Using a disposable account:
+1. Start Long/Short Decision; clarity/weight/emotion/confidence must remain unrated until explicitly set.
+2. Correct a transcript, add another voice fragment, verify the correction survives.
+3. Reload an unsynced local draft; if cloud revision is unchanged it should recover, otherwise CAS conflict must block overwrite.
+4. Record 60–120 seconds in installed iPhone PWA; retry a failed transcription without re-recording.
+5. Lock → create Journal trade → close → post-review → Analytics → reload.
+6. Two devices editing the same Decision must preserve CAS and locked-snapshot immutability.
 
-- interrupt network during a cloud save;
-- app should freeze uncertain writes / show blocking recovery state rather than pretend success;
-- restore network and reload cloud state;
-- confirm no empty profile overwrote real journal data.
+## H. Full app smoke after build
 
-Do not deploy if any persistence/conflict/reset behavior differs from the established v4.8.x semantics.
+Run the ordinary production chain:
+
+Journal create → screenshot AI recognition → copyedit → save → edit → close → reload → logout/login → Strategy Lab → Decision Lab → full backup/export → restore on a disposable account.
+
+No step should depend on source `?v=` query strings or CDN import maps after v5.3.2.

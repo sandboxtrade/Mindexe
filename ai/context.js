@@ -1,12 +1,12 @@
 // mind.exe — AI context builders.
 // Pure compression/derivation from journal analytics; no Firebase, network or UI side effects.
 
-import { st_mean, st_median, st_round2 } from "../core/stats.js?v=4.9.0";
-import { entriesWithRealizedRR, normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js?v=4.9.0";
+import { st_mean, st_median, st_round2 } from "../core/stats.js";
+import { entriesWithRealizedRR, normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js";
 import {
   emotionClampPct, emotionConflict, emotionScaleKeys, isEntryClosed, normalizeEmotions
-} from "../core/journal-model.js?v=4.9.0";
-import { calculateTraderLevel } from "../analytics/trader-analytics.js?v=4.9.0";
+} from "../core/journal-model.js";
+import { calculateTraderLevel } from "../analytics/trader-analytics.js";
 
 function aiSafeNum(v) {
   return typeof v === "number" && isFinite(v) ? v : null;

@@ -1,39 +1,133 @@
-MIND.EXE v4.9.0 FINAL QA
+MIND.EXE v5.3.1 — FINAL QA candidate
+Vite production architecture + Approach 1/2 hardening preserved.
 
-Upload the release while preserving the directory structure.
-Do NOT flatten ai/, analytics/, config/, core/, features/, i18n/ or ui/ into the repository root.
+IMPORTANT
+v5.3.1 is a Vite source release. Do NOT publish source index.html/app.js directly.
+Deploy the generated dist/ directory.
 
-Runtime files in this archive:
-- index.html
-- app.js
-- splash.mp4
-- splash-poster.jpg
+REQUIRED RUNTIME
+Node.js supported by Vite 7:
+- Node 20.19+
+- or Node 22.12+
+The package.json engine is pinned as: ^20.19.0 || >=22.12.0
+
+SOURCE STRUCTURE
+Keep all folders intact:
 - ai/
 - analytics/
+- audio/
 - config/
 - core/
 - features/
 - i18n/
+- public/
+- scripts/
+- tests/
 - ui/
 
-Keep the existing repository PWA assets that are not part of this archive (manifest.json and icon PNG files).
-The final index references manifest.json?v=4.9.0 and app.js?v=4.9.0-final.
-All local JS module imports use ?v=4.9.0.
+Keep the root PWA assets included in this archive:
+- manifest.json
+- icon-16.png
+- icon-32.png
+- icon-180.png
+- icon-192.png
+- icon-512.png
 
-Recommended repository-only files:
-- package.json
-- tests/
-- TESTING.md
-- NEXT_CHAT_HANDOFF.md
+Vite copies manifest/icons into dist/. public/splash.mp4, public/splash-poster.jpg and
+public/sw.js are copied by Vite. The build hook then injects the actual hashed JS/CSS/image
+outputs into the service-worker precache.
 
-Before deploy:
-  npm test
+BUILD
+1. npm install
+2. npm test
+3. npm run test:syntax
+4. npm run build
+5. Deploy ONLY the contents of dist/
 
-Expected result:
-  68 regression checks passed.
+Expected source regression result for this release:
+  118 regression checks passed.
   MIND.EXE regression suite: OK
 
-No data migration is required.
-SCHEMA_VERSION remains 2.
-Canonical profile/media/Strategy keys and Firestore path shape are unchanged.
-Critical persistence stores are byte-for-byte unchanged from the tested v4.8.5.1 base.
+HOSTING / CI
+Install command: npm install
+Build command: npm run build
+Publish/output directory: dist
+
+Vite uses base: "./", so the generated site is safe for a domain root or a project subdirectory.
+
+PWA / CACHE
+- The service worker is registered only in production and only after the cloud profile is confirmed.
+- It intercepts same-origin shell/assets only; Firebase/Gemini/Google requests are never intercepted.
+- A new worker no longer calls skipWaiting(), so it cannot delete the previous shell cache while an
+  already-open old client may still need old lazy chunks. The new worker activates naturally after
+  old clients close.
+- Splash video is runtime-cached instead of install-time precached.
+
+DATA SAFETY INVARIANTS
+Unchanged:
+- SCHEMA_VERSION = 2
+- PROFILE_KEY = mind-exe-journal-state
+- MEDIA_KEY = mind-exe-journal-media
+- STRATEGY_SCHEMA_VERSION = 1
+- STRATEGY_INDEX_KEY = mind-exe-strategy-index
+- STRATEGY_TRADE_KEY = mind-exe-strategy-trade
+- STRATEGY_MEDIA_KEY = mind-exe-strategy-media
+- Firestore path: users/{uid}/data/{safeKey}
+- Decision schema v1 + locked pre-trade snapshot semantics
+
+core/journal-media.js, core/strategy-store.js and core/firestore-storage.js remain byte-identical
+to v5.2.1. core/profile-store.js keeps the same key layout and manifest CAS; its v5.3 changes are
+parallel immutable revision I/O plus returning the full public profile after save.
+
+FINAL-QA ENVIRONMENT LIMITATION
+The QA container still cannot resolve registry.npmjs.org (EAI_AGAIN), so npm dependencies cannot be
+installed here and a real `npm run build`/browser bundle launch cannot be truthfully marked verified.
+The source build hook is independently smoke-tested by the regression suite, all local JS syntax and
+relative imports are checked, the module graph is acyclic, PWA assets are complete, and 118 tests pass.
+
+Before production publish, the deployment environment MUST successfully run `npm run build`, then the
+real browser/iPhone smoke matrix in TESTING.md.
+
+V5.3.2 RELEASE HARDENING
+========================
+
+Firestore Security Rules
+------------------------
+The repository now includes firebase.json + firestore.rules. Deploy the checked-in rules
+with Firebase CLI from the project root after selecting the correct Firebase project:
+
+  firebase deploy --only firestore:rules
+
+The rules are default-deny and allow authenticated users to access only
+/users/{their-own-uid}/data/**. Review them before deployment if you add any new Firestore
+collections outside this canonical path.
+
+App Check / reCAPTCHA Enterprise
+--------------------------------
+The client now prefers ReCaptchaEnterpriseProvider when the production build receives:
+
+  VITE_RECAPTCHA_ENTERPRISE_SITE_KEY=<your score-based Enterprise Web key>
+
+Before setting it, create a score-based reCAPTCHA Enterprise Web key for the production
+domains and register that same key for this Web app in Firebase Console > App Check.
+Until that provisioning is complete the existing reCAPTCHA v3 provider remains as a safe
+compatibility fallback, so this release does not lock existing users out.
+
+Dependency lock / production build
+----------------------------------
+This source archive intentionally does NOT contain a fabricated package-lock.json. The QA
+environment could not reach registry.npmjs.org, so a trustworthy transitive lock graph could
+not be generated or a real Vite build executed here. On a machine with npm registry access,
+run once:
+
+  npm install
+  npm test
+  npm run test:syntax
+  npm run build
+
+Commit the generated package-lock.json. After that, releases should use:
+
+  npm ci
+  npm run verify:release
+
+Upload only dist/ to hosting.

@@ -5,44 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#000000" />
   <title>mind.exe</title>
-  <link rel="icon" href="./icon-32.png" sizes="32x32" type="image/png" />
-  <link rel="icon" href="./icon-16.png" sizes="16x16" type="image/png" />
-  <link rel="apple-touch-icon" sizes="180x180" href="./icon-180.png" />
-  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="./icon-180.png" />
-  <link rel="manifest" href="./manifest.json?v=4.9.0" />
+  <script>window.__mindExePageStartedAt = performance.now();</script>
+  <link rel="icon" href="%BASE_URL%icon-32.png" sizes="32x32" type="image/png" />
+  <link rel="icon" href="%BASE_URL%icon-16.png" sizes="16x16" type="image/png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="%BASE_URL%icon-180.png" />
+  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="%BASE_URL%icon-180.png" />
+  <link rel="manifest" href="%BASE_URL%manifest.json" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="mind.exe" />
-  <!-- Keep the importmap below: the app uses bare React/Recharts/Firebase module specifiers. -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <!-- The app is built entirely with Tailwind utility classes (flex, rounded-xl, text-[24px], etc.)
-       — inside Claude's artifact preview Tailwind is provided automatically, but a plain static site
-       needs it loaded explicitly. Without this script every className does nothing and the app falls
-       back to unstyled browser-default form controls. -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* Final shell uses the same black surface and type stack as the React UI. */
-    html, body { margin: 0; padding: 0; background: #000000; overscroll-behavior: none; }
-    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-weight: 400; color-scheme: dark; }
-    #root { min-height: 100dvh; }
-    #boot-fallback { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; background: #000; color: #6f7078; font: 500 12px/1.4 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: .14em; }
-    #boot-fallback[hidden] { display: none; }
-    #boot-fallback::before { content: ""; width: 24px; height: 24px; margin-right: 12px; border: 2px solid #202027; border-top-color: #f4f4f6; border-radius: 50%; animation: bootSpin .9s linear infinite; }
-    @keyframes bootSpin { to { transform: rotate(360deg); } }
-  </style>
+  <link rel="stylesheet" href="./styles.css" />
 
   <script>
-    // window.storage shim — mind.exe was built against Claude's artifact storage API
-    // (get/set/delete/list). Outside that environment this backs the same interface with
-    // localStorage, keyed by an anonymous per-browser id so multiple "accounts" on one device
-    // don't collide. This is a drop-in replacement only — the app itself never talks to
-    // localStorage directly, only through window.storage.
-    //
-    // NOTE (Firebase migration): this shim is now only used to read pre-Firebase local data
-    // during the one-time legacy migration path in app.js (legacyStorage*). All new reads/writes
-    // for authenticated users go through Firestore instead — see firebase/* imports in app.js.
+    // Compatibility shim for the one-time pre-Firebase migration path only.
     (function () {
       const PREFIX = "mindexe:";
       function fullKey(key, shared) {
@@ -69,36 +44,15 @@
             .filter((k) => k.startsWith(scope) && k.startsWith(marker))
             .map((k) => k.slice(scope.length));
           return { keys, prefix, shared: !!shared };
-        },
+        }
       };
     })();
-  </script>
-
-  <script type="importmap">
-  {
-    "imports": {
-      "react": "https://esm.sh/react@18.3.1",
-      "react-dom": "https://esm.sh/react-dom@18.3.1",
-      "react-dom/client": "https://esm.sh/react-dom@18.3.1/client",
-      "react/jsx-runtime": "https://esm.sh/react@18.3.1/jsx-runtime",
-      "react/jsx-dev-runtime": "https://esm.sh/react@18.3.1/jsx-dev-runtime",
-      "recharts": "https://esm.sh/recharts@2.12.7?external=react,react-dom",
-      "lucide-react": "https://esm.sh/lucide-react@0.383.0?external=react",
-      "firebase/app": "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js",
-      "firebase/auth": "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js",
-      "firebase/firestore": "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js",
-      "firebase/ai": "https://www.gstatic.com/firebasejs/12.17.1/firebase-ai.js",
-      "firebase/app-check": "https://www.gstatic.com/firebasejs/12.17.1/firebase-app-check.js"
-    }
-  }
   </script>
 </head>
 <body>
   <div id="boot-fallback" role="status" aria-live="polite">MIND.EXE</div>
   <div id="root"></div>
-  <!-- Cache-bust the entry module on each release; nested local modules use the final generation too. -->
   <script>
-    // If the module graph/CDN fails before React starts, do not leave a silent black screen.
     window.__mindExeBootTimer = setTimeout(function () {
       var el = document.getElementById("boot-fallback");
       if (el && !window.__mindExeStarted) {
@@ -107,6 +61,6 @@
       }
     }, 9000);
   </script>
-  <script type="module" src="./app.js?v=4.9.0-final"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>

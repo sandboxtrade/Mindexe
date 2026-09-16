@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Private MIND.EXE state. A signed-in user can access only their own UID namespace.
+    match /users/{userId}/data/{document=**} {
+      allow read, create, update, delete: if request.auth != null
+        && request.auth.uid == userId;
+    }
+
+    // The only intentionally shared client-side documents are small, non-personal hourly
+    // market snapshots. Keep the namespace narrow so it can never become a generic shared KV store.
+    match /shared/{documentId} {
+      function isMarketSnapshotKey() {
+        return documentId == 'market-snapshot:crypto'
+          || documentId == 'market-snapshot:forex'
+          || documentId == 'market-snapshot:stocks';
+      }
+      function validMarketSnapshot() {
+        return request.resource.data.keys().hasOnly(['value', 'updatedAt'])
+          && request.resource.data.value is string
+          && request.resource.data.value.size() <= 20000
+          && request.resource.data.updatedAt is number;
+      }
+      allow read: if request.auth != null && isMarketSnapshotKey();
+      allow create, update: if request.auth != null && isMarketSnapshotKey() && validMarketSnapshot();
+      allow delete: if false;
+    }
+
+    // Deny every document not explicitly covered above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

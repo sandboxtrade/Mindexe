@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { Download, X as XIcon } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE } from "../config/app-config.js?v=4.9.0";
+import { BASE } from "../config/app-config.js";
 
 export function Pill({ active, children, onClick, accent }) {
   return /* @__PURE__ */ jsx(

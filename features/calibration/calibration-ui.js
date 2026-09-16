@@ -4,17 +4,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Sparkles, Check, AlertTriangle, Gauge } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
-import { BASE, WIN, LOSS, WARN } from "../../config/app-config.js?v=4.9.0";
-import { Card } from "../../ui/primitives.js?v=4.9.0";
-import { LogoSpinner } from "../../ui/brand.js?v=4.9.0";
+import { BASE, WIN, LOSS, WARN } from "../../config/app-config.js";
+import { Card } from "../../ui/primitives.js";
+import { LogoSpinner } from "../../ui/brand.js";
 import {
   CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, REVIEW_LIKERT, REVIEW_LIKERT_EN,
-  buildReviewQuiz, scoreJournalReview, caScaleSet, scoreCalibrationDynamic, caWithTimeout
-} from "../../analytics/calibration-review.js?v=4.9.0";
-import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js?v=4.9.0";
+  buildReviewQuiz, scoreJournalReview, caScaleSet, scoreCalibrationDynamic
+} from "../../analytics/calibration-review.js";
+import { caComputeAdaptiveFactors, caBuildContext } from "../../ai/context.js";
 import {
   aiGenerateCalibrationQuestions, aiReviewQuestions, aiReviewSummary
-} from "../../ai/ai-service.js?v=4.9.0";
+} from "../../ai/ai-service.js";
 
 const softLift = (accent) => `0 0 0 1px ${accent}30, 0 8px 22px rgba(0,0,0,0.28)`;
 
@@ -121,7 +121,7 @@ export function Calibration({ accent, onComplete, lang, t, entries, analytics, u
           // не имеет собственного таймаута: при недоступной/висящей сети промис не резолвится
           // никогда, поэтому finally { setStage("quiz") } не выполнялся. Ограничиваем ожидание:
           // по истечении времени идём по уже существующему локальному fallback-пути.
-          adaptiveQuestions = await caWithTimeout(aiGenerateCalibrationQuestions(context), 2e4, "ai_calibration_timeout");
+          adaptiveQuestions = await aiGenerateCalibrationQuestions(context);
         } catch (e) {
           adaptiveQuestions = [];
         }

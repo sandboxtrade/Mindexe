@@ -12,16 +12,17 @@ import {
   formatPriceValue, formatResult, formatStoredResult,
   normalizeResultByCloseType, normalizeResultCurrency, normalizeResultMode,
   outcomeFromResult, resultEntriesForUnit, unitSymbol
-} from "../../core/trade-math.js?v=4.9.0";
+} from "../../core/trade-math.js";
 import {
   emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions
-} from "../../core/journal-model.js?v=4.9.0";
+} from "../../core/journal-model.js";
 import {
   BASE, WIN, LOSS, WARN, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL
-} from "../../config/app-config.js?v=4.9.0";
-import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js?v=4.9.0";
-import { compressImageFile } from "../../ui/media-utils.js?v=4.9.0";
-import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js?v=4.9.0";
+} from "../../config/app-config.js";
+import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js";
+import { compressImageFile } from "../../ui/media-utils.js";
+import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js";
+import { DecisionTradePanel } from "../decision-lab/decision-trade-panel.js";
 
 const ring = (accent) => `0 0 0 1px ${accent}35`;
 const softLift = (accent) => `0 0 0 1px ${accent}30, 0 8px 22px rgba(0,0,0,0.28)`;
@@ -401,37 +402,51 @@ export function StrategySelect({ value, onChange, strategies, accent, placeholde
 
 function PolishButton({ accent, notify, text, onPolished }) {
   const [busy, setBusy] = useState(false);
+  const [slow, setSlow] = useState(false);
+  const latestTextRef = useRef(text || "");
+  latestTextRef.current = text || "";
+  const requestRef = useRef(0);
   const handleClick = async () => {
-    if (!text || !text.trim()) {
-      notify?.("\u0421\u043D\u0430\u0447\u0430\u043B\u0430 \u043D\u0430\u043F\u0438\u0448\u0438 \u0442\u0435\u043A\u0441\u0442");
-      return;
-    }
-    setBusy(true);
+    const source = String(text || "").trim();
+    if (!source) { notify?.("Сначала напиши текст"); return; }
+    if (busy) return;
+    const requestId = ++requestRef.current;
+    setBusy(true); setSlow(false);
+    const slowTimer = setTimeout(() => { if (requestRef.current === requestId) setSlow(true); }, 4500);
     try {
-      const polished = await aiPolishText(text);
+      const polished = await aiPolishText(source);
+      if (requestRef.current !== requestId) return;
+      // Never replace text the trader changed while Gemini was answering.
+      if (String(latestTextRef.current || "").trim() !== source) {
+        notify?.("Текст уже изменён вручную — ответ ИИ не применён");
+        return;
+      }
+      if (polished.trim() === source) {
+        notify?.("Текст уже выглядит нормально");
+        return;
+      }
       onPolished(polished);
-    } catch {
-      notify?.("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0442\u0440\u0435\u0434\u0430\u043A\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C \u0442\u0435\u043A\u0441\u0442");
+      notify?.("Текст поправлен");
+    } catch (e) {
+      if (e?.message === "ai_operation_in_progress") notify?.("Обработка уже идёт");
+      else if (/timeout/i.test(e?.message || "")) notify?.("ИИ отвечает слишком долго. Попробуй ещё раз");
+      else notify?.("Не удалось отредактировать текст. Попробуй ещё раз");
     } finally {
-      setBusy(false);
+      clearTimeout(slowTimer);
+      if (requestRef.current === requestId) { setBusy(false); setSlow(false); }
     }
   };
-  return /* @__PURE__ */ jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      disabled: busy,
-      title: "\u0423\u043B\u0443\u0447\u0448\u0438\u0442\u044C \u0442\u0435\u043A\u0441\u0442 \u0441 \u0418\u0418",
-      className: "shrink-0 flex items-center gap-1 px-2 h-6 rounded-full text-[10px] transition-all active:scale-90",
-      style: { background: `${accent}12`, color: accent, border: `1px solid ${accent}30`, opacity: busy ? 0.55 : 1 },
-      children: [/* @__PURE__ */ jsx(Sparkles, { size: 11 }), busy ? "\u2026" : ""]
-    }
-  );
+  return /* @__PURE__ */ jsxs("button", {
+    type: "button", onClick: handleClick, disabled: busy,
+    title: "Улучшить текст с ИИ",
+    className: "shrink-0 flex items-center gap-1 px-2 h-6 rounded-full text-[10px] transition-all active:scale-90",
+    style: { background: `${accent}12`, color: accent, border: `1px solid ${accent}30`, opacity: busy ? 0.62 : 1 },
+    children: [/* @__PURE__ */ jsx(Sparkles, { size: 11 }), busy ? (slow ? "долго…" : "…") : ""]
+  });
 }
-export function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, strategies = [], notify, t, lang = "ru" }) {
-  const [instrument, setInstrument] = useState("");
-  const [direction, setDirection] = useState("Long");
+export function NewEntry({ onSave, accent, customInstruments, customTags, onAddCustomInstrument, onAddCustomTag, strategies = [], notify, t, lang = "ru", prefill = null }) {
+  const [instrument, setInstrument] = useState(prefill?.instrument || "");
+  const [direction, setDirection] = useState(prefill?.direction === "Short" ? "Short" : "Long");
   const [entryPrice, setEntryPrice] = useState("");
   const [stopLoss, setStopLoss] = useState("");
   const [takeProfit, setTakeProfit] = useState("");
@@ -444,9 +459,12 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
   const [pull, setPull] = useState("");
   const [screenshots, setScreenshots] = useState([]);
   const [recognizing, setRecognizing] = useState(false);
+  const [recognitionSlow, setRecognitionSlow] = useState(false);
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
   const recognizeInputRef = useRef(null);
+  const recognitionFieldsRef = useRef(null);
+  recognitionFieldsRef.current = { instrument, direction, entryPrice, stopLoss, takeProfit };
   const MAX_SHOTS = 4;
   const handleRecognizeFile = async (e) => {
     const file = e.target.files?.[0];
@@ -460,26 +478,45 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
       notify(`\u041C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
       return;
     }
+    const sourceFields = { ...(recognitionFieldsRef.current || {}) };
     setRecognizing(true);
+    setRecognitionSlow(false);
+    const slowTimer = setTimeout(() => setRecognitionSlow(true), 6500);
     try {
       const dataUrl = await compressImageFile(file);
       setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev);
       const rec = await aiRecognizeTradeFromImage(dataUrl);
-      if (rec.asset) setInstrument(rec.asset);
-      if (rec.direction) setDirection(rec.direction);
-      if (rec.entryPrice != null) setEntryPrice(String(rec.entryPrice));
-      if (rec.stopLoss != null) setStopLoss(String(rec.stopLoss));
-      if (rec.takeProfit != null) setTakeProfit(String(rec.takeProfit));
-      if (rec.entryPrice != null && rec.stopLoss != null && rec.takeProfit != null) {
-        const check = computePlannedRR(rec.direction || direction, rec.entryPrice, rec.stopLoss, rec.takeProfit);
-        notify(check.ok ? "\u0421\u0434\u0435\u043B\u043A\u0430 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u0430 \u2014 \u043F\u0440\u043E\u0432\u0435\u0440\u044C \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F" : "\u041F\u0440\u043E\u0432\u0435\u0440\u044C \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u043D\u044B\u0435 \u0437\u043D\u0430\u0447\u0435\u043D\u0438\u044F");
+      const latest = recognitionFieldsRef.current || {};
+      // Recognition may take several seconds. Never overwrite a field edited while AI was working.
+      if (rec.asset && latest.instrument === sourceFields.instrument) setInstrument(rec.asset);
+      if (rec.direction && latest.direction === sourceFields.direction) setDirection(rec.direction);
+      if (rec.entryPrice != null && latest.entryPrice === sourceFields.entryPrice) setEntryPrice(String(rec.entryPrice));
+      if (rec.stopLoss != null && latest.stopLoss === sourceFields.stopLoss) setStopLoss(String(rec.stopLoss));
+      if (rec.takeProfit != null && latest.takeProfit === sourceFields.takeProfit) setTakeProfit(String(rec.takeProfit));
+      const protectedEdits = [
+        rec.asset && latest.instrument !== sourceFields.instrument,
+        rec.direction && latest.direction !== sourceFields.direction,
+        rec.entryPrice != null && latest.entryPrice !== sourceFields.entryPrice,
+        rec.stopLoss != null && latest.stopLoss !== sourceFields.stopLoss,
+        rec.takeProfit != null && latest.takeProfit !== sourceFields.takeProfit
+      ].filter(Boolean).length;
+      if (protectedEdits) notify("Часть полей уже изменена вручную — ИИ их не перезаписал");
+      else if (rec.uncertainFields?.length) notify("Часть значений распознана неуверенно — проверь их вручную");
+      else if (rec.entryPrice != null && rec.stopLoss != null && rec.takeProfit != null) {
+        const check = computePlannedRR(rec.direction || latest.direction || direction, rec.entryPrice, rec.stopLoss, rec.takeProfit);
+        notify(check.ok ? "Сделка распознана — проверь значения" : "Проверь распознанные значения");
       } else {
-        notify("\u0421\u0434\u0435\u043B\u043A\u0430 \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u043D\u0430 \u0447\u0430\u0441\u0442\u0438\u0447\u043D\u043E \u2014 \u0434\u043E\u0437\u0430\u043F\u043E\u043B\u043D\u0438 \u043E\u0441\u0442\u0430\u043B\u044C\u043D\u043E\u0435 \u0432\u0440\u0443\u0447\u043D\u0443\u044E");
+        notify("Сделка распознана частично — дозаполни остальное вручную");
       }
-    } catch {
-      notify("\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u0440\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443. \u0417\u0430\u043F\u043E\u043B\u043D\u0438\u0442\u0435 \u0434\u0430\u043D\u043D\u044B\u0435 \u0432\u0440\u0443\u0447\u043D\u0443\u044E.");
+    } catch (err) {
+      const msg = String(err?.message || err?.code || "");
+      if (/timeout/i.test(msg)) notify("Распознавание заняло слишком много времени. Попробуй ещё раз");
+      else if (/ai_operation_in_progress/i.test(msg)) notify("Распознавание уже идёт");
+      else notify("Не удалось распознать сделку. Заполни данные вручную или попробуй ещё раз");
     } finally {
+      clearTimeout(slowTimer);
       setRecognizing(false);
+      setRecognitionSlow(false);
     }
   };
   const plannedRRResult = useMemo(() => {
@@ -526,6 +563,7 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
         status: "open",
         instrument: instrument.trim(),
         direction,
+        decisionSessionId: prefill?.decisionSessionId || null,
         outcome: null,
         r: null,
         tag: tag.trim() || "\u041E\u0431\u0449\u0435\u0435",
@@ -582,7 +620,7 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
           style: { border: `1px solid ${accent}40`, color: accent, background: `${accent}0d`, opacity: recognizing ? 0.6 : 1, fontFamily: "var(--font-display)" },
           children: [
             /* @__PURE__ */ jsx(Camera, { size: 13 }),
-            recognizing ? "\u0410\u043D\u0430\u043B\u0438\u0437\u0438\u0440\u0443\u0435\u043C \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u2026" : "\u0420\u0430\u0441\u043F\u043E\u0437\u043D\u0430\u0442\u044C \u0441\u0434\u0435\u043B\u043A\u0443 \u043F\u043E \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0443"
+            recognizing ? (recognitionSlow ? "Анализ занимает больше времени…" : "Анализируем скриншот…") : "Распознать сделку по скриншоту"
           ]
         }
       ),
@@ -1265,7 +1303,7 @@ function LogMiniStat({ label, value, color }) {
     /* @__PURE__ */ jsx("div", { className: "text-xs truncate", style: { color: color || BASE.ink, fontFamily: "var(--font-mono)" }, children: value })
   ] });
 }
-export function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode, currency, t }) {
+export function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, measureMode, currency, t, decisionStore = null, decisionUserId = null, notify = null, lang = "ru" }) {
   const [openId, setOpenId] = useState(null);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -1351,6 +1389,15 @@ export function Log({ entries, onDelete, onCloseTrade, onEditTrade, accent, meas
             e.pull
           ] })
         ] }),
+        e.decisionSessionId && decisionStore && decisionUserId && /* @__PURE__ */ jsx(DecisionTradePanel, {
+          sessionId: e.decisionSessionId,
+          userId: decisionUserId,
+          store: decisionStore,
+          trade: e,
+          accent,
+          lang,
+          notify
+        }),
         isEntryClosed(e) && /* @__PURE__ */ jsxs("div", { className: "pt-2", style: { borderTop: `1px solid ${BASE.line}` }, children: [
           /* @__PURE__ */ jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1.5", style: { color: BASE.inkFaint }, children: t.home.exitSection }),
           /* @__PURE__ */ jsxs("div", { className: "flex gap-4 text-xs mb-2 flex-wrap", style: { fontFamily: "var(--font-mono)" }, children: [

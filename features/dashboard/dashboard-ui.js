@@ -7,30 +7,24 @@ import {
 import {
   Sparkles, BookOpen, NotebookText, LineChart as LineChartIcon, Flame, ChevronRight,
   ChevronLeft, Check, X as XIcon, CalendarCheck, ShieldCheck, PenLine, TrendingUp,
-  Gauge, RotateCcw, Bitcoin, Activity
+  Gauge, RotateCcw, Bitcoin, Activity, Brain
 } from "lucide-react";
-import { BASE, WIN, LOSS, FLAT, DIRECTION_LABEL } from "../../config/app-config.js?v=4.9.0";
+import { BASE, WIN, LOSS, FLAT, DIRECTION_LABEL } from "../../config/app-config.js";
 import {
   countExcludedResultEntries, formatBalance, formatResult, formatStoredResult, hasRealizedRR,
   resultEntriesForUnit, unitSymbol
-} from "../../core/trade-math.js?v=4.9.0";
-import { st_mean } from "../../core/stats.js?v=4.9.0";
-import { emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions } from "../../core/journal-model.js?v=4.9.0";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderLevel } from "../../analytics/trader-analytics.js?v=4.9.0";
-import { caWithTimeout } from "../../analytics/calibration-review.js?v=4.9.0";
-import { JournalReview } from "../calibration/calibration-ui.js?v=4.9.0";
-import { Card, Pill, SkeletonLines, EmptyState, StatCard } from "../../ui/primitives.js?v=4.9.0";
-import { aiGenerateHomeAdvice, aiFetchMarketSnapshot } from "../../ai/ai-service.js?v=4.9.0";
-import { aiBuildContext, aiHashContext } from "../../ai/context.js?v=4.9.0";
-import { pointToEmotions } from "../journal/journal-ui.js?v=4.9.0";
+} from "../../core/trade-math.js";
+import { st_mean } from "../../core/stats.js";
+import { emotionClampPct, emotionScaleKeys, emotionConflict, isEntryClosed, normalizeEmotions } from "../../core/journal-model.js";
+import { TREND_ARROW, analyzeTraderPatterns, calculateTraderLevel } from "../../analytics/trader-analytics.js";
+import { caWithTimeout } from "../../analytics/calibration-review.js";
+import { JournalReview } from "../calibration/calibration-ui.js";
+import { Card, Pill, SkeletonLines, EmptyState, StatCard } from "../../ui/primitives.js";
+import { aiGenerateHomeAdvice, aiFetchMarketSnapshot } from "../../ai/ai-service.js";
+import { aiBuildContext, aiHashContext } from "../../ai/context.js";
+import { pointToEmotions } from "../journal/journal-ui.js";
 
-let storageGet = null;
-let storageSet = null;
-
-export function configureDashboardData(deps = {}) {
-  storageGet = typeof deps.storageGet === "function" ? deps.storageGet : null;
-  storageSet = typeof deps.storageSet === "function" ? deps.storageSet : null;
-}
+import { dashboardStorageGet, dashboardStorageSet } from "./dashboard-data.js";
 
 const BTC_DOMINANCE = 54.6;
 const FEAR_GREED = { score: 44, label: "Нейтрально" };
@@ -202,18 +196,37 @@ async function getHomeAdvice(context, contextHash, force) {
   if (!context) return null;
   if (!force) {
     try {
-      const res = await caWithTimeout(storageGet(HOME_ADVICE_KEY, false), 1e4, "home_advice_cache_timeout");
+      const res = await caWithTimeout(dashboardStorageGet(HOME_ADVICE_KEY, false), 1e4, "home_advice_cache_timeout");
       const cached = res?.value ? JSON.parse(res.value) : null;
       if (cached && cached.hash === contextHash && cached.text) return cached.text;
     } catch (_) {
     }
   }
-  const text = await caWithTimeout(aiGenerateHomeAdvice(context), 2e4, "home_advice_timeout");
+  const text = await aiGenerateHomeAdvice(context);
   if (!text) return null;
-  storageSet(HOME_ADVICE_KEY, JSON.stringify({ hash: contextHash, text }), false).catch(() => {
+  dashboardStorageSet(HOME_ADVICE_KEY, JSON.stringify({ hash: contextHash, text }), false).catch(() => {
   });
   return text;
 }
+
+function scheduleBackgroundTask(fn, delayMs = 1200) {
+  let idleId = null;
+  let cancelled = false;
+  const timer = setTimeout(() => {
+    if (cancelled) return;
+    if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+      idleId = window.requestIdleCallback(() => { if (!cancelled) fn(); }, { timeout: 1800 });
+    } else {
+      fn();
+    }
+  }, delayMs);
+  return () => {
+    cancelled = true;
+    clearTimeout(timer);
+    if (idleId != null && typeof window !== "undefined" && typeof window.cancelIdleCallback === "function") window.cancelIdleCallback(idleId);
+  };
+}
+
 function marketHourBucket() {
   return Math.floor(Date.now() / 36e5);
 }
@@ -222,7 +235,7 @@ function marketSnapshotKey(assetClass) {
 }
 async function loadCachedMarketSnapshot(assetClass) {
   try {
-    const res = await storageGet(marketSnapshotKey(assetClass), true);
+    const res = await dashboardStorageGet(marketSnapshotKey(assetClass), true);
     return res?.value ? JSON.parse(res.value) : null;
   } catch {
     return null;
@@ -230,7 +243,7 @@ async function loadCachedMarketSnapshot(assetClass) {
 }
 async function saveCachedMarketSnapshot(assetClass, snapshot) {
   try {
-    await storageSet(marketSnapshotKey(assetClass), JSON.stringify(snapshot), true);
+    await dashboardStorageSet(marketSnapshotKey(assetClass), JSON.stringify(snapshot), true);
   } catch {
   }
 }
@@ -239,25 +252,32 @@ async function saveCachedMarketSnapshot(assetClass, snapshot) {
 // Gemini call each time the Home tab renders. This keeps at most one call per asset per hour per
 // session regardless of whether the shared write succeeded.
 var __marketMemCache = {};
-async function getMarketSnapshot(assetClass, lang) {
+var __marketInFlight = {};
+async function getMarketSnapshot(assetClass, lang, { force = false } = {}) {
   if (!assetClass) return null;
-  const bucket = marketHourBucket();
-  const mem = __marketMemCache[assetClass];
-  if (mem && mem.hourBucket === bucket) return mem;
-  const cached = await loadCachedMarketSnapshot(assetClass);
-  if (cached && cached.hourBucket === bucket) {
-    __marketMemCache[assetClass] = cached;
-    return cached;
-  }
-  try {
-    const fresh = await aiFetchMarketSnapshot(assetClass, lang);
-    const withBucket = { ...fresh, hourBucket: bucket };
-    __marketMemCache[assetClass] = withBucket;
-    saveCachedMarketSnapshot(assetClass, withBucket);
-    return withBucket;
-  } catch {
-    return cached || null;
-  }
+  if (__marketInFlight[assetClass]) return __marketInFlight[assetClass];
+  const task = (async () => {
+    const bucket = marketHourBucket();
+    const mem = __marketMemCache[assetClass];
+    if (!force && mem && mem.hourBucket === bucket) return mem;
+    const cached = await loadCachedMarketSnapshot(assetClass);
+    if (!force && cached && cached.hourBucket === bucket) {
+      __marketMemCache[assetClass] = cached;
+      return cached;
+    }
+    try {
+      const fresh = await aiFetchMarketSnapshot(assetClass, lang);
+      const withBucket = { ...fresh, hourBucket: bucket };
+      __marketMemCache[assetClass] = withBucket;
+      saveCachedMarketSnapshot(assetClass, withBucket);
+      return withBucket;
+    } catch {
+      return cached || null;
+    }
+  })();
+  __marketInFlight[assetClass] = task;
+  try { return await task; }
+  finally { if (__marketInFlight[assetClass] === task) delete __marketInFlight[assetClass]; }
 }
 
 function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
@@ -271,14 +291,15 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       return;
     }
     let cancelled = false;
-    getMarketSnapshot(tradingAsset, lang).then((snap) => {
-      if (!cancelled && snap) setMarketSnapshot(snap);
-    }).catch((err) => {
-      console.error("mind.exe market snapshot (auto) failed:", err);
-    });
-    return () => {
-      cancelled = true;
-    };
+    // Background market work must not compete with auth/profile/user actions immediately after boot.
+    const cancelBackground = scheduleBackgroundTask(() => {
+      getMarketSnapshot(tradingAsset, lang).then((snap) => {
+        if (!cancelled && snap) setMarketSnapshot(snap);
+      }).catch((err) => {
+        console.error("mind.exe market snapshot (auto) failed:", err);
+      });
+    }, 1400);
+    return () => { cancelled = true; cancelBackground(); };
   }, [tradingAsset, lang]);
   // V0.4 — совет по собственному журналу вместо пересказа рынка. Контекст тот же, что у Coach
   // (aiBuildContext), плюс стратегия из настроек. Запрос уходит только когда меняется хэш
@@ -293,17 +314,18 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       return;
     }
     let cancelled = false;
-    setAdviceLoading(true);
-    getHomeAdvice(adviceContext, adviceHash, false).then((text) => {
-      if (!cancelled && text) setHomeAdvice(text);
-    }).catch((err) => {
-      console.error("mind.exe home advice failed:", err);
-    }).finally(() => {
-      if (!cancelled) setAdviceLoading(false);
-    });
-    return () => {
-      cancelled = true;
-    };
+    const cancelBackground = scheduleBackgroundTask(() => {
+      if (cancelled) return;
+      setAdviceLoading(true);
+      getHomeAdvice(adviceContext, adviceHash, false).then((text) => {
+        if (!cancelled && text) setHomeAdvice(text);
+      }).catch((err) => {
+        console.error("mind.exe home advice failed:", err);
+      }).finally(() => {
+        if (!cancelled) setAdviceLoading(false);
+      });
+    }, 1800);
+    return () => { cancelled = true; cancelBackground(); };
     // adviceContext/entries читаются внутри; перезапуск строго по изменению хэша контекста.
   }, [adviceHash]);
   // V0.4 — кнопка обновления в шапке карточки: принудительно перегенерировать совет (мимо кэша)
@@ -332,11 +354,8 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
     }
     setMarketRefreshing(true);
     try {
-      const fresh = await aiFetchMarketSnapshot(tradingAsset, lang);
-      const withBucket = { ...fresh, hourBucket: marketHourBucket() };
-      __marketMemCache[tradingAsset] = withBucket;
-      saveCachedMarketSnapshot(tradingAsset, withBucket);
-      setMarketSnapshot(withBucket);
+      const fresh = await getMarketSnapshot(tradingAsset, lang, { force: true });
+      if (fresh) setMarketSnapshot(fresh);
     } catch (err) {
       console.error("mind.exe market snapshot (manual) failed:", err);
       notify?.(`\u041E\u0448\u0438\u0431\u043A\u0430 \u0438\u043D\u0441\u0430\u0439\u0442\u0430: ${err?.message || err}`);
@@ -416,6 +435,24 @@ function Home({ entries, goTo, accent, name, measureMode, currency, startingCapi
       })
     ] }),
     /* @__PURE__ */ jsxs("div", { className: "lg:columns-2 lg:gap-4", children: [
+    /* @__PURE__ */ jsxs(
+      "button",
+      {
+        onClick: () => goTo("decision"),
+        className: "w-full flex items-center justify-between px-4 py-4 rounded-[16px] mb-3 text-left transition-all duration-200 active:scale-[0.99] break-inside-avoid",
+        style: { border: `1px solid ${BASE.line}`, background: BASE.surface },
+        children: [
+          /* @__PURE__ */ jsxs("span", { className: "flex items-center gap-3 min-w-0", children: [
+            /* @__PURE__ */ jsx("span", { className: "w-9 h-9 rounded-[10px] flex items-center justify-center shrink-0", style: { background: `${accent}0d`, border: `1px solid ${accent}28` }, children: /* @__PURE__ */ jsx(Brain, { size: 16, style: { color: accent } }) }),
+            /* @__PURE__ */ jsxs("span", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsx("span", { className: "block text-[13px]", style: { color: BASE.ink, fontWeight: 600 }, children: lang === "en" ? "Decision Lab" : "Разобрать мысли" }),
+              /* @__PURE__ */ jsx("span", { className: "block text-[10px] mt-0.5 truncate", style: { color: BASE.inkFaint }, children: lang === "en" ? "Long / Short or enter / wait — structure your own logic" : "Long / Short или вход / ожидание — разложи собственную логику" })
+            ] })
+          ] }),
+          /* @__PURE__ */ jsx(ChevronRight, { size: 15, style: { color: BASE.inkFaint } })
+        ]
+      }
+    ),
     /* @__PURE__ */ jsxs(
       "button",
       {

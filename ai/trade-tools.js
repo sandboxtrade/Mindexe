@@ -2,9 +2,9 @@
 // Runtime is configured once by app.js so this module reuses the same Firebase AI client/model.
 
 import { getGenerativeModel } from "firebase/ai";
-import { caWithTimeout } from "../analytics/calibration-review.js?v=4.9.0";
-import { normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js?v=4.9.0";
-import { isEntryClosed } from "../core/journal-model.js?v=4.9.0";
+import { runAiRequest } from "../core/ai-request-runtime.js";
+import { normalizeResultCurrency, normalizeResultMode } from "../core/trade-math.js";
+import { isEntryClosed } from "../core/journal-model.js";
 
 let runtimeAiLogic = null;
 let runtimeModelName = null;
@@ -33,7 +33,7 @@ function getPolishModel() {
   if (!aiPolishModel) {
     aiPolishModel = getGenerativeModel(runtimeAiLogic, {
       model: runtimeModelName,
-      generationConfig: { temperature: 0.3, maxOutputTokens: 300 }
+      generationConfig: { temperature: 0.05, maxOutputTokens: 300 }
     });
   }
   return aiPolishModel;
@@ -45,13 +45,18 @@ export async function aiPolishText(text) {
   const trimmed = (text || "").trim();
   if (!trimmed) throw new Error("ai_empty_text");
   const model = getPolishModel();
-  const result = await caWithTimeout(model.generateContent(`${AI_POLISH_TASK}
+  return runAiRequest({
+    key: "journal_polish", operation: "AI_POLISH", timeoutMs: 12000, retries: 1, slowMs: 4500,
+    execute: async () => {
+      const result = await model.generateContent(`${AI_POLISH_TASK}
 
 TEXT:
-${trimmed}`), 2e4, "ai_polish_timeout");
-  const out = result?.response?.text?.();
-  if (!out || !out.trim()) throw new Error("ai_empty_response");
-  return out.trim();
+${trimmed}`);
+      const out = result?.response?.text?.();
+      if (!out || !out.trim()) throw new Error("ai_model_empty_response");
+      return out.trim();
+    }
+  });
 }
 
 // ---- aiService.js: Vision (trade screenshot recognition) ----------------------
@@ -64,36 +69,37 @@ loss, take profit. Do NOT guess, calculate, or infer any value not directly visi
 missing, ambiguous, or poorly readable, its value must be null. Do not give trading advice or interpret
 future price scenarios. Return ONLY this JSON shape, no markdown fences, no commentary:
 {"asset":{"value":string|null,"confidence":0-1},"direction":{"value":"LONG"|"SHORT"|null,"confidence":0-1},"entryPrice":{"value":number|null,"confidence":0-1},"stopLoss":{"value":number|null,"confidence":0-1},"takeProfit":{"value":number|null,"confidence":0-1}}`;
-async function aiCallGeminiVision(prompt, base64Data, mimeType) {
-  const model = getBaseModel();
-  const result = await caWithTimeout(model.generateContent([
-    { text: prompt },
-    { inlineData: { mimeType, data: base64Data } }
-  ]), 45e3, "ai_vision_timeout");
-  const text = result?.response?.text?.();
-  if (!text || !text.trim()) throw new Error("ai_empty_response");
-  return text.trim();
-}
 export async function aiRecognizeTradeFromImage(dataUrl) {
   const m = /^data:(image\/[a-zA-Z]+);base64,(.+)$/.exec(dataUrl || "");
   if (!m) throw new Error("ai_bad_image");
-  const raw = await aiCallGeminiVision(AI_VISION_TRADE_TASK, m[2], m[1]);
-  const cleaned = raw.replace(/```json|```/g, "").trim();
-  const parsed = JSON.parse(cleaned);
-  const val = (f) => parsed?.[f]?.value ?? null;
-  const num = (f) => {
-    const v = val(f);
-    return typeof v === "number" && isFinite(v) ? v : null;
-  };
-  const dir = val("direction");
-  const asset = val("asset");
-  return {
-    asset: typeof asset === "string" && asset.trim() ? asset.trim() : null,
-    direction: dir === "LONG" ? "Long" : dir === "SHORT" ? "Short" : null,
-    entryPrice: num("entryPrice"),
-    stopLoss: num("stopLoss"),
-    takeProfit: num("takeProfit")
-  };
+  const model = getBaseModel();
+  return runAiRequest({
+    key: "trade_vision", operation: "AI_VISION", timeoutMs: 30000, retries: 0, slowMs: 6000,
+    execute: async () => {
+      const result = await model.generateContent([
+        { text: AI_VISION_TRADE_TASK },
+        { inlineData: { mimeType: m[1], data: m[2] } }
+      ]);
+      const text = result?.response?.text?.();
+      if (!text || !text.trim()) throw new Error("ai_model_empty_response");
+      const cleaned = text.replace(/```json|```/g, "").trim();
+      let parsed;
+      try { parsed = JSON.parse(cleaned); } catch { throw new Error("ai_vision_bad_json"); }
+      const CONFIDENT = 0.72;
+      const field = (f) => ({ value: parsed?.[f]?.value ?? null, confidence: Number(parsed?.[f]?.confidence) || 0 });
+      const confidentValue = (f) => { const x = field(f); return x.confidence >= CONFIDENT ? x.value : null; };
+      const num = (f) => { const v = confidentValue(f); return typeof v === "number" && isFinite(v) ? v : null; };
+      const dir = confidentValue("direction");
+      const asset = confidentValue("asset");
+      const uncertainFields = ["asset","direction","entryPrice","stopLoss","takeProfit"].filter((f) => { const x = field(f); return x.value != null && x.confidence < CONFIDENT; });
+      return {
+        asset: typeof asset === "string" && asset.trim() ? asset.trim() : null,
+        direction: dir === "LONG" ? "Long" : dir === "SHORT" ? "Short" : null,
+        entryPrice: num("entryPrice"), stopLoss: num("stopLoss"), takeProfit: num("takeProfit"),
+        uncertainFields, confidence: Object.fromEntries(["asset","direction","entryPrice","stopLoss","takeProfit"].map((f)=>[f, field(f).confidence]))
+      };
+    }
+  });
 }
 
 // ---- aiService.js: Strategy Lab -----------------------------------------------
@@ -165,8 +171,13 @@ Return plain text with three short sections:
 3. What to test next.
 Do not use markdown tables.`;
   const model = aiGetStrategyModel();
-  const result = await caWithTimeout(model.generateContent(prompt), 3e4, "ai_strategy_timeout");
-  const text = result?.response?.text?.();
-  if (!text || !text.trim()) throw new Error("ai_empty_response");
-  return text.trim();
+  return runAiRequest({
+    key: "strategy_analysis", operation: "AI_STRATEGY_ANALYSIS", timeoutMs: 30000, retries: 0, slowMs: 6000,
+    execute: async () => {
+      const result = await model.generateContent(prompt);
+      const text = result?.response?.text?.();
+      if (!text || !text.trim()) throw new Error("ai_model_empty_response");
+      return text.trim();
+    }
+  });
 }
