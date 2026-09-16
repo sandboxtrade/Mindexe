@@ -7,6 +7,7 @@ let runtimeAiLogic = null;
 let runtimeModelName = null;
 let organizerModel = null;
 let transcriptionModel = null;
+let transcriptPolishModel = null;
 
 const ORGANIZER_SYSTEM = `You are the structuring engine inside MIND.EXE Decision Lab.
 Your ONLY job is to reorganize the trader's own words into a clean decision map.
@@ -27,6 +28,7 @@ export function configureDecisionAi({ aiLogic, modelName }) {
   runtimeModelName = modelName || null;
   organizerModel = null;
   transcriptionModel = null;
+  transcriptPolishModel = null;
 }
 
 function requireRuntime() {
@@ -55,4 +57,23 @@ export function getDecisionTranscriptionModel() {
     });
   }
   return transcriptionModel;
+}
+
+
+const TRANSCRIPT_POLISH_SYSTEM = `You are a conservative transcript editor inside MIND.EXE.
+You receive an already-transcribed trader voice note. Improve readability only: punctuation, paragraph breaks,
+and unmistakable speech-to-text mistakes. Preserve every substantive thought, number, ticker, timeframe,
+LONG/SHORT direction, negation and uncertainty. Never summarize, infer missing market facts, add advice,
+or make the trader sound more certain. Return plain text only.`;
+
+export function getDecisionTranscriptPolishModel() {
+  requireRuntime();
+  if (!transcriptPolishModel) {
+    transcriptPolishModel = getGenerativeModel(runtimeAiLogic, {
+      model: runtimeModelName,
+      systemInstruction: TRANSCRIPT_POLISH_SYSTEM,
+      generationConfig: { temperature: 0, maxOutputTokens: 2400 }
+    });
+  }
+  return transcriptPolishModel;
 }

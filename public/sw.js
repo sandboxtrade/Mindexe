@@ -1,4 +1,4 @@
-const CACHE_NAME = "mind-exe-shell-v5.3.2";
+const CACHE_NAME = "mind-exe-shell-v5.4.1";
 // Replaced with the actual hashed Vite output during `npm run build`.
 // Keeping "./" here makes the source service worker safe if inspected before build.
 const PRECACHE_URLS = ["./"];

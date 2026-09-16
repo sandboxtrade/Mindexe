@@ -45,7 +45,7 @@ BUILD
 5. Deploy ONLY the contents of dist/
 
 Expected source regression result for this release:
-  118 regression checks passed.
+  127 regression checks passed.
   MIND.EXE regression suite: OK
 
 HOSTING / CI
@@ -83,12 +83,12 @@ FINAL-QA ENVIRONMENT LIMITATION
 The QA container still cannot resolve registry.npmjs.org (EAI_AGAIN), so npm dependencies cannot be
 installed here and a real `npm run build`/browser bundle launch cannot be truthfully marked verified.
 The source build hook is independently smoke-tested by the regression suite, all local JS syntax and
-relative imports are checked, the module graph is acyclic, PWA assets are complete, and 118 tests pass.
+relative imports are checked, the module graph is acyclic, PWA assets are complete, and 125 tests pass.
 
 Before production publish, the deployment environment MUST successfully run `npm run build`, then the
 real browser/iPhone smoke matrix in TESTING.md.
 
-V5.3.2 RELEASE HARDENING
+V5.4.1 RELEASE HARDENING
 ========================
 
 Firestore Security Rules

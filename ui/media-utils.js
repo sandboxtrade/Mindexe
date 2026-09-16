@@ -50,24 +50,66 @@ async function decodeImage(file) {
   });
 }
 
-export async function compressImageFile(file, maxDim = 1280, quality = 0.72) {
+function dimensionsFor(decoded, maxDim) {
+  const scale = Math.min(1, maxDim / Math.max(decoded.width, decoded.height));
+  return {
+    width: Math.max(1, Math.round(decoded.width * scale)),
+    height: Math.max(1, Math.round(decoded.height * scale))
+  };
+}
+
+async function encodeAt(decoded, maxDim, quality) {
+  const { width, height } = dimensionsFor(decoded, maxDim);
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d", { alpha: false });
+  if (!ctx) throw new Error("image canvas unavailable");
+  // High quality scaling is especially important for small chart labels/candle edges.
+  try { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; } catch (_) {}
+  decoded.draw(ctx, width, height);
+  const blob = await canvasToJpegBlob(canvas, quality);
+  return { blob, dataUrl: await blobToDataUrl(blob), width, height };
+}
+
+export async function compressImageFile(file, maxDim = 1280, quality = 0.72, maxDataUrlChars = 240000) {
   if (!(file instanceof Blob) || file.size === 0) throw new Error("image file empty");
   const decoded = await decodeImage(file);
   try {
-    const scale = Math.min(1, maxDim / Math.max(decoded.width, decoded.height));
-    const w = Math.max(1, Math.round(decoded.width * scale));
-    const h = Math.max(1, Math.round(decoded.height * scale));
-    const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext("2d", { alpha: false });
-    if (!ctx) throw new Error("image canvas unavailable");
-    decoded.draw(ctx, w, h);
-    // toBlob is asynchronous, unlike toDataURL, so encoding a large screenshot does not block
-    // the UI thread for one long synchronous string conversion.
-    const blob = await canvasToJpegBlob(canvas, quality);
-    return await blobToDataUrl(blob);
+    const initialDim = Math.max(960, Number(maxDim) || 1280);
+    const initialQuality = Math.max(0.58, Math.min(0.94, Number(quality) || 0.72));
+    const limit = Math.max(120000, Number(maxDataUrlChars) || 240000);
+
+    // Start at the requested quality. If it is too large, estimate a smaller dimension from the
+    // encoded-size ratio instead of repeatedly JPEG-encoding the same huge canvas dozens of times.
+    let encoded = await encodeAt(decoded, initialDim, initialQuality);
+    if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
+
+    let dim = Math.max(960, Math.min(initialDim - 1, Math.floor(initialDim * Math.sqrt(limit / encoded.dataUrl.length) * 0.95)));
+    const qualities = [...new Set([
+      initialQuality,
+      Math.max(0.62, Number((initialQuality - 0.08).toFixed(2))),
+      Math.max(0.58, Number((initialQuality - 0.16).toFixed(2)))
+    ])].sort((a, b) => b - a);
+    let smallest = encoded;
+
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (const q of qualities) {
+        encoded = await encodeAt(decoded, dim, q);
+        if (encoded.dataUrl.length < smallest.dataUrl.length) smallest = encoded;
+        if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
+      }
+      if (dim <= 960) break;
+      dim = Math.max(960, Math.floor(dim * 0.82));
+    }
+    return smallest.dataUrl;
   } finally {
     decoded.close();
   }
+}
+
+// Journal screenshots live in one Firestore document per image, so they can safely keep far more
+// chart detail than Strategy Lab screenshots, which are still embedded together in a trade record.
+export function compressJournalImageFile(file) {
+  return compressImageFile(file, 2560, 0.9, 850000);
 }

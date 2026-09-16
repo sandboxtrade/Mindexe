@@ -2,7 +2,7 @@
 // Presentational/browser UI only; no profile persistence or Firebase writes.
 
 import { useEffect, useState } from "react";
-import { Download, X as XIcon } from "lucide-react";
+import { Download, X as XIcon, Maximize2, Minimize2 } from "lucide-react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import { BASE } from "../config/app-config.js";
 
@@ -91,11 +91,13 @@ async function downloadScreenshotFile(src, alt = "mind-exe-screenshot") {
 }
 export function ScreenshotPreviewHost() {
   const [preview, setPreview] = useState(null);
+  const [zoomed, setZoomed] = useState(false);
 
   useEffect(() => {
     const onPreview = (e) => {
       const src = e?.detail?.src;
       if (!src) return;
+      setZoomed(false);
       setPreview({ src, alt: e?.detail?.alt || "" });
     };
     window.addEventListener("mindexe:preview-screenshot", onPreview);
@@ -144,6 +146,15 @@ export function ScreenshotPreviewHost() {
             /* @__PURE__ */ jsxs("div", { className: "flex items-center gap-2 shrink-0", children: [
               /* @__PURE__ */ jsx("button", {
                 type: "button",
+                onClick: (e) => { e.stopPropagation(); setZoomed((value) => !value); },
+                "aria-label": zoomed ? "По размеру экрана" : "Оригинальный размер",
+                title: zoomed ? "По размеру экрана" : "Оригинальный размер",
+                className: "w-10 h-10 rounded-full flex items-center justify-center active:scale-[0.96]",
+                style: { border: "1px solid rgba(255,255,255,0.12)", background: zoomed ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)", color: BASE.ink },
+                children: zoomed ? /* @__PURE__ */ jsx(Minimize2, { size: 17 }) : /* @__PURE__ */ jsx(Maximize2, { size: 17 })
+              }),
+              /* @__PURE__ */ jsx("button", {
+                type: "button",
                 onClick: async (e) => {
                   e.stopPropagation();
                   await downloadScreenshotFile(preview.src, preview.alt || "mind-exe-screenshot");
@@ -177,7 +188,7 @@ export function ScreenshotPreviewHost() {
           ]
         }),
         /* @__PURE__ */ jsx("div", {
-          className: "flex-1 min-h-0 overflow-auto flex items-center justify-center px-3 pb-3",
+          className: `flex-1 min-h-0 overflow-auto flex px-3 pb-3 ${zoomed ? "items-start justify-start" : "items-center justify-center"}`,
           onClick: () => setPreview(null),
           style: {
             WebkitOverflowScrolling: "touch",
@@ -189,13 +200,15 @@ export function ScreenshotPreviewHost() {
             draggable: false,
             onClick: (e) => e.stopPropagation(),
             className: "block object-contain select-none",
+            onDoubleClick: (e) => { e.stopPropagation(); setZoomed((value) => !value); },
             style: {
-              maxWidth: "100%",
-              maxHeight: "100%",
+              maxWidth: zoomed ? "none" : "100%",
+              maxHeight: zoomed ? "none" : "100%",
               width: "auto",
               height: "auto",
               borderRadius: 12,
-              boxShadow: "0 24px 70px rgba(0,0,0,0.55)"
+              boxShadow: "0 24px 70px rgba(0,0,0,0.55)",
+              cursor: zoomed ? "zoom-out" : "zoom-in"
             }
           })
         })

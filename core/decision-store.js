@@ -156,6 +156,47 @@ export function createDecisionStore({
     return saveSession(uid, { ...s, status: "abandoned", updatedAt: now() });
   }
 
+  async function deleteSession(uid, sessionId, { expectedRevision = null } = {}) {
+    if (!uid || !sessionId) throw new Error("decision_session_missing_id");
+    const id = String(sessionId);
+    const sessionRef = getDocRef(sessionKey(uid, id), false);
+    const indexRef = getDocRef(indexKey(uid), false);
+    if (!sessionRef || !indexRef) throw new Error("decision_auth_uid_mismatch");
+
+    let deleted = null;
+    await runTransaction(db, async (tx) => {
+      const [sessionSnap, indexSnap] = await Promise.all([tx.get(sessionRef), tx.get(indexRef)]);
+      if (sessionSnap.exists()) {
+        const raw = sessionSnap.data()?.value;
+        if (typeof raw !== "string") throw new Error("decision_session_unreadable");
+        deleted = normalizeDecisionSession(parseJson(raw, "decision_session_unreadable"));
+        if (!deleted || deleted.id !== id) throw new Error("decision_session_unreadable");
+        if (expectedRevision != null && Math.max(0, Number(expectedRevision) || 0) !== Math.max(0, Number(deleted.persistenceRevision) || 0)) {
+          throw new Error("decision_revision_conflict");
+        }
+      }
+
+      let index = normalizeIndex(null);
+      if (indexSnap.exists()) {
+        const raw = indexSnap.data()?.value;
+        if (typeof raw === "string") index = normalizeIndex(parseJson(raw, "decision_index_unreadable"));
+      }
+      const nextRows = index.sessions.filter((row) => row.id !== id);
+      const savedAt = now();
+      if (nextRows.length !== index.sessions.length || !indexSnap.exists()) {
+        const nextIndex = normalizeIndex({
+          version: DECISION_INDEX_SCHEMA_VERSION,
+          revision: index.revision + 1,
+          sessions: nextRows
+        });
+        tx.set(indexRef, { value: JSON.stringify(nextIndex), updatedAt: savedAt });
+      }
+      if (sessionSnap.exists()) tx.delete(sessionRef);
+    });
+    return deleted;
+  }
+
+
   async function linkTrade(uid, sessionId, tradeId) {
     const current = await loadSession(uid, sessionId);
     if (!current) throw new Error("decision_session_missing");
@@ -312,6 +353,7 @@ export function createDecisionStore({
     loadSession,
     saveSession,
     abandonSession,
+    deleteSession,
     linkTrade,
     loadSessionsPage,
     loadAllSessions,

@@ -106,7 +106,18 @@ const UI = {
     cancel: "Отмена",
     syncPending: "Сохраняю в облако…",
     recordingLimit: "Максимум 3 минуты",
-    localRecovered: "Восстановлены локальные изменения, которые ещё не успели попасть в облако."
+    localRecovered: "Восстановлены локальные изменения, которые ещё не успели попасть в облако.",
+    deleteDecision: "Удалить разбор",
+    deleteConfirm: "Удалить этот разбор без возможности восстановления?",
+    deleteError: "Не удалось удалить разбор",
+    deleted: "Разбор удалён",
+    showAllHistory: "Показать всю историю",
+    showLessHistory: "Свернуть историю",
+    statusDraft: "черновик",
+    statusAbandoned: "не завершён",
+    statusLocked: "зафиксирован",
+    statusLinked: "привязан к сделке",
+    statusReviewed: "разобран"
   },
   en: {
     title: "Decision Lab",
@@ -184,7 +195,18 @@ const UI = {
     cancel: "Cancel",
     syncPending: "Syncing to cloud…",
     recordingLimit: "Maximum 3 minutes",
-    localRecovered: "Recovered local changes that had not reached the cloud yet."
+    localRecovered: "Recovered local changes that had not reached the cloud yet.",
+    deleteDecision: "Delete decision",
+    deleteConfirm: "Delete this decision permanently?",
+    deleteError: "Could not delete decision",
+    deleted: "Decision deleted",
+    showAllHistory: "Show full history",
+    showLessHistory: "Show less",
+    statusDraft: "draft",
+    statusAbandoned: "unfinished",
+    statusLocked: "locked",
+    statusLinked: "linked to trade",
+    statusReviewed: "reviewed"
   }
 };
 
@@ -195,14 +217,14 @@ const sideColor = (side, accent) => side === "long" || side === "for_entry" ? WI
 
 function Panel({ children, className = "" }) {
   return jsx("div", {
-    className: `rounded-[16px] p-4 ${className}`,
-    style: { background: BASE.surface, border: `1px solid ${BASE.line}` },
+    className: `rounded-[18px] p-5 ${className}`,
+    style: { background: "#070708", border: "1px solid #18181C" },
     children
   });
 }
 
 function SectionTitle({ children }) {
-  return jsx("div", { className: "text-[10px] uppercase tracking-[0.12em] mb-2.5", style: { color: BASE.inkFaint }, children });
+  return jsx("div", { className: "text-[12px] mb-3", style: { color: BASE.inkDim, fontWeight: 550, letterSpacing: "-0.01em" }, children });
 }
 
 function PrimaryButton({ children, onClick, disabled = false, accent, icon: Icon = null }) {
@@ -210,17 +232,20 @@ function PrimaryButton({ children, onClick, disabled = false, accent, icon: Icon
     type: "button",
     onClick,
     disabled,
-    className: "w-full h-12 rounded-[12px] flex items-center justify-center gap-2 text-sm transition-all active:scale-[0.985]",
+    className: "w-full h-[50px] rounded-[13px] flex items-center justify-center gap-2 text-[14px] transition-all active:scale-[0.985]",
     style: { background: disabled ? BASE.surface2 : BASE.ink, color: disabled ? BASE.inkFaint : "#050505", fontWeight: 650, opacity: disabled ? 0.7 : 1 },
     children: [Icon && jsx(Icon, { size: 16 }), children]
   });
 }
 
-function StepHeader({ title, subtitle, onBack }) {
-  return jsxs("div", { className: "mb-6", children: [
-    onBack && jsx("button", { type: "button", onClick: onBack, className: "w-9 h-9 -ml-2 mb-3 rounded-[10px] flex items-center justify-center", style: { color: BASE.inkDim }, children: jsx(ChevronLeft, { size: 18 }) }),
-    jsx("h2", { className: "text-[22px] leading-tight mb-1.5", style: { color: BASE.ink, fontWeight: 650, letterSpacing: "-0.025em" }, children: title }),
-    subtitle && jsx("p", { className: "text-[12px] leading-relaxed", style: { color: BASE.inkDim }, children: subtitle })
+function StepHeader({ title, subtitle, onBack, onDelete, deleteLabel = "Delete" }) {
+  return jsxs("div", { className: "mb-7", children: [
+    jsxs("div", { className: "flex items-center justify-between gap-3 mb-3", children: [
+      onBack ? jsx("button", { type: "button", onClick: onBack, className: "w-9 h-9 -ml-2 rounded-[10px] flex items-center justify-center", style: { color: BASE.inkDim }, children: jsx(ChevronLeft, { size: 18 }) }) : jsx("span", {}),
+      onDelete && jsx("button", { type: "button", onClick: onDelete, className: "h-9 px-2.5 rounded-[10px] flex items-center gap-1.5 text-[11px]", style: { color: LOSS, border: `1px solid ${LOSS}33`, background: `${LOSS}08` }, title: deleteLabel, children: [jsx(Trash2, { size: 14 }), jsx("span", { className: "hidden sm:inline", children: deleteLabel })] })
+    ] }),
+    jsx("h2", { className: "text-[24px] leading-[1.15] mb-2", style: { color: BASE.ink, fontWeight: 650, letterSpacing: "-0.025em" }, children: title }),
+    subtitle && jsx("p", { className: "text-[13px] leading-[1.55]", style: { color: BASE.inkDim }, children: subtitle })
   ] });
 }
 
@@ -270,7 +295,7 @@ function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rat
       children: label
     }, id)) }),
     jsxs("div", { className: "mt-2", children: [
-      jsx("div", { className: "text-[9px] mb-1", style: { color: BASE.inkFaint }, children: l.chooseFactor }),
+      jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: l.chooseFactor }),
       jsx("select", {
         value: arg.factorId || "other",
         onChange: (e) => {
@@ -288,7 +313,7 @@ function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rat
       jsx(SliderField, { label: l.weight, value: arg.weight, rated: arg.weightRated, unratedLabel: l.unrated, onChange: (value) => onChange({ ...arg, weight: value, weightRated: true, userEdited: true }), accent, hintLeft: lang === "en" ? "doesn't matter" : "не влияет", hintRight: lang === "en" ? "defines decision" : "определяет решение" }),
       jsx(SliderField, { label: l.emotion, value: arg.emotionIntensity, rated: arg.emotionRated, unratedLabel: l.unrated, onChange: (value) => onChange({ ...arg, emotionIntensity: value, emotionRated: true, emotionTag: value <= 20 ? "calm" : arg.emotionTag === "calm" ? null : arg.emotionTag, userEdited: true }), accent, hintLeft: lang === "en" ? "calm" : "спокойно", hintRight: lang === "en" ? "takes over" : "захватывает" }),
       arg.emotionRated && arg.emotionIntensity > 20 && jsxs("div", { className: "mb-4", children: [
-        jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: lang === "en" ? "Dominant emotion" : "Доминирующая эмоция" }),
+        jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: lang === "en" ? "Dominant emotion" : "Доминирующая эмоция" }),
         jsx("div", { className: "flex flex-wrap gap-1.5", children: DECISION_EMOTION_TAGS.filter((tag) => tag !== "calm").map((tag) => jsx("button", {
           type: "button",
           onClick: () => onChange({ ...arg, emotionTag: tag, userEdited: true }),
@@ -314,19 +339,29 @@ function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rat
   ] });
 }
 
-function ModeHome({ index, activeDraft, onStart, onOpen, accent, lang, startPromptMode, onResumeDraft, onConfirmNew, onCancelNew }) {
+function ModeHome({ index, activeDraft, onStart, onOpen, onDelete, accent, lang, startPromptMode, onResumeDraft, onConfirmNew, onCancelNew }) {
   const l = UI[lang] || UI.ru;
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const historyRows = (index?.sessions || []).filter((row) => row.id !== activeDraft?.id);
+  const visibleHistoryRows = showAllHistory ? historyRows : historyRows.slice(0, 8);
+  const statusLabel = (status) => ({
+    draft: l.statusDraft,
+    abandoned: l.statusAbandoned,
+    locked: l.statusLocked,
+    linked: l.statusLinked,
+    reviewed: l.statusReviewed
+  }[status] || status);
   return jsxs("div", { children: [
     jsxs("div", { className: "mb-7", children: [
-      jsxs("div", { className: "flex items-center gap-2 mb-2", children: [jsx(Brain, { size: 18, style: { color: accent } }), jsx("h2", { className: "text-[22px]", style: { color: BASE.ink, fontWeight: 650 }, children: l.title })] }),
-      jsx("p", { className: "text-[12px] leading-relaxed", style: { color: BASE.inkDim }, children: l.subtitle })
+      jsxs("div", { className: "flex items-center gap-2 mb-2", children: [jsx(Brain, { size: 18, style: { color: accent } }), jsx("h2", { className: "text-[24px]", style: { color: BASE.ink, fontWeight: 650, letterSpacing: "-0.025em" }, children: l.title })] }),
+      jsx("p", { className: "text-[14px] leading-[1.55]", style: { color: BASE.inkDim }, children: l.subtitle })
     ] }),
     activeDraft && jsxs("button", {
       type: "button", onClick: () => onOpen(activeDraft.id), className: "w-full text-left rounded-[16px] p-4 mb-4 transition-all active:scale-[0.99]",
       style: { background: `${accent}0b`, border: `1px solid ${accent}35` },
       children: [
         jsxs("div", { className: "flex items-center justify-between gap-3", children: [
-          jsxs("div", { children: [jsx("div", { className: "text-[10px] uppercase tracking-wide mb-1", style: { color: accent }, children: lang === "en" ? "Unfinished decision" : "Незавершённый разбор" }), jsx("div", { className: "text-sm", style: { color: BASE.ink }, children: activeDraft.symbol || l.noSymbol })] }),
+          jsxs("div", { children: [jsx("div", { className: "text-[11px] mb-1", style: { color: accent }, children: lang === "en" ? "Unfinished decision" : "Незавершённый разбор" }), jsx("div", { className: "text-sm", style: { color: BASE.ink }, children: activeDraft.symbol || l.noSymbol })] }),
           jsxs("span", { className: "flex items-center gap-1 text-[11px]", style: { color: accent }, children: [l.resume, jsx(ChevronRight, { size: 14 })] })
         ] })
       ]
@@ -341,18 +376,24 @@ function ModeHome({ index, activeDraft, onStart, onOpen, accent, lang, startProm
     ] }),
     jsx(SectionTitle, { children: l.choose }),
     jsxs("div", { className: "grid md:grid-cols-2 gap-3 mb-7", children: [
-      jsxs("button", { type: "button", onClick: () => onStart("direction"), className: "text-left rounded-[16px] p-4 min-h-[116px] transition-all active:scale-[0.99]", style: { background: BASE.surface, border: `1px solid ${BASE.line}` }, children: [jsx("div", { className: "text-[15px] mb-2", style: { color: BASE.ink, fontWeight: 600 }, children: l.direction }), jsx("p", { className: "text-[11px] leading-relaxed", style: { color: BASE.inkDim }, children: l.directionHint }), jsx(ChevronRight, { size: 15, className: "mt-3", style: { color: accent } })] }),
-      jsxs("button", { type: "button", onClick: () => onStart("entry"), className: "text-left rounded-[16px] p-4 min-h-[116px] transition-all active:scale-[0.99]", style: { background: BASE.surface, border: `1px solid ${BASE.line}` }, children: [jsx("div", { className: "text-[15px] mb-2", style: { color: BASE.ink, fontWeight: 600 }, children: l.entry }), jsx("p", { className: "text-[11px] leading-relaxed", style: { color: BASE.inkDim }, children: l.entryHint }), jsx(ChevronRight, { size: 15, className: "mt-3", style: { color: accent } })] })
+      jsxs("button", { type: "button", onClick: () => onStart("direction"), className: "text-left rounded-[18px] p-5 min-h-[124px] transition-all active:scale-[0.99]", style: { background: "#070708", border: "1px solid #18181C" }, children: [jsx("div", { className: "text-[16px] mb-2", style: { color: BASE.ink, fontWeight: 600 }, children: l.direction }), jsx("p", { className: "text-[12px] leading-[1.5]", style: { color: BASE.inkDim }, children: l.directionHint }), jsx(ChevronRight, { size: 15, className: "mt-3", style: { color: accent } })] }),
+      jsxs("button", { type: "button", onClick: () => onStart("entry"), className: "text-left rounded-[18px] p-5 min-h-[124px] transition-all active:scale-[0.99]", style: { background: "#070708", border: "1px solid #18181C" }, children: [jsx("div", { className: "text-[16px] mb-2", style: { color: BASE.ink, fontWeight: 600 }, children: l.entry }), jsx("p", { className: "text-[12px] leading-[1.5]", style: { color: BASE.inkDim }, children: l.entryHint }), jsx(ChevronRight, { size: 15, className: "mt-3", style: { color: accent } })] })
     ] }),
     jsx(SectionTitle, { children: l.recent }),
-    !index?.sessions?.filter((row) => row.status !== "abandoned").length ? jsx("div", { className: "text-[12px] py-3", style: { color: BASE.inkFaint }, children: l.historyEmpty }) : jsx("div", { className: "flex flex-col", children: index.sessions.filter((row) => row.status !== "abandoned").slice(0, 8).map((row) => jsxs("button", { type: "button", onClick: () => onOpen(row.id), className: "w-full flex items-center justify-between py-3 text-left", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
-      jsxs("div", { className: "min-w-0", children: [jsx("div", { className: "text-[13px] truncate", style: { color: BASE.ink }, children: row.symbol || l.noSymbol }), jsx("div", { className: "text-[10px] mt-0.5", style: { color: BASE.inkFaint }, children: `${row.mode === "entry" ? l.entry : l.direction} · ${row.status}` })] }),
-      jsxs("div", { className: "flex items-center gap-2", children: [row.finalDecision && jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkDim, fontFamily: "var(--font-mono)" }, children: row.finalDecision }), jsx(ChevronRight, { size: 14, style: { color: BASE.inkFaint } })] })
-    ] }, row.id)) })
+    !historyRows.length ? jsx("div", { className: "text-[12px] py-3", style: { color: BASE.inkFaint }, children: l.historyEmpty }) : jsxs("div", { children: [
+      jsx("div", { className: "flex flex-col", children: visibleHistoryRows.map((row) => jsxs("div", { className: "w-full flex items-center gap-2", style: { borderBottom: `1px solid ${BASE.line}` }, children: [
+        jsxs("button", { type: "button", disabled: row.status === "abandoned", onClick: row.status === "abandoned" ? undefined : () => onOpen(row.id), className: "min-w-0 flex-1 flex items-center justify-between py-3 text-left", style: { opacity: row.status === "abandoned" ? 0.72 : 1 }, children: [
+          jsxs("div", { className: "min-w-0", children: [jsx("div", { className: "text-[13px] truncate", style: { color: BASE.ink }, children: row.symbol || l.noSymbol }), jsx("div", { className: "text-[11px] mt-1", style: { color: BASE.inkFaint }, children: `${row.mode === "entry" ? l.entry : l.direction} · ${statusLabel(row.status)}` })] }),
+          jsxs("div", { className: "flex items-center gap-2", children: [row.finalDecision && jsx("span", { className: "text-[10px] uppercase", style: { color: BASE.inkDim, fontFamily: "var(--font-mono)" }, children: row.finalDecision }), row.status !== "abandoned" && jsx(ChevronRight, { size: 14, style: { color: BASE.inkFaint } })] })
+        ] }),
+        jsx("button", { type: "button", onClick: () => onDelete(row), className: "w-9 h-9 shrink-0 rounded-[10px] flex items-center justify-center", style: { color: row.status === "abandoned" ? LOSS : BASE.inkFaint }, "aria-label": l.deleteDecision, title: l.deleteDecision, children: jsx(Trash2, { size: 14 }) })
+      ] }, row.id)) }),
+      historyRows.length > 8 && jsx("button", { type: "button", onClick: () => setShowAllHistory((value) => !value), className: "w-full h-10 mt-2 text-[11px]", style: { color: BASE.inkDim }, children: showAllHistory ? l.showLessHistory : `${l.showAllHistory} · ${historyRows.length}` })
+    ] })
   ] });
 }
 
-export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCreateTrade, trades = [] }) {
+export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCreateTrade, onBeforeDeleteSession, trades = [] }) {
   const l = UI[lang] || UI.ru;
   const [index, setIndex] = useState({ sessions: [] });
   const [active, setActive] = useState(null);
@@ -383,6 +424,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   const syncTimerRef = useRef(null);
   const saveChainRef = useRef(Promise.resolve());
   const organizerGenerationRef = useRef(0);
+  const deletedSessionIdsRef = useRef(new Set());
   const recordingChunksRef = useRef([]);
   const recordingAudioIdRef = useRef(null);
   const recordingSessionIdRef = useRef(null);
@@ -433,6 +475,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   const syncDraft = (candidate = activeRef.current, capturedSeq = editSeqRef.current) => {
     if (!candidate || candidate.status !== "draft" || !userId || !store) return Promise.resolve(null);
     const sessionId = candidate.id;
+    if (deletedSessionIdsRef.current.has(sessionId)) return Promise.resolve(null);
     const operation = saveChainRef.current.then(async () => {
       const latestCloud = cloudRef.current?.id === sessionId ? cloudRef.current : candidate;
       const toSave = normalizeDecisionSession({
@@ -596,15 +639,20 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     if (!mode || !activeDraft) return;
     setSaving(true);
     try {
-      const current = await store.loadSession(userId, activeDraft.id);
-      if (current?.status === "draft") {
-        const abandoned = await store.abandonSession(userId, current);
-        upsertIndex(abandoned);
-      }
+      clearTimeout(syncTimerRef.current);
+      deletedSessionIdsRef.current.add(activeDraft.id);
+      await saveChainRef.current.catch(() => null);
+      await store.deleteSession(userId, activeDraft.id);
+      setIndex((prev) => ({ ...(prev || { sessions: [] }), sessions: (prev?.sessions || []).filter((row) => row.id !== activeDraft.id) }));
       draftCache.remove(userId, activeDraft.id);
       await audioStore.clearForSession(activeDraft.id).catch(() => {});
+      if (activeRef.current?.id === activeDraft.id) { activeRef.current = null; setActive(null); }
+      cloudRef.current = null;
       await createFreshDraft(mode);
     } catch (e) {
+      // The draft still exists when deletion fails. Re-enable its normal autosync path; otherwise
+      // this session would be treated as deleted until the whole Decision Lab remounts.
+      deletedSessionIdsRef.current.delete(activeDraft.id);
       setError(e);
       notify?.(`${l.saveError}: ${e?.message || e}`);
     } finally {
@@ -682,7 +730,12 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
       let text = draft.transcriptText?.trim() || "";
       let durableDraft = draft;
       if (!text) {
-        text = await transcribeDecisionAudio(draft.blob, { mimeType: draft.mimeType, lang });
+        text = await transcribeDecisionAudio(draft.blob, {
+          mimeType: draft.mimeType,
+          lang,
+          symbol: activeRef.current?.symbol || "",
+          direction: activeRef.current?.consideredDirection || ""
+        });
         durableDraft = await audioStore.save({ ...draft, status: "transcribed", transcriptText: text, updatedAt: Date.now() });
         setPendingAudio(durableDraft);
       }
@@ -841,6 +894,46 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     }
   };
 
+  const deleteSessionRecord = async (sessionOrRow) => {
+    const id = String(sessionOrRow?.id || "");
+    if (!id || !store?.deleteSession || !userId) return false;
+    const confirmed = typeof window === "undefined" ? true : window.confirm(l.deleteConfirm);
+    if (!confirmed) return false;
+    setSaving(true);
+    setError(null);
+    deletedSessionIdsRef.current.add(id);
+    clearTimeout(syncTimerRef.current);
+    try {
+      await saveChainRef.current.catch(() => null);
+      const cloud = sessionOrRow?.persistenceRevision != null ? sessionOrRow : await store.loadSession(userId, id);
+      if (onBeforeDeleteSession) {
+        const ok = await onBeforeDeleteSession(id, cloud);
+        if (ok === false) throw new Error("decision_journal_unlink_failed");
+      }
+      await store.deleteSession(userId, id, { expectedRevision: cloud?.persistenceRevision ?? null });
+      draftCache.remove(userId, id);
+      await audioStore.clearForSession(id).catch(() => {});
+      setIndex((prev) => ({ ...(prev || { sessions: [] }), sessions: (prev?.sessions || []).filter((row) => row.id !== id) }));
+      setAnalyticsSessions((prev) => (prev || []).filter((row) => row?.id !== id));
+      if (activeRef.current?.id === id) {
+        activeRef.current = null;
+        cloudRef.current = null;
+        setActive(null);
+        editSeqRef.current = 0;
+        lastSyncedSeqRef.current = 0;
+      }
+      notify?.(l.deleted);
+      return true;
+    } catch (e) {
+      deletedSessionIdsRef.current.delete(id);
+      setError(e);
+      notify?.(`${l.deleteError}: ${e?.message || e}`);
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const reloadActive = async () => {
     if (!activeRef.current?.id) return;
     draftCache.remove(userId, activeRef.current.id);
@@ -849,14 +942,14 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
 
   if (loading) return jsx("div", { className: "py-16 text-center text-xs", style: { color: BASE.inkFaint }, children: lang === "en" ? "Loading Decision Lab…" : "Загружаю разборы…" });
   if (!active) return jsxs("div", { children: [
-    jsx("div", { className: "grid grid-cols-2 gap-1 p-1 rounded-[12px] mb-5", style: { background: BASE.surface, border: `1px solid ${BASE.line}` }, children: [
-      jsx("button", { type: "button", onClick: () => setHomeView("decisions"), className: "h-9 rounded-[9px] text-[11px] flex items-center justify-center gap-1.5", style: { background: homeView === "decisions" ? BASE.surface2 : "transparent", color: homeView === "decisions" ? BASE.ink : BASE.inkFaint }, children: [jsx(Brain, { size: 13 }), l.decisionsTab] }),
-      jsx("button", { type: "button", onClick: openAnalytics, className: "h-9 rounded-[9px] text-[11px] flex items-center justify-center gap-1.5", style: { background: homeView === "analytics" ? BASE.surface2 : "transparent", color: homeView === "analytics" ? BASE.ink : BASE.inkFaint }, children: [jsx(BarChart3, { size: 13 }), l.analyticsTab] })
+    jsx("div", { className: "grid grid-cols-2 gap-1 p-1 rounded-[13px] mb-6", style: { background: "#070708", border: "1px solid #18181C" }, children: [
+      jsx("button", { type: "button", onClick: () => setHomeView("decisions"), className: "h-10 rounded-[10px] text-[12px] flex items-center justify-center gap-1.5", style: { background: homeView === "decisions" ? BASE.surface2 : "transparent", color: homeView === "decisions" ? BASE.ink : BASE.inkFaint }, children: [jsx(Brain, { size: 13 }), l.decisionsTab] }),
+      jsx("button", { type: "button", onClick: openAnalytics, className: "h-10 rounded-[10px] text-[12px] flex items-center justify-center gap-1.5", style: { background: homeView === "analytics" ? BASE.surface2 : "transparent", color: homeView === "analytics" ? BASE.ink : BASE.inkFaint }, children: [jsx(BarChart3, { size: 13 }), l.analyticsTab] })
     ] }),
     homeView === "analytics"
       ? (analyticsLoading ? jsx("div", { className: "py-16 text-center text-xs", style: { color: BASE.inkFaint }, children: l.analyticsLoading }) : jsx(DecisionAnalyticsView, { sessions: analyticsSessions, trades, accent, lang }))
       : jsx(ModeHome, {
-          index, activeDraft, onStart: start, onOpen: open, accent, lang, startPromptMode,
+          index, activeDraft, onStart: start, onOpen: open, onDelete: deleteSessionRecord, accent, lang, startPromptMode,
           onResumeDraft: () => { setStartPromptMode(null); if (activeDraft) open(activeDraft.id); },
           onConfirmNew: confirmStartNew,
           onCancelNew: () => setStartPromptMode(null)
@@ -873,11 +966,11 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
   if (step === "context") {
     const contextReady = active.preDecisionState.clarityBeforeRated && active.preDecisionState.clarityBefore != null && (active.mode !== "entry" || !!active.consideredDirection);
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.context, subtitle: active.mode === "entry" ? l.entryHint : l.directionHint, onBack: () => setActive(null) }),
+      jsx(StepHeader, { title: l.context, subtitle: active.mode === "entry" ? l.entryHint : l.directionHint, onBack: () => setActive(null), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       jsxs(Panel, { children: [
         jsx("label", { className: "block text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: l.symbol }),
         jsx("input", { value: active.symbol, onChange: (e) => patchActive({ symbol: e.target.value.toUpperCase().slice(0, 40) }), placeholder: "BTCUSDT", className: "w-full bg-transparent border-b outline-none py-2.5 mb-5 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
-        active.mode === "entry" && jsxs("div", { className: "mb-5", children: [jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: l.considered }), jsx("div", { className: "grid grid-cols-2 gap-2", children: [["long", "LONG"], ["short", "SHORT"]].map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ consideredDirection: id }), className: "h-10 rounded-[10px] text-xs", style: { border: `1px solid ${active.consideredDirection === id ? sideColor(id, accent) + "55" : BASE.line}`, color: active.consideredDirection === id ? sideColor(id, accent) : BASE.inkDim, background: active.consideredDirection === id ? `${sideColor(id, accent)}0d` : "transparent" }, children: label }, id)) })] }),
+        active.mode === "entry" && jsxs("div", { className: "mb-5", children: [jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: l.considered }), jsx("div", { className: "grid grid-cols-2 gap-2", children: [["long", "LONG"], ["short", "SHORT"]].map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ consideredDirection: id }), className: "h-10 rounded-[10px] text-xs", style: { border: `1px solid ${active.consideredDirection === id ? sideColor(id, accent) + "55" : BASE.line}`, color: active.consideredDirection === id ? sideColor(id, accent) : BASE.inkDim, background: active.consideredDirection === id ? `${sideColor(id, accent)}0d` : "transparent" }, children: label }, id)) })] }),
         jsx(SliderField, { label: l.clarityBefore, value: active.preDecisionState.clarityBefore, rated: active.preDecisionState.clarityBeforeRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityBefore: value, clarityBeforeRated: true } }), accent, hintLeft: lang === "en" ? "chaos" : "каша", hintRight: lang === "en" ? "clear" : "ясно" }),
         jsx(PrimaryButton, { accent, disabled: !contextReady, onClick: () => goStep("input"), children: l.continue })
       ] })
@@ -888,13 +981,13 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     const mm = String(Math.floor(recordingSec / 60)).padStart(2, "0");
     const ss = String(recordingSec % 60).padStart(2, "0");
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.unload, subtitle: l.unloadHint, onBack: setBack("context") }),
+      jsx(StepHeader, { title: l.unload, subtitle: l.unloadHint, onBack: setBack("context"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       jsxs(Panel, { className: "mb-3", children: [
-        recording ? jsxs("div", { className: "text-center py-5", children: [jsx("div", { className: "text-[28px] mb-2", style: { fontFamily: "var(--font-mono)", color: BASE.ink }, children: `${mm}:${ss}` }), jsx("div", { className: "text-[9px] mb-4", style: { color: BASE.inkFaint }, children: l.recordingLimit }), jsx("button", { type: "button", onClick: stopRecording, className: "mx-auto w-16 h-16 rounded-full flex items-center justify-center", style: { background: LOSS, color: "#fff" }, children: jsx(Square, { size: 20, fill: "currentColor" }) }), jsx("div", { className: "text-[10px] mt-3", style: { color: BASE.inkFaint }, children: l.stop })] }) : jsxs("div", { className: "text-center py-5", children: [jsx("button", { type: "button", onClick: startRecording, disabled: voiceBusy, className: "mx-auto w-16 h-16 rounded-full flex items-center justify-center transition-transform active:scale-95", style: { background: BASE.ink, color: "#050505", opacity: voiceBusy ? 0.5 : 1 }, children: jsx(Mic, { size: 22 }) }), jsx("div", { className: "text-[11px] mt-3", style: { color: BASE.inkDim }, children: voiceBusy ? l.processing : l.record })] }),
-        pendingAudio && !voiceBusy && jsxs("div", { className: "mt-3 pt-3", style: { borderTop: `1px solid ${BASE.line}` }, children: [jsx("p", { className: "text-[10px] leading-relaxed mb-2", style: { color: BASE.inkDim }, children: l.savedAudio }), jsx("button", { type: "button", onClick: () => processAudioDraft(pendingAudio), className: "h-9 px-3 rounded-[10px] text-[11px] flex items-center gap-2", style: { border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [jsx(RotateCcw, { size: 13 }), l.retryAudio] })] })
+        recording ? jsxs("div", { className: "text-center py-7", children: [jsx("div", { className: "text-[30px] mb-2", style: { fontFamily: "var(--font-mono)", color: BASE.ink }, children: `${mm}:${ss}` }), jsx("div", { className: "text-[11px] mb-4", style: { color: BASE.inkFaint }, children: l.recordingLimit }), jsx("button", { type: "button", onClick: stopRecording, className: "mx-auto w-[72px] h-[72px] rounded-full flex items-center justify-center", style: { background: LOSS, color: "#fff" }, children: jsx(Square, { size: 20, fill: "currentColor" }) }), jsx("div", { className: "text-[10px] mt-3", style: { color: BASE.inkFaint }, children: l.stop })] }) : jsxs("div", { className: "text-center py-7", children: [jsx("button", { type: "button", onClick: startRecording, disabled: voiceBusy, className: "mx-auto w-[72px] h-[72px] rounded-full flex items-center justify-center transition-transform active:scale-95", style: { background: BASE.ink, color: "#050505", opacity: voiceBusy ? 0.5 : 1 }, children: jsx(Mic, { size: 22 }) }), jsx("div", { className: "text-[12px] mt-3", style: { color: BASE.inkDim }, children: voiceBusy ? l.processing : l.record })] }),
+        pendingAudio && !voiceBusy && jsxs("div", { className: "mt-3 pt-3", style: { borderTop: `1px solid ${BASE.line}` }, children: [jsx("p", { className: "text-[12px] leading-relaxed mb-2", style: { color: BASE.inkDim }, children: l.savedAudio }), jsx("button", { type: "button", onClick: () => processAudioDraft(pendingAudio), className: "h-9 px-3 rounded-[10px] text-[11px] flex items-center gap-2", style: { border: `1px solid ${BASE.line}`, color: BASE.ink }, children: [jsx(RotateCcw, { size: 13 }), l.retryAudio] })] })
       ] }),
-      jsxs(Panel, { className: "mb-3", children: [jsx("div", { className: "text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: l.typeFallback }), jsx("textarea", { value: manualText, onChange: (e) => setManualText(e.target.value), rows: 3, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.ink }, placeholder: lang === "en" ? "Write any thought here…" : "Можно дописать любую мысль…" }), jsx("button", { type: "button", onClick: addManualText, disabled: !manualText.trim(), className: "mt-2 h-9 px-3 rounded-[10px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: manualText.trim() ? BASE.ink : BASE.inkFaint }, children: l.addText })] }),
-      active.rawInput.combinedTranscript && jsxs(Panel, { className: "mb-3", children: [jsx(SectionTitle, { children: l.transcript }), jsx("textarea", { value: active.rawInput.combinedTranscript, onChange: (e) => applyLocal(setDecisionTranscript(activeRef.current, e.target.value)), rows: 7, className: "w-full bg-transparent outline-none resize-none text-[12px] leading-relaxed", style: { color: BASE.inkDim } })] }),
+      jsxs(Panel, { className: "mb-3", children: [jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: l.typeFallback }), jsx("textarea", { value: manualText, onChange: (e) => setManualText(e.target.value), rows: 3, className: "w-full bg-transparent outline-none resize-none text-[14px] leading-[1.6]", style: { color: BASE.ink }, placeholder: lang === "en" ? "Write any thought here…" : "Можно дописать любую мысль…" }), jsx("button", { type: "button", onClick: addManualText, disabled: !manualText.trim(), className: "mt-2 h-9 px-3 rounded-[10px] text-[11px]", style: { border: `1px solid ${BASE.line}`, color: manualText.trim() ? BASE.ink : BASE.inkFaint }, children: l.addText })] }),
+      active.rawInput.combinedTranscript && jsxs(Panel, { className: "mb-3", children: [jsx(SectionTitle, { children: l.transcript }), jsx("textarea", { value: active.rawInput.combinedTranscript, onChange: (e) => applyLocal(setDecisionTranscript(activeRef.current, e.target.value)), rows: 7, className: "w-full bg-transparent outline-none resize-none text-[14px] leading-[1.6]", style: { color: BASE.inkDim } })] }),
       organizeError && jsx("button", { type: "button", onClick: continueManual, className: "w-full h-10 rounded-[10px] mb-2 text-xs", style: { border: `1px solid ${BASE.line}`, color: BASE.inkDim }, children: l.manual }),
       jsx(PrimaryButton, { accent, disabled: organizing || voiceBusy || !active.rawInput.combinedTranscript.trim(), onClick: organize, icon: Sparkles, children: organizing ? l.organizing : l.organize })
     ] });
@@ -902,7 +995,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
 
   if (step === "review") {
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.review, subtitle: l.reviewHint, onBack: setBack("input") }),
+      jsx(StepHeader, { title: l.review, subtitle: l.reviewHint, onBack: setBack("input"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       active.arguments.map((arg) => jsx(DecisionArgumentCard, { arg, mode: active.mode, accent, lang, onChange: (next) => updateArgument(arg.id, next), onDelete: () => deleteArgument(arg.id), notify }, arg.id)),
       active.arguments.length < 14 && jsxs(Panel, { className: "mb-3", children: [jsx("input", { value: newArgText, onChange: (e) => setNewArgText(e.target.value), className: "w-full bg-transparent outline-none py-2 text-sm", style: { color: BASE.ink }, placeholder: l.addArgument }), jsx("button", { type: "button", onClick: addManualArgument, disabled: !newArgText.trim(), className: "mt-2 h-9 px-3 rounded-[10px] text-[11px] flex items-center gap-2", style: { border: `1px solid ${BASE.line}`, color: newArgText.trim() ? BASE.ink : BASE.inkFaint }, children: [jsx(Plus, { size: 13 }), l.addText] })] }),
       jsx(PrimaryButton, { accent, disabled: active.arguments.length === 0, onClick: () => goStep("rate"), children: l.continue })
@@ -911,7 +1004,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
 
   if (step === "rate") {
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.rate, subtitle: l.rateHint, onBack: setBack("review") }),
+      jsx(StepHeader, { title: l.rate, subtitle: l.rateHint, onBack: setBack("review"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       active.arguments.map((arg) => jsx(DecisionArgumentCard, { arg, mode: active.mode, accent, lang, rating: true, decisiveCount, notify, onChange: (next) => updateArgument(arg.id, next), onDelete: () => deleteArgument(arg.id) }, arg.id)),
       jsx(PrimaryButton, { accent, disabled: !allArgumentsRated, onClick: () => goStep("conditions"), children: l.continue })
     ] });
@@ -922,7 +1015,7 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     const firstKey = active.mode === "entry" ? "entryRemainsValidIf" : "longBecomesValidIf";
     const secondKey = active.mode === "entry" ? "invalidation" : "shortBecomesValidIf";
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.conditions, onBack: setBack("rate") }),
+      jsx(StepHeader, { title: l.conditions, onBack: setBack("rate"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.entryValid : l.longValid }), jsx("textarea", { value: linesText(c[firstKey]), onChange: (e) => patchActive({ conditions: { ...c, [firstKey]: lines(e.target.value) } }), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
       jsxs(Panel, { className: "mb-3", children: [jsx("label", { className: "block text-[12px] mb-2", style: { color: BASE.ink }, children: active.mode === "entry" ? l.invalidation : l.shortValid }), jsx("textarea", { value: linesText(c[secondKey]), onChange: (e) => patchActive({ conditions: { ...c, [secondKey]: lines(e.target.value) } }), rows: 4, placeholder: l.onePerLine, className: "w-full bg-transparent outline-none resize-none text-sm leading-relaxed", style: { color: BASE.inkDim } })] }),
       jsx(PrimaryButton, { accent, onClick: () => goStep("decision"), children: l.continue })
@@ -935,10 +1028,10 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     const choices = active.mode === "entry" ? [["enter", l.enter], ["wait", l.wait], ["skip", l.skip]] : [["long", l.long], ["short", l.short], ["wait", l.wait]];
     const finalRatingsReady = active.preDecisionState.clarityAfterRated && active.preDecisionState.clarityAfter != null && active.preDecisionState.decisionConfidenceRated && active.preDecisionState.decisionConfidence != null;
     return jsxs("div", { children: [
-      jsx(StepHeader, { title: l.final, onBack: setBack("conditions") }),
+      jsx(StepHeader, { title: l.final, onBack: setBack("conditions"), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
       jsxs(Panel, { className: "mb-3", children: [
-        strongest && jsxs("div", { className: "mb-4", children: [jsx(SectionTitle, { children: l.strongest }), jsx("div", { className: "text-[13px] mb-1", style: { color: BASE.ink }, children: strongest.normalizedText }), jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${strongest.weight}%` })] }),
-        emotional && jsxs("div", { children: [jsx(SectionTitle, { children: l.emotional }), jsx("div", { className: "text-[13px] mb-1", style: { color: BASE.ink }, children: emotional.normalizedText }), jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${emotional.emotionIntensity}%${emotional.emotionTag ? ` · ${DECISION_EMOTION_LABELS[emotional.emotionTag]?.[lang] || emotional.emotionTag}` : ""}` })] })
+        strongest && jsxs("div", { className: "mb-4", children: [jsx(SectionTitle, { children: l.strongest }), jsx("div", { className: "text-[14px] mb-1", style: { color: BASE.ink }, children: strongest.normalizedText }), jsx("div", { className: "text-[12px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${strongest.weight}%` })] }),
+        emotional && jsxs("div", { children: [jsx(SectionTitle, { children: l.emotional }), jsx("div", { className: "text-[14px] mb-1", style: { color: BASE.ink }, children: emotional.normalizedText }), jsx("div", { className: "text-[12px]", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: `${emotional.emotionIntensity}%${emotional.emotionTag ? ` · ${DECISION_EMOTION_LABELS[emotional.emotionTag]?.[lang] || emotional.emotionTag}` : ""}` })] })
       ] }),
       jsxs(Panel, { className: "mb-3", children: [jsx(SliderField, { label: l.clarityAfter, value: active.preDecisionState.clarityAfter, rated: active.preDecisionState.clarityAfterRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityAfter: value, clarityAfterRated: true } }), accent, hintLeft: lang === "en" ? "unclear" : "неясно", hintRight: lang === "en" ? "clear" : "ясно" }), jsx(SliderField, { label: l.confidence, value: active.preDecisionState.decisionConfidence, rated: active.preDecisionState.decisionConfidenceRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, decisionConfidence: value, decisionConfidenceRated: true } }), accent, hintLeft: lang === "en" ? "not sure" : "не уверен", hintRight: lang === "en" ? "sure of process" : "уверен в решении" })] }),
       jsx(SectionTitle, { children: l.chooseDecision }),
@@ -955,18 +1048,18 @@ export function DecisionLab({ userId, store, accent, lang = "ru", notify, onCrea
     ? [["for_entry", l.forEntry], ["against_entry", l.againstEntry], ["neutral", l.neutral]]
     : [["long", l.long], ["short", l.short], ["neutral", l.neutral]];
   return jsxs("div", { children: [
-    jsx(StepHeader, { title: l.locked, subtitle: `${locked.symbol || l.noSymbol} · ${String(locked.finalDecision || "").toUpperCase()}`, onBack: () => setActive(null) }),
+    jsx(StepHeader, { title: l.locked, subtitle: `${locked.symbol || l.noSymbol} · ${String(locked.finalDecision || "").toUpperCase()}`, onBack: () => setActive(null), onDelete: () => deleteSessionRecord(activeRef.current), deleteLabel: l.deleteDecision }),
     jsxs(Panel, { className: "mb-3", children: [
       jsxs("div", { className: "grid grid-cols-3 gap-2 text-center", children: [
-        jsxs("div", { children: [jsx("div", { className: "text-[9px] uppercase mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Clarity before" : "Ясность до" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.clarityBeforeRated ? pct(locked.preDecisionState.clarityBefore) : "—" })] }),
-        jsxs("div", { children: [jsx("div", { className: "text-[9px] uppercase mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Clarity after" : "Ясность после" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.clarityAfterRated ? pct(locked.preDecisionState.clarityAfter) : "—" }), delta != null && jsx("div", { className: "text-[9px] mt-0.5", style: { color: delta >= 0 ? WIN : LOSS }, children: `${delta >= 0 ? "+" : ""}${delta}` })] }),
-        jsxs("div", { children: [jsx("div", { className: "text-[9px] uppercase mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Confidence" : "Уверенность" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.decisionConfidenceRated ? pct(locked.preDecisionState.decisionConfidence) : "—" })] })
+        jsxs("div", { children: [jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Clarity before" : "Ясность до" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.clarityBeforeRated ? pct(locked.preDecisionState.clarityBefore) : "—" })] }),
+        jsxs("div", { children: [jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Clarity after" : "Ясность после" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.clarityAfterRated ? pct(locked.preDecisionState.clarityAfter) : "—" }), delta != null && jsx("div", { className: "text-[11px] mt-1", style: { color: delta >= 0 ? WIN : LOSS }, children: `${delta >= 0 ? "+" : ""}${delta}` })] }),
+        jsxs("div", { children: [jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: lang === "en" ? "Confidence" : "Уверенность" }), jsx("div", { className: "text-lg", style: { color: BASE.ink, fontFamily: "var(--font-mono)" }, children: locked.preDecisionState.decisionConfidenceRated ? pct(locked.preDecisionState.decisionConfidence) : "—" })] })
       ] })
     ] }),
     ...groups.map(([side, label]) => {
       const args = locked.arguments.filter((arg) => arg.side === side);
       if (!args.length) return null;
-      return jsxs("div", { className: "mb-4", children: [jsx(SectionTitle, { children: label }), ...args.map((arg) => jsxs(Panel, { className: "mb-2", children: [jsx("div", { className: "text-[13px] leading-relaxed", style: { color: BASE.ink }, children: arg.normalizedText }), jsxs("div", { className: "flex flex-wrap gap-2 mt-2 text-[10px]", style: { color: BASE.inkFaint }, children: [jsx("span", { style: { fontFamily: "var(--font-mono)" }, children: `${l.weight}: ${arg.weightRated ? `${arg.weight}%` : "—"}` }), jsx("span", { style: { fontFamily: "var(--font-mono)" }, children: `${l.emotion}: ${arg.emotionRated ? `${arg.emotionIntensity}%` : "—"}` }), arg.emotionRated && arg.emotionTag && jsx("span", { children: DECISION_EMOTION_LABELS[arg.emotionTag]?.[lang] || arg.emotionTag }), arg.isDecisive && jsx("span", { style: { color: accent }, children: `★ ${l.decisive}` })] })] }, arg.id))] }, side);
+      return jsxs("div", { className: "mb-4", children: [jsx(SectionTitle, { children: label }), ...args.map((arg) => jsxs(Panel, { className: "mb-2", children: [jsx("div", { className: "text-[14px] leading-[1.55]", style: { color: BASE.ink }, children: arg.normalizedText }), jsxs("div", { className: "flex flex-wrap gap-2 mt-2 text-[10px]", style: { color: BASE.inkFaint }, children: [jsx("span", { style: { fontFamily: "var(--font-mono)" }, children: `${l.weight}: ${arg.weightRated ? `${arg.weight}%` : "—"}` }), jsx("span", { style: { fontFamily: "var(--font-mono)" }, children: `${l.emotion}: ${arg.emotionRated ? `${arg.emotionIntensity}%` : "—"}` }), arg.emotionRated && arg.emotionTag && jsx("span", { children: DECISION_EMOTION_LABELS[arg.emotionTag]?.[lang] || arg.emotionTag }), arg.isDecisive && jsx("span", { style: { color: accent }, children: `★ ${l.decisive}` })] })] }, arg.id))] }, side);
     }).filter(Boolean),
     actionable && !locked.linkedTradeId && jsx(PrimaryButton, { accent, onClick: () => onCreateTrade?.(locked), children: l.createTrade }),
     locked.linkedTradeId && jsx("div", { className: "text-center text-[11px] mb-3", style: { color: WIN }, children: lang === "en" ? "Linked to journal trade" : "Привязано к сделке в дневнике" }),

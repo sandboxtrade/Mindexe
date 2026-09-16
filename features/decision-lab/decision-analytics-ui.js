@@ -56,16 +56,16 @@ const T = {
 
 function Panel({ children, className = "" }) {
   return jsx("div", {
-    className: `rounded-[16px] p-4 ${className}`,
-    style: { background: BASE.surface, border: `1px solid ${BASE.line}` },
+    className: `rounded-[18px] p-5 ${className}`,
+    style: { background: "#070708", border: "1px solid #18181C" },
     children
   });
 }
 
 function Stat({ label, value, color = BASE.ink }) {
   return jsxs("div", { className: "min-w-0", children: [
-    jsx("div", { className: "text-[9px] uppercase tracking-wide mb-1", style: { color: BASE.inkFaint }, children: label }),
-    jsx("div", { className: "text-[18px] truncate", style: { color, fontFamily: "var(--font-mono)", fontWeight: 600 }, children: value })
+    jsx("div", { className: "text-[11px] mb-1", style: { color: BASE.inkFaint }, children: label }),
+    jsx("div", { className: "text-[19px] truncate", style: { color, fontFamily: "var(--font-mono)", fontWeight: 600 }, children: value })
   ] });
 }
 
@@ -91,8 +91,8 @@ function FactorCard({ factor, lang, accent }) {
   return jsxs(Panel, { className: "mb-2.5", children: [
     jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       jsxs("div", { className: "min-w-0", children: [
-        jsx("div", { className: "text-[13px] leading-snug", style: { color: BASE.ink, fontWeight: 600 }, children: factor.label }),
-        jsx("div", { className: "text-[9px] mt-1 uppercase tracking-wide", style: { color: BASE.inkFaint }, children: strengthLabel(perf?.strength, l) })
+        jsx("div", { className: "text-[14px] leading-snug", style: { color: BASE.ink, fontWeight: 600 }, children: factor.label }),
+        jsx("div", { className: "text-[10px] mt-1", style: { color: BASE.inkFaint }, children: strengthLabel(perf?.strength, l) })
       ] }),
       jsx("div", { className: "text-[14px] shrink-0", style: { color: resultColor, fontFamily: "var(--font-mono)", fontWeight: 600 }, children: fmtR(perf?.averageR) })
     ] }),
@@ -113,11 +113,11 @@ function FactorCard({ factor, lang, accent }) {
     ] }),
     canCompareEmotion && jsxs("div", { className: "grid grid-cols-2 gap-2 mt-3", children: [
       jsxs("div", { className: "rounded-[10px] p-2.5", style: { background: BASE.bg, border: `1px solid ${BASE.line}` }, children: [
-        jsx("div", { className: "text-[9px] mb-1", style: { color: BASE.inkFaint }, children: l.calm }),
+        jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: l.calm }),
         jsx("div", { className: "text-[12px]", style: { color: typeof low.averageR === "number" ? (low.averageR >= 0 ? WIN : LOSS) : BASE.inkDim, fontFamily: "var(--font-mono)" }, children: `${fmtR(low.averageR)} · n=${low.sample}` })
       ] }),
       jsxs("div", { className: "rounded-[10px] p-2.5", style: { background: BASE.bg, border: `1px solid ${BASE.line}` }, children: [
-        jsx("div", { className: "text-[9px] mb-1", style: { color: BASE.inkFaint }, children: l.emotional }),
+        jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: l.emotional }),
         jsx("div", { className: "text-[12px]", style: { color: typeof high.averageR === "number" ? (high.averageR >= 0 ? WIN : LOSS) : BASE.inkDim, fontFamily: "var(--font-mono)" }, children: `${fmtR(high.averageR)} · n=${high.sample}` })
       ] })
     ] })
@@ -133,8 +133,8 @@ export function DecisionAnalyticsView({ sessions = [], trades = [], accent, lang
 
   return jsxs("div", { children: [
     jsxs("div", { className: "mb-6", children: [
-      jsxs("div", { className: "flex items-center gap-2 mb-2", children: [jsx(BarChart3, { size: 18, style: { color: accent } }), jsx("h2", { className: "text-[22px]", style: { color: BASE.ink, fontWeight: 650 }, children: l.title })] }),
-      jsx("p", { className: "text-[11px] leading-relaxed", style: { color: BASE.inkDim }, children: l.subtitle })
+      jsxs("div", { className: "flex items-center gap-2 mb-2", children: [jsx(BarChart3, { size: 18, style: { color: accent } }), jsx("h2", { className: "text-[24px]", style: { color: BASE.ink, fontWeight: 650 }, children: l.title })] }),
+      jsx("p", { className: "text-[13px] leading-[1.55]", style: { color: BASE.inkDim }, children: l.subtitle })
     ] }),
     jsxs(Panel, { className: "mb-4", children: [
       jsxs("div", { className: "grid grid-cols-2 md:grid-cols-4 gap-4", children: [
@@ -144,10 +144,10 @@ export function DecisionAnalyticsView({ sessions = [], trades = [], accent, lang
         jsx(Stat, { label: l.overall, value: fmtR(overall.averageR), color: avgRColor })
       ] })
     ] }),
-    analytics.linkedClosedCount === 0 && jsxs(Panel, { className: "mb-4", children: [jsx(AlertTriangle, { size: 17, style: { color: BASE.inkFaint } }), jsx("p", { className: "text-[12px] mt-2 leading-relaxed", style: { color: BASE.inkDim }, children: l.noData })] }),
-    jsx("div", { className: "text-[10px] uppercase tracking-[0.12em] mb-2.5", style: { color: BASE.inkFaint }, children: l.observations }),
-    insights.length ? jsx("div", { className: "space-y-2 mb-5", children: insights.map((insight, i) => jsxs(Panel, { children: [jsxs("div", { className: "flex items-start gap-2", children: [jsx(Activity, { size: 14, className: "mt-0.5 shrink-0", style: { color: accent } }), jsx("p", { className: "text-[11px] leading-relaxed", style: { color: BASE.inkDim }, children: insight.text })] })] }, `${insight.type}_${insight.factorId}_${i}`)) }) : jsx("div", { className: "text-[11px] mb-5", style: { color: BASE.inkFaint }, children: l.noObs }),
-    jsx("div", { className: "text-[10px] uppercase tracking-[0.12em] mb-2.5", style: { color: BASE.inkFaint }, children: l.factors }),
-    analytics.factors.length ? analytics.factors.slice(0, 24).map((factor) => jsx(FactorCard, { factor, lang, accent }, factor.factorId)) : jsx("div", { className: "text-[11px] py-4", style: { color: BASE.inkFaint }, children: l.noData })
+    analytics.linkedClosedCount === 0 && jsxs(Panel, { className: "mb-4", children: [jsx(AlertTriangle, { size: 17, style: { color: BASE.inkFaint } }), jsx("p", { className: "text-[13px] mt-2 leading-[1.55]", style: { color: BASE.inkDim }, children: l.noData })] }),
+    jsx("div", { className: "text-[12px] mb-3", style: { color: BASE.inkFaint }, children: l.observations }),
+    insights.length ? jsx("div", { className: "space-y-2 mb-5", children: insights.map((insight, i) => jsxs(Panel, { children: [jsxs("div", { className: "flex items-start gap-2", children: [jsx(Activity, { size: 14, className: "mt-0.5 shrink-0", style: { color: accent } }), jsx("p", { className: "text-[13px] leading-[1.55]", style: { color: BASE.inkDim }, children: insight.text })] })] }, `${insight.type}_${insight.factorId}_${i}`)) }) : jsx("div", { className: "text-[12px] mb-5", style: { color: BASE.inkFaint }, children: l.noObs }),
+    jsx("div", { className: "text-[12px] mb-3", style: { color: BASE.inkFaint }, children: l.factors }),
+    analytics.factors.length ? analytics.factors.slice(0, 24).map((factor) => jsx(FactorCard, { factor, lang, accent }, factor.factorId)) : jsx("div", { className: "text-[12px] py-4", style: { color: BASE.inkFaint }, children: l.noData })
   ] });
 }

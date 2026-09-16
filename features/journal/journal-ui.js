@@ -20,7 +20,7 @@ import {
   BASE, WIN, LOSS, WARN, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL
 } from "../../config/app-config.js";
 import { Pill, ScreenshotImage, EmptyState, StatCard } from "../../ui/primitives.js";
-import { compressImageFile } from "../../ui/media-utils.js";
+import { compressJournalImageFile } from "../../ui/media-utils.js";
 import { aiPolishText, aiRecognizeTradeFromImage } from "../../ai/trade-tools.js";
 import { DecisionTradePanel } from "../decision-lab/decision-trade-panel.js";
 
@@ -483,7 +483,7 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
     setRecognitionSlow(false);
     const slowTimer = setTimeout(() => setRecognitionSlow(true), 6500);
     try {
-      const dataUrl = await compressImageFile(file);
+      const dataUrl = await compressJournalImageFile(file);
       setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev);
       const rec = await aiRecognizeTradeFromImage(dataUrl);
       const latest = recognitionFieldsRef.current || {};
@@ -544,7 +544,7 @@ export function NewEntry({ onSave, accent, customInstruments, customTags, onAddC
         notify(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
         return;
       }
-      compressImageFile(file).then((dataUrl) => setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
+      compressJournalImageFile(file).then((dataUrl) => setScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
     });
     if (files.length > room) notify(`\u0414\u043E\u0431\u0430\u0432\u043B\u0435\u043D\u044B \u043D\u0435 \u0432\u0441\u0435 \u2014 \u043C\u0430\u043A\u0441\u0438\u043C\u0443\u043C ${MAX_SHOTS} \u0441\u043A\u0440\u0438\u043D\u0448\u043E\u0442\u0430`);
   };
@@ -821,7 +821,7 @@ export function CloseTrade({ entry, onSave, onCancel, accent, measureMode, curre
         notify?.(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
         return;
       }
-      compressImageFile(file).then((dataUrl) => setExitScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
+      compressJournalImageFile(file).then((dataUrl) => setExitScreenshots((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
     });
   };
   const submit = async () => {
@@ -1089,7 +1089,7 @@ export function EditTrade({ entry, onSave, onCancel, accent, customInstruments, 
         notify?.(`\xAB${file.name}\xBB \u0441\u043B\u0438\u0448\u043A\u043E\u043C \u0431\u043E\u043B\u044C\u0448\u043E\u0439 (\u043C\u0430\u043A\u0441. 15 \u041C\u0411)`);
         return;
       }
-      compressImageFile(file).then((dataUrl) => setList((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
+      compressJournalImageFile(file).then((dataUrl) => setList((prev) => prev.length < MAX_SHOTS ? [...prev, dataUrl] : prev)).catch(() => notify?.(`\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043E\u0431\u0440\u0430\u0431\u043E\u0442\u0430\u0442\u044C \xAB${file.name}\xBB`));
     });
   };
   const ShotRow = ({ list, setList, fileRef, onFiles }) => /* @__PURE__ */ jsxs("div", { className: "flex gap-2 flex-wrap", children: [

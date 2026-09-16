@@ -1,4 +1,4 @@
-# MIND.EXE v5.3.2 — FINAL QA / production smoke matrix
+# MIND.EXE v5.4.1 — FINAL QA / production smoke matrix
 
 Before deployment:
 
@@ -12,7 +12,7 @@ npm run build
 Expected source regression result:
 
 ```text
-118 regression checks passed.
+127 regression checks passed.
 MIND.EXE regression suite: OK
 ```
 
@@ -30,18 +30,18 @@ The production site must be deployed from `dist/`, not directly from source file
 
 1. Fully close the installed iPhone PWA, reopen it on Wi-Fi, then repeat on mobile data.
 2. Settings → Diagnostics must show `MODULE_READY`, `AUTH_RESOLVE`, `PROFILE_LOAD`, `INTERACTIVE`.
-3. Repeat a warm reopen. It should not wait for the old 6–8 second splash sequence.
+3. Confirm the splash video plays to its natural end (~5.03 s) on both cold and warm launches. If profile data is still loading after video end, only the minimal waiting indicator should remain.
 4. Confirm Home/Strategy/Decision reconciliation do not start before the cloud profile is verified.
 5. Compare several launches rather than one; note any launch where `MODULE_READY` or `PROFILE_LOAD` is unusually slow.
 
 ## C. Confirmed local profile bootstrap
 
-1. Complete one successful cloud load/save on v5.3.2, then fully close the PWA.
+1. Complete one successful cloud load/save on v5.4.1, then fully close the PWA.
 2. Reopen with a throttled connection. The last cloud-confirmed profile may appear quickly while verification continues.
 3. While the banner says `Проверяю облачные данные…`, taps/edits must not create writes.
 4. After cloud verification completes, the banner/blocker disappears and normal editing works.
-5. Test cloud unavailable after a previously confirmed v5.3.2 snapshot. The app may show the cached snapshot as read-only; it must not silently become writable.
-6. Upgrade directly from v5.2.1 and throttle the first launch. An old v5.2.1 shadow must NOT be trusted for fast bootstrap; v5.3.2 should first obtain the full cloud profile and only then create its confirmed local snapshot.
+5. Test cloud unavailable after a previously confirmed v5.4.1 snapshot. The app may show the cached snapshot as read-only; it must not silently become writable.
+6. Upgrade directly from v5.2.1 and throttle the first launch. An old v5.2.1 shadow must NOT be trusted for fast bootstrap; v5.4.1 should first obtain the full cloud profile and only then create its confirmed local snapshot.
 7. Use desktop + phone. A stale device must never upload its local snapshot before cloud revision verification.
 
 ## D. Profile save performance / safety
@@ -50,7 +50,7 @@ The production site must be deployed from `dist/`, not directly from source file
 2. Verify save latency is improved or at least not worse; immutable profile chunks now write concurrently.
 3. Interrupt network during a save. The previous active manifest revision must remain readable after reload.
 4. Retry after network recovery. CAS conflict/uncertain-write protections must behave exactly as before.
-5. Confirm Journal entries and coin ledger remain present after save/reload; v5.3.2 specifically fixes the full local-shadow return shape after chunked saves.
+5. Confirm Journal entries and coin ledger remain present after save/reload; v5.4.1 specifically fixes the full local-shadow return shape after chunked saves.
 
 ## E. PWA service worker
 
@@ -73,14 +73,24 @@ The production site must be deployed from `dist/`, not directly from source file
 1. Start Long/Short Decision; clarity/weight/emotion/confidence must remain unrated until explicitly set.
 2. Correct a transcript, add another voice fragment, verify the correction survives.
 3. Reload an unsynced local draft; if cloud revision is unchanged it should recover, otherwise CAS conflict must block overwrite.
-4. Record 60–120 seconds in installed iPhone PWA; retry a failed transcription without re-recording.
-5. Lock → create Journal trade → close → post-review → Analytics → reload.
-6. Two devices editing the same Decision must preserve CAS and locked-snapshot immutability.
+4. Record 60–120 seconds in installed iPhone PWA; confirm there is no playback/download UI, then retry a failed transcription without re-recording.
+5. Verify the cleaned transcript keeps every spoken number and LONG/SHORT direction.
+6. Create an unfinished test Decision, delete it, reload and confirm it is gone. Repeat with a locked/linked Decision.
+7. Simulate/observe a failed delete and verify the draft can still autosync/edit afterward.
+8. Lock → create Journal trade → close → post-review → Analytics → reload.
+9. Two devices editing the same Decision must preserve CAS and locked-snapshot immutability; a stale device must not be able to delete the newer revision.
 
-## H. Full app smoke after build
+## H. Journal screenshot quality
+
+1. Add a high-resolution chart screenshot containing small price labels/text, save and reload the Journal entry.
+2. Open the screenshot in the viewer: Fit mode should show the whole image; actual-size mode should allow scrolling through the stored pixels.
+3. Confirm small labels are materially clearer than the old 1280/0.72 path on newly uploaded screenshots.
+4. Add multiple screenshots in Strategy Lab and save/reload to confirm Strategy persistence still works with its compact image path.
+
+## I. Full app smoke after build
 
 Run the ordinary production chain:
 
 Journal create → screenshot AI recognition → copyedit → save → edit → close → reload → logout/login → Strategy Lab → Decision Lab → full backup/export → restore on a disposable account.
 
-No step should depend on source `?v=` query strings or CDN import maps after v5.3.2.
+No step should depend on source `?v=` query strings or CDN import maps after v5.4.1.

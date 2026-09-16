@@ -1590,7 +1590,8 @@ await test("Decision Lab cloud store uses per-session CAS and atomically updates
     getDocRef: (key) => ref(key),
     runTransaction: async (_db, fn) => fn({
       get: async (r) => snap(r.key),
-      set: (r, value) => docs.set(r.key, value)
+      set: (r, value) => docs.set(r.key, value),
+      delete: (r) => docs.delete(r.key)
     }),
     db: {},
     now: (() => { let t = 1000; return () => ++t; })()
@@ -1607,6 +1608,16 @@ await test("Decision Lab cloud store uses per-session CAS and atomically updates
   const index = await store.loadIndex("u1");
   eq(index.sessions.length, 1, "Decision index did not receive session row");
   eq(index.sessions[0].symbol, "BTCUSDT", "Decision index does not reflect committed session");
+  let deleteConflict = false;
+  try { await store.deleteSession("u1", "d1", { expectedRevision: stale.persistenceRevision }); }
+  catch (e) { deleteConflict = e?.message === "decision_revision_conflict"; }
+  ok(deleteConflict, "stale Decision delete removed a newer session");
+  ok(await store.loadSession("u1", "d1"), "stale Decision delete removed the session despite a revision conflict");
+  eq((await store.loadIndex("u1")).sessions.length, 1, "stale Decision delete removed the index row");
+  const deleted = await store.deleteSession("u1", "d1", { expectedRevision: newer.persistenceRevision });
+  eq(deleted.id, "d1", "Decision delete did not return the removed session");
+  eq(await store.loadSession("u1", "d1"), null, "Decision session survived delete");
+  eq((await store.loadIndex("u1")).sessions.length, 0, "Decision index kept a deleted session row");
 });
 
 await test("Decision organizer validator cannot invent taxonomy ids, weights or emotions", async () => {
@@ -1774,15 +1785,70 @@ await test("Decision Lab Stage 2 stays modular and exposes analytics without gro
 });
 
 
-await test("startup path no longer stacks long splash + intro and uses bounded profile retries", () => {
-  ok(appSource.includes("const STARTUP_SPLASH_FADE_MS = 1900;"), "short splash fade budget missing");
-  ok(appSource.includes("const STARTUP_SPLASH_HIDE_MS = 2500;"), "short splash hide budget missing");
-  ok(!appSource.includes("setSplashFading(true), 5500"), "legacy 5.5s splash delay returned");
-  ok(!appSource.includes("setShowSplash(false), 6400"), "legacy 6.4s splash delay returned");
+await test("Decision voice pipeline normalizes audio for Gemini and keeps retry UI free of playback controls", () => {
+  const transcription = fs.readFileSync(path.join(root, "ai", "transcription-service.js"), "utf8");
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(transcription.includes("audioBufferToMonoWav"), "voice audio is not normalized to PCM WAV");
+  ok(transcription.includes("targetRate = 16000"), "voice audio is not normalized to 16 kHz");
+  ok(transcription.includes("decision_transcript_polish"), "successful transcript is not cleaned for readability");
+  ok(transcription.includes('mimeType: "audio/wav"'), "Gemini still receives browser-specific recorder containers");
+  ok(!decisionUi.includes('jsx("audio"'), "Decision Lab still renders an audio playback control");
+  ok(!decisionUi.includes("Download recording"), "Decision Lab still exposes recording download UI");
+});
+
+await test("Decision deletion cleans local state and asks app to unlink Journal first", () => {
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  const decisionStore = fs.readFileSync(path.join(root, "core", "decision-store.js"), "utf8");
+  ok(decisionStore.includes("async function deleteSession"), "Decision store has no atomic delete API");
+  ok(decisionStore.includes("tx.delete(sessionRef)"), "Decision session document is not deleted transactionally");
+  ok(decisionUi.includes("onBeforeDeleteSession"), "Decision UI can delete a linked session before Journal unlinking");
+  ok(decisionUi.includes("audioStore.clearForSession(id)"), "Decision delete leaves local audio behind");
+  ok(decisionUi.includes("draftCache.remove(userId, id)"), "Decision delete leaves the local draft behind");
+  ok(decisionUi.includes("statusAbandoned") && decisionUi.includes("showAllHistory"), "abandoned/older Decision records are still unreachable from deletion UI");
+  ok(!decisionUi.includes('filter((row) => row.status !== "abandoned").slice(0, 8)'), "Decision history still hides abandoned records behind the old eight-row filter");
+  ok(appSource.includes("decisionSessionId: null"), "Journal link is not cleared before Decision deletion");
+});
+
+await test("journal screenshots preserve substantially more detail without inflating Strategy Lab records", () => {
+  const mediaUtils = fs.readFileSync(path.join(root, "ui", "media-utils.js"), "utf8");
+  const journalUi = fs.readFileSync(path.join(root, "features", "journal", "journal-ui.js"), "utf8");
+  const strategyUi = fs.readFileSync(path.join(root, "features", "strategy", "strategy-lab.js"), "utf8");
+  const primitives = fs.readFileSync(path.join(root, "ui", "primitives.js"), "utf8");
+  ok(mediaUtils.includes("compressJournalImageFile"), "journal has no dedicated high-detail image pipeline");
+  ok(mediaUtils.includes("compressImageFile(file, 2560, 0.9, 850000)"), "journal image pipeline is not using the high-detail Firestore-safe target");
+  ok(journalUi.includes("compressJournalImageFile(file)"), "Journal is not using its dedicated high-detail compressor");
+  ok(strategyUi.includes("compressImageFile(file)"), "Strategy Lab unexpectedly switched to the large Journal image payload");
+  ok(mediaUtils.includes("maxDim = 1280") && mediaUtils.includes("quality = 0.72"), "shared/Strategy image defaults are no longer compact");
+  ok(primitives.includes("Maximize2") && primitives.includes("zoomed"), "screenshot preview has no actual-size inspection mode");
+});
+
+await test("Decision polish cannot silently rewrite critical numeric/directional content", () => {
+  const transcription = fs.readFileSync(path.join(root, "ai", "transcription-service.js"), "utf8");
+  ok(transcription.includes("polishPreservesCriticalContent"), "transcript polish has no critical-content guard");
+  ok(transcription.includes("before.numbers !== after.numbers"), "transcript polish can silently alter numbers");
+  ok(transcription.includes("before.directions !== after.directions"), "transcript polish can silently alter LONG/SHORT direction");
+  ok(transcription.includes("before.negationCount !== after.negationCount"), "transcript polish can silently drop negation");
+  ok(transcription.includes("polishedLength < rawLength * 0.72"), "transcript polish can silently summarize a long voice note");
+  ok(transcription.includes("cleanModelText"), "transcript output is not normalized away from accidental markdown fences");
+});
+
+await test("failed Decision draft replacement restores autosync eligibility", () => {
+  const decisionUi = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(decisionUi.includes("deletedSessionIdsRef.current.delete(activeDraft.id)"), "failed start-new deletion can leave the draft permanently excluded from autosync");
+});
+
+await test("startup plays the complete splash while profile bootstrap runs behind it", () => {
+  const shellSource = fs.readFileSync(path.join(root, "ui", "app-shell.js"), "utf8");
+  ok(!appSource.includes("STARTUP_SPLASH_FADE_MS"), "fixed splash fade budget returned");
+  ok(!appSource.includes("STARTUP_SPLASH_HIDE_MS"), "fixed splash hide budget returned");
+  ok(appSource.includes("splashVideoEnded"), "app does not wait for the actual video end");
+  ok(appSource.includes("startupDataReady"), "splash is not coordinated with startup data readiness");
+  ok(shellSource.includes("onEnded: () => onVideoEnd?.()"), "splash video end event is not wired");
+  ok(shellSource.includes("fallbackTimerRef"), "splash playback failure can permanently block startup");
+  ok(shellSource.includes("finishFallback(12000)"), "started-but-stalled splash playback has no watchdog");
   ok(appSource.includes("showIntroAfterExplicitAuthRef"), "returning-session BootIntro gate missing");
   ok(appSource.includes("const PROFILE_LOAD_TIMEOUT_MS = 10000;"), "profile timeout is not bounded to 10s");
   ok(appSource.includes("const PROFILE_LOAD_MAX_RETRIES = 1;"), "profile load still retries too many times");
-  ok(indexSource.includes("window.__mindExePageStartedAt = performance.now()"), "navigation-relative splash timer missing");
   ok(!indexSource.includes("esm.sh"), "runtime esm.sh dependency returned");
   ok(!indexSource.includes("www.gstatic.com/firebasejs"), "runtime Firebase CDN dependency returned");
   ok(!indexSource.includes('type="importmap"'), "runtime import map returned after Vite migration");
@@ -2212,7 +2278,7 @@ await test("Home auto AI work is idle-scheduled and no longer wraps an AI call i
 
 await test("Approach 3 uses a Vite/npm production graph with no runtime dependency CDN", () => {
   const pkg = JSON.parse(packageSource);
-  eq(pkg.version, "5.3.2", "package release version not bumped");
+  eq(pkg.version, "5.4.1", "package release version not bumped");
   ok(pkg.scripts?.build?.includes("vite build"), "production build does not use Vite");
   for (const dep of ["react", "react-dom", "firebase", "lucide-react", "recharts"]) {
     ok(pkg.dependencies?.[dep], `npm dependency missing: ${dep}`);
@@ -2320,7 +2386,7 @@ await test("profile-store never activates a partially failed parallel revision a
 });
 
 await test("Approach 3 service worker is same-origin only, build-precache aware and deferred until cloud readiness", () => {
-  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.3.2"'), "service-worker cache generation is stale");
+  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.1"'), "service-worker cache generation is stale");
   ok(!serviceWorkerSource.includes("skipWaiting"), "service worker still forces activation and can invalidate lazy chunks in an already-open old client");
   ok(serviceWorkerSource.includes('url.origin !== self.location.origin'), "service worker can intercept external Firebase/Gemini traffic");
   ok(serviceWorkerSource.includes("PRECACHE_URLS.map"), "service worker does not support build-generated shell precaching");

@@ -93,9 +93,10 @@ function ProfileLoadErrorScreen({ accent, lang = "ru", onRetry, onLogout, kind =
     ] })
   });
 }
-function Splash({ accent, fading }) {
+function Splash({ accent, fading, waiting = false, onVideoEnd }) {
   const videoRef = useRef(null);
   const [flare, setFlare] = useState(false);
+  const fallbackTimerRef = useRef(null);
   useEffect(() => {
     const t = setTimeout(() => setFlare(true), 1400);
     return () => clearTimeout(t);
@@ -105,10 +106,18 @@ function Splash({ accent, fading }) {
     if (!v) return;
     // Some browsers reject the autoplay attribute but allow a muted programmatic play(); if both
     // fail we simply keep the poster frame, which is a valid splash on its own.
+    const finishFallback = (delay = 5200) => {
+      clearTimeout(fallbackTimerRef.current);
+      fallbackTimerRef.current = setTimeout(() => onVideoEnd?.(), delay);
+    };
+    // A started media element can still stall forever on flaky iOS/PWA networking without firing
+    // ended/error. Keep a generous watchdog above the ~5s asset duration so a broken stream can
+    // never trap the user on the splash screen. It does not shorten a normally-playing video.
+    finishFallback(12000);
     const p = v.play?.();
-    if (p && typeof p.catch === "function") p.catch(() => {
-    });
+    if (p && typeof p.catch === "function") p.catch(() => finishFallback(5200));
     return () => {
+      clearTimeout(fallbackTimerRef.current);
       try {
         v.pause();
         v.removeAttribute("src");
@@ -129,10 +138,16 @@ function Splash({ accent, fading }) {
         muted: true,
         playsInline: true,
         preload: "auto",
+        onEnded: () => onVideoEnd?.(),
+        onError: () => {
+          clearTimeout(fallbackTimerRef.current);
+          fallbackTimerRef.current = setTimeout(() => onVideoEnd?.(), 5200);
+        },
         "aria-hidden": "true"
       }
     ) }),
     /* @__PURE__ */ jsx("div", { className: "splash2-vignette" }),
+    waiting && /* @__PURE__ */ jsx("div", { className: "absolute left-1/2 -translate-x-1/2 bottom-[7%] z-20 flex items-center gap-1.5", "aria-label": "Loading", children: [0, 1, 2].map((i) => /* @__PURE__ */ jsx("span", { className: "w-1 h-1 rounded-full", style: { background: BASE.inkDim, opacity: 0.45 + i * 0.2 } }, i)) }),
     /* @__PURE__ */ jsxs("div", { className: "splash2-content", children: [
       /* @__PURE__ */ jsxs("div", { className: "splash2-radar", children: [
         /* @__PURE__ */ jsx("span", { className: "splash2-ring ring-a" }),

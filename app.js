@@ -1,4 +1,4 @@
-// mind.exe — V5.3.2 RELEASE HARDENING / Vite production architecture
+// mind.exe — V5.4.1 RELEASE HARDENING / Vite production architecture
 // Built on the v4.9.0 FINAL QA base.
 // - runtime dependencies repaired after modular extraction;
 // - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;
@@ -1292,8 +1292,6 @@ function useAuth() {
   };
   return { status, user, register, login, loginWithGoogle, logout };
 }
-const STARTUP_SPLASH_FADE_MS = 1900;
-const STARTUP_SPLASH_HIDE_MS = 2500;
 const PROFILE_LOAD_TIMEOUT_MS = 10000;
 traceEvent("APP_RUNTIME", { status: "start" });
 const PROFILE_LOAD_MAX_RETRIES = 1;
@@ -1336,6 +1334,7 @@ function MindExe() {
   const [walletOpen, setWalletOpen] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
+  const [splashVideoEnded, setSplashVideoEnded] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [cloudProfileReady, setCloudProfileReady] = useState(false);
   const [profileBootstrapSource, setProfileBootstrapSource] = useState("none");
@@ -1544,24 +1543,21 @@ function MindExe() {
       });
     }, 3000);
   }, [cloudProfileReady]);
+  const startupDataReady = authStatus !== "checking" && (
+    authStatus !== "authenticated" ||
+    !!migrateFor ||
+    loaded ||
+    !!profileDataError
+  );
   useEffect(() => {
-    // The old splash was hard-coded to 6.4s and was followed by BootIntro on every reload,
-    // so a healthy cached session still needed ~8s before the app became usable. Count the
-    // splash budget from navigation start instead: slow module/CDN startup consumes the same
-    // budget instead of being followed by another full animation.
-    const startedAt = Number(window.__mindExePageStartedAt);
-    const elapsed = Number.isFinite(startedAt) && typeof performance !== "undefined"
-      ? Math.max(0, performance.now() - startedAt)
-      : 0;
-    const fadeIn = Math.max(0, STARTUP_SPLASH_FADE_MS - elapsed);
-    const hideIn = Math.max(120, STARTUP_SPLASH_HIDE_MS - elapsed);
-    const t1 = setTimeout(() => setSplashFading(true), fadeIn);
-    const t2 = setTimeout(() => setShowSplash(false), hideIn);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
+    // The splash is now driven by the actual video, not by a fixed 2.5s budget. Firebase/profile
+    // bootstrap starts immediately behind it. We only fade once the video has fully ended AND
+    // the next screen has enough state to render without flashing an empty shell.
+    if (!showSplash || !splashVideoEnded || !startupDataReady) return;
+    setSplashFading(true);
+    const timer = setTimeout(() => setShowSplash(false), 900);
+    return () => clearTimeout(timer);
+  }, [showSplash, splashVideoEnded, startupDataReady]);
   useEffect(() => {
     if (authStatus !== "authenticated" || !userId || migrateFor || authLegacyGateRef.current) return;
     let cancelled = false;
@@ -2606,7 +2602,7 @@ function MindExe() {
   const cachedReadOnly = authStatus === "authenticated" && !migrateFor && loaded && !cloudProfileReady && profileBootstrapSource === "shadow";
   const profileUiAllowed = !blockingProfileError && (!profileDataError || profileDataError.cached);
 
-  return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: accentPreset.cosmic ? "#040405" : BASE.bg, fontFamily: "var(--font-display)" }, children: [
+  return /* @__PURE__ */ jsxs("div", { className: `min-h-screen w-full relative theme-fade${accentPreset.cosmic ? " cosmic-theme" : ""}`, style: { background: BASE.bg, fontFamily: "var(--font-display)" }, children: [
     /* @__PURE__ */ jsx("style", { children: `
         /* V4.9 final typography: strict grotesk for UI copy, mono only for figures and technical data. */
         :root {
@@ -2722,17 +2718,17 @@ function MindExe() {
         .splash2-dot.active { width: 7px; height: 7px; background: #FFFFFF; box-shadow: 0 0 6px rgba(255,255,255,0.55); }
 
         /* ---------- Cosmic theme: quiet dark atmosphere \u2014 soft ambient light and stars, not a literal black hole ---------- */
-        @keyframes horizonBreathe { 0%, 100% { opacity: 0.7; transform: scale(1); } 50% { opacity: 1; transform: scale(1.03); } }
-        @keyframes cosmicTwinkle { 0%, 100% { opacity: 0.1; } 50% { opacity: 0.4; } }
+        @keyframes horizonBreathe { 0%, 100% { opacity: 0.36; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.015); } }
+        @keyframes cosmicTwinkle { 0%, 100% { opacity: 0.05; } 50% { opacity: 0.16; } }
         .cosmic-core {
-          position: absolute; width: 100vw; height: 100vw; right: -40vw; bottom: -46vw; border-radius: 50%;
-          background: radial-gradient(circle at 38% 38%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 32%, transparent 55%);
-          filter: blur(8px);
-          animation: horizonBreathe 12s ease-in-out infinite;
+          position: absolute; width: 86vw; height: 86vw; right: -40vw; bottom: -42vw; border-radius: 50%;
+          background: radial-gradient(circle at 38% 38%, rgba(255,255,255,0.028) 0%, rgba(255,255,255,0.012) 28%, transparent 58%);
+          filter: blur(12px);
+          animation: horizonBreathe 14s ease-in-out infinite;
         }
         .cosmic-vignette {
           position: absolute; inset: 0;
-          background: radial-gradient(ellipse 95% 75% at 0% 0%, rgba(0,0,0,0.5) 0%, transparent 55%);
+          background: radial-gradient(ellipse 80% 58% at 100% 100%, rgba(255,255,255,0.012) 0%, transparent 58%);
         }
         .cosmic-stars {
           position: absolute; inset: -15%;
@@ -2750,8 +2746,8 @@ function MindExe() {
           background-repeat: repeat;
           background-size: 420px 420px;
         }
-        .cosmic-stars-1 { opacity: 0.35; animation: cosmicTwinkle 6s ease-in-out infinite; }
-        .cosmic-stars-2 { background-size: 560px 560px; opacity: 0.22; animation: cosmicTwinkle 9s ease-in-out infinite 1.4s; }
+        .cosmic-stars-1 { opacity: 0.14; animation: cosmicTwinkle 7s ease-in-out infinite; }
+        .cosmic-stars-2 { background-size: 560px 560px; opacity: 0.08; animation: cosmicTwinkle 10s ease-in-out infinite 1.4s; }
         /* buttons/cards read as a layer floating above the void, not flush with it */
         .cosmic-theme .rounded-2xl { box-shadow: 0 16px 36px -10px rgba(0,0,0,0.7), 0 2px 10px -2px rgba(0,0,0,0.5); }
         .cosmic-theme .rounded-xl { box-shadow: 0 10px 22px -8px rgba(0,0,0,0.6); }
@@ -2811,7 +2807,12 @@ function MindExe() {
         .stagger > *:nth-child(5) { animation-delay: 240ms; }
         .stagger > *:nth-child(6) { animation-delay: 300ms; }
       ` }),
-    showSplash && /* @__PURE__ */ jsx(Splash, { accent, fading: splashFading }),
+    showSplash && /* @__PURE__ */ jsx(Splash, {
+      accent,
+      fading: splashFading,
+      waiting: splashVideoEnded && !startupDataReady,
+      onVideoEnd: () => setSplashVideoEnded(true)
+    }),
     !showSplash && authStatus === "authenticated" && !migrateFor && blockingProfileError && /* @__PURE__ */ jsx(ProfileLoadErrorScreen, {
       accent,
       lang,
@@ -2841,7 +2842,7 @@ function MindExe() {
           setProfileLoadRetryNonce((n) => n + 1);
         }, children: lang === "en" ? "Retry" : "Повторить" })
       ] }),
-      /* @__PURE__ */ jsx("div", { className: "pointer-events-none fixed inset-0", style: { background: `radial-gradient(circle at 50% 0%, ${accent}0A 0%, transparent 55%)`, transition: "background 0.4s ease" } }),
+      /* @__PURE__ */ jsx("div", { className: "pointer-events-none fixed inset-0", style: { background: `radial-gradient(circle at 50% 0%, ${accent}05 0%, transparent 48%)`, transition: "background 0.4s ease" } }),
       accentPreset.cosmic && /* @__PURE__ */ jsxs("div", { className: "pointer-events-none fixed inset-0 overflow-hidden", "aria-hidden": "true", children: [
         /* @__PURE__ */ jsx("div", { className: "cosmic-core" }),
         /* @__PURE__ */ jsx("div", { className: "cosmic-stars cosmic-stars-1" }),
@@ -2984,6 +2985,14 @@ function MindExe() {
               lang,
               notify: showToast,
               trades: entries,
+              onBeforeDeleteSession: async (sessionId) => {
+                const linked = entries.filter((entry) => String(entry?.decisionSessionId || "") === String(sessionId || ""));
+                if (!linked.length) return true;
+                const next = entries.map((entry) => String(entry?.decisionSessionId || "") === String(sessionId || "")
+                  ? { ...entry, decisionSessionId: null }
+                  : entry);
+                return commitJournalEntries(next, null);
+              },
               onCreateTrade: (session) => {
                 const direction = session.mode === "direction"
                   ? session.finalDecision
