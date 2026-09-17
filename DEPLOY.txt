@@ -1,8 +1,8 @@
-MIND.EXE v5.3.1 — FINAL QA candidate
+MIND.EXE v5.4.5 — FINAL QA candidate
 Vite production architecture + Approach 1/2 hardening preserved.
 
 IMPORTANT
-v5.3.1 is a Vite source release. Do NOT publish source index.html/app.js directly.
+v5.4.5 is a Vite source release. Do NOT publish source index.html/app.js directly.
 Deploy the generated dist/ directory.
 
 REQUIRED RUNTIME
@@ -10,6 +10,7 @@ Node.js supported by Vite 7:
 - Node 20.19+
 - or Node 22.12+
 The package.json engine is pinned as: ^20.19.0 || >=22.12.0
+Vite is pinned to 7.3.5 (audited Vite 7 security floor for this release).
 
 SOURCE STRUCTURE
 Keep all folders intact:
@@ -45,7 +46,7 @@ BUILD
 5. Deploy ONLY the contents of dist/
 
 Expected source regression result for this release:
-  127 regression checks passed.
+  153 regression checks passed.
   MIND.EXE regression suite: OK
 
 HOSTING / CI
@@ -75,15 +76,16 @@ Unchanged:
 - Firestore path: users/{uid}/data/{safeKey}
 - Decision schema v1 + locked pre-trade snapshot semantics
 
-core/journal-media.js, core/strategy-store.js and core/firestore-storage.js remain byte-identical
-to v5.2.1. core/profile-store.js keeps the same key layout and manifest CAS; its v5.3 changes are
-parallel immutable revision I/O plus returning the full public profile after save.
+core/strategy-store.js and core/firestore-storage.js retain the existing persistence contracts.
+core/journal-media.js keeps the same storage keys and manifest format, while v5.4.5 hardens image
+compression so an oversized screenshot cannot escape above the configured safe payload limit.
+core/profile-store.js keeps the same key layout and manifest CAS while hardening migration/reset behavior.
 
 FINAL-QA ENVIRONMENT LIMITATION
 The QA container still cannot resolve registry.npmjs.org (EAI_AGAIN), so npm dependencies cannot be
 installed here and a real `npm run build`/browser bundle launch cannot be truthfully marked verified.
 The source build hook is independently smoke-tested by the regression suite, all local JS syntax and
-relative imports are checked, the module graph is acyclic, PWA assets are complete, and 125 tests pass.
+relative imports are checked, the module graph is acyclic, PWA assets are complete, and 153 tests pass.
 
 Before production publish, the deployment environment MUST successfully run `npm run build`, then the
 real browser/iPhone smoke matrix in TESTING.md.
@@ -110,6 +112,8 @@ The client now prefers ReCaptchaEnterpriseProvider when the production build rec
 
 Before setting it, create a score-based reCAPTCHA Enterprise Web key for the production
 domains and register that same key for this Web app in Firebase Console > App Check.
+For GitHub Pages, store the value as the repository Actions secret named
+VITE_RECAPTCHA_ENTERPRISE_SITE_KEY; .github/workflows/pages.yml forwards it to the Vite build.
 Until that provisioning is complete the existing reCAPTCHA v3 provider remains as a safe
 compatibility fallback, so this release does not lock existing users out.
 

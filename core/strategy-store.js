@@ -28,8 +28,7 @@ export function createStrategyStore({
   tradeBaseKey,
   indexSchemaVersion,
   now = () => Date.now(),
-  revisionIdFactory = makeRevisionId,
-  logger = console
+  revisionIdFactory = makeRevisionId
 }) {
   if (typeof storageGet !== "function" || typeof storageSet !== "function" ||
       typeof storageDelete !== "function" || typeof getDocRef !== "function" ||
@@ -228,6 +227,7 @@ export function createStrategyStore({
       throw e;
     }
 
+    if (!committed) throw new Error("strategy_manifest_commit_missing");
     expectedActiveRevision = revisionId;
     expectedSequence = committed.sequence;
     manifestSeen = true;
@@ -291,6 +291,7 @@ export function createStrategyStore({
       throw e;
     }
 
+    if (!committed) throw new Error("strategy_reset_commit_missing");
     expectedActiveRevision = revisionId;
     expectedSequence = committed.sequence;
     manifestSeen = true;

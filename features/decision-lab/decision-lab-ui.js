@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import {
   Brain, Mic, Square, ChevronRight, ChevronLeft, Plus, Trash2, Check,
-  RotateCcw, Clock3, AlertTriangle, Sparkles, History, SlidersHorizontal, X, BarChart3, ImagePlus, ChevronDown
+  RotateCcw, AlertTriangle, Sparkles, BarChart3, ImagePlus, ChevronDown
 } from "lucide-react";
 import { BASE, WIN, LOSS } from "../../config/app-config.js";
 import { ScreenshotImage, requestAppConfirm } from "../../ui/primitives.js";
@@ -22,8 +22,7 @@ import {
 import {
   DECISION_EMOTION_TAGS,
   DECISION_EMOTION_LABELS,
-  DECISION_FACTORS,
-  decisionFactorLabel
+  DECISION_FACTORS
 } from "../../core/decision-factor-taxonomy.js";
 import { createAudioDraftStore } from "../../audio/audio-draft-store.js";
 import { createDecisionDraftCache } from "../../core/decision-draft-cache.js";
@@ -98,6 +97,7 @@ const UI = {
     emotionalBalance: "Эмоциональный перевес",
     neutralShare: "Неопределённая часть",
     insufficientBalance: "Недостаточно оценённых аргументов для перевеса",
+    neutralOnlyBalance: "Все оценённые мысли сейчас в неопределённости — перевеса между сторонами нет.",
     sideLongThinking: "Как LONG существует в твоих рассуждениях",
     sideShortThinking: "Как SHORT существует в твоих рассуждениях",
     sideForEntryThinking: "Как аргументы ЗА ВХОД существуют в твоих рассуждениях",
@@ -215,6 +215,7 @@ const UI = {
     emotionalBalance: "Emotional balance",
     neutralShare: "Uncertain share",
     insufficientBalance: "Not enough rated arguments to calculate a balance",
+    neutralOnlyBalance: "All rated thoughts are currently uncertain, so there is no balance between the two sides yet.",
     sideLongThinking: "How LONG exists in your reasoning",
     sideShortThinking: "How SHORT exists in your reasoning",
     sideForEntryThinking: "How FOR ENTRY exists in your reasoning",
@@ -276,6 +277,31 @@ const lines = (text) => String(text || "").split(/\n+/).map((s) => s.trim()).fil
 const linesText = (arr) => (Array.isArray(arr) ? arr : []).join("\n");
 const sideColor = (side, accent) => side === "long" || side === "for_entry" ? WIN : side === "short" || side === "against_entry" ? LOSS : accent;
 
+function DecisionChoiceButton({ id, label, selected, onClick, accent, size = "chip" }) {
+  const large = size === "large";
+  const medium = size === "medium";
+  const geometry = large
+    ? "w-full h-12 rounded-[11px] px-3 text-[12px]"
+    : medium
+      ? "w-full h-10 rounded-[10px] px-3 text-[12px]"
+      : "min-h-8 rounded-[10px] px-3 py-1.5 text-[11px]";
+  const color = sideColor(id, accent);
+  return jsx("button", {
+    type: "button",
+    onClick,
+    className: `${geometry} transition-all active:scale-[0.985]`,
+    style: {
+      border: `1px solid ${selected ? color + "66" : BASE.line}`,
+      background: selected ? `${color}0e` : "transparent",
+      color: selected ? color : BASE.inkDim,
+      fontFamily: "var(--font-display)",
+      fontWeight: selected ? 600 : 520,
+      letterSpacing: id === "long" || id === "short" ? "0.015em" : "-0.005em"
+    },
+    children: label
+  });
+}
+
 function Panel({ children, className = "" }) {
   return jsx("div", {
     className: `rounded-[18px] p-5 ${className}`,
@@ -288,7 +314,7 @@ function SectionTitle({ children }) {
   return jsx("div", { className: "text-[12px] mb-3", style: { color: BASE.inkDim, fontWeight: 550, letterSpacing: "-0.01em" }, children });
 }
 
-function PrimaryButton({ children, onClick, disabled = false, accent, icon: Icon = null }) {
+function PrimaryButton({ children, onClick, disabled = false, icon: Icon = null }) {
   return jsxs("button", {
     type: "button",
     onClick,
@@ -377,9 +403,13 @@ function AppSelect({ value, onChange, options = [] }) {
 
 function ThoughtBalanceMeter({ title, balance, leftSide, rightSide, leftLabel, rightLabel, accent, l }) {
   if (!balance?.available) {
+    const neutralOnly = Number(balance?.ratedCount || 0) > 0
+      && Number(balance?.leftTotal || 0) <= 0
+      && Number(balance?.rightTotal || 0) <= 0
+      && Number(balance?.neutralTotal || 0) > 0;
     return jsxs("div", { className: "py-3", children: [
       jsx("div", { className: "text-[11px] mb-1.5", style: { color: BASE.inkDim }, children: title }),
-      jsx("div", { className: "text-[11px]", style: { color: BASE.inkFaint }, children: l.insufficientBalance })
+      jsx("div", { className: "text-[11px] leading-[1.5]", style: { color: BASE.inkFaint }, children: neutralOnly ? l.neutralOnlyBalance : l.insufficientBalance })
     ] });
   }
   const leftPct = Math.max(0, Math.min(100, Number(balance.leftPct) || 0));
@@ -459,12 +489,12 @@ function DecisionArgumentCard({ arg, mode, accent, lang, onChange, onDelete, rat
       }),
       jsx("button", { type: "button", onClick: onDelete, className: "w-8 h-8 rounded-[9px] flex items-center justify-center shrink-0", style: { color: BASE.inkFaint }, children: jsx(Trash2, { size: 14 }) })
     ] }),
-    jsxs("div", { className: "flex flex-wrap gap-1.5 mt-2", children: sides.map(([id, label]) => jsx("button", {
-      type: "button",
+    jsx("div", { className: "flex flex-wrap gap-1.5 mt-2", children: sides.map(([id, label]) => jsx(DecisionChoiceButton, {
+      id,
+      label,
+      selected: arg.side === id,
       onClick: () => onChange({ ...arg, side: id, userEdited: true }),
-      className: "px-2 py-1 rounded-full text-[9px] uppercase tracking-wide",
-      style: { color: arg.side === id ? sideColor(id, accent) : BASE.inkFaint, border: `1px solid ${arg.side === id ? sideColor(id, accent) + "55" : BASE.line}`, background: arg.side === id ? `${sideColor(id, accent)}0d` : "transparent" },
-      children: label
+      accent
     }, id)) }),
     jsxs("div", { className: "mt-2", children: [
       jsx("div", { className: "text-[10px] mb-1", style: { color: BASE.inkFaint }, children: l.chooseFactor }),
@@ -753,16 +783,6 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
     return applyLocal(next, options);
   };
 
-  const flushDraft = async () => {
-    clearTimeout(syncTimerRef.current);
-    await saveChainRef.current;
-    const current = activeRef.current;
-    if (current?.status === "draft" && editSeqRef.current > lastSyncedSeqRef.current) {
-      return syncDraft(current, editSeqRef.current);
-    }
-    return cloudRef.current;
-  };
-
   const openAnalytics = async () => {
     setHomeView("analytics");
     if (!store?.loadAllSessions || !userId) return;
@@ -958,7 +978,6 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       let durableDraft = draft;
       if (!text) {
         text = await transcribeDecisionAudio(draft.blob, {
-          mimeType: draft.mimeType,
           lang,
           symbol: activeRef.current?.symbol || "",
           direction: activeRef.current?.consideredDirection || ""
@@ -1175,7 +1194,7 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       if (committed.psychologySynthesis?.inputHash === hash) psychologySynthesis = committed.psychologySynthesis;
     } catch (_) {
     }
-    const next = applyLocal({ ...committed, flowStep: "decision", psychologySynthesis });
+    applyLocal({ ...committed, flowStep: "decision", psychologySynthesis });
     setPsychologyError(null);
     setPsychologySkipKey(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1322,7 +1341,7 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       jsxs(Panel, { children: [
         jsx("label", { className: "block text-[10px] uppercase tracking-wide mb-2", style: { color: BASE.inkFaint }, children: l.symbol }),
         jsx("input", { value: active.symbol, onChange: (e) => patchActive({ symbol: e.target.value.toUpperCase().slice(0, 40) }), placeholder: "BTCUSDT", className: "w-full bg-transparent border-b outline-none py-2.5 mb-5 text-sm", style: { borderColor: BASE.line, color: BASE.ink, fontFamily: "var(--font-mono)" } }),
-        active.mode === "entry" && jsxs("div", { className: "mb-5", children: [jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: l.considered }), jsx("div", { className: "grid grid-cols-2 gap-2", children: [["long", "LONG"], ["short", "SHORT"]].map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ consideredDirection: id }), className: "h-10 rounded-[10px] text-xs", style: { border: `1px solid ${active.consideredDirection === id ? sideColor(id, accent) + "55" : BASE.line}`, color: active.consideredDirection === id ? sideColor(id, accent) : BASE.inkDim, background: active.consideredDirection === id ? `${sideColor(id, accent)}0d` : "transparent" }, children: label }, id)) })] }),
+        active.mode === "entry" && jsxs("div", { className: "mb-5", children: [jsx("div", { className: "text-[11px] mb-2", style: { color: BASE.inkFaint }, children: l.considered }), jsx("div", { className: "grid grid-cols-2 gap-2", children: [["long", "LONG"], ["short", "SHORT"]].map(([id, label]) => jsx(DecisionChoiceButton, { id, label, selected: active.consideredDirection === id, onClick: () => patchActive({ consideredDirection: id }), accent, size: "medium" }, id)) })] }),
         jsx(SliderField, { label: l.clarityBefore, value: active.preDecisionState.clarityBefore, rated: active.preDecisionState.clarityBeforeRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityBefore: value, clarityBeforeRated: true } }), accent, hintLeft: lang === "en" ? "chaos" : "каша", hintRight: lang === "en" ? "clear" : "ясно" }),
         jsx(PrimaryButton, { accent, disabled: !contextReady, onClick: () => goStep("input"), children: l.continue })
       ] })
@@ -1426,7 +1445,7 @@ export function DecisionLab({ userId, store, mediaStore, accent, lang = "ru", no
       psychologySkipped && !psychology && jsx("div", { className: "text-[10px] mb-3 text-center", style: { color: BASE.inkFaint }, children: lang === "en" ? "Psychological synthesis skipped for this decision." : "Психологический разбор пропущен для этого решения." }),
       psychologyReady && jsxs(Panel, { className: "mb-3", children: [jsx(SliderField, { label: l.clarityAfter, value: active.preDecisionState.clarityAfter, rated: active.preDecisionState.clarityAfterRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, clarityAfter: value, clarityAfterRated: true } }), accent, hintLeft: lang === "en" ? "unclear" : "неясно", hintRight: lang === "en" ? "clear" : "ясно" }), jsx(SliderField, { label: l.confidence, value: active.preDecisionState.decisionConfidence, rated: active.preDecisionState.decisionConfidenceRated, unratedLabel: l.unrated, onChange: (value) => patchActive({ preDecisionState: { ...active.preDecisionState, decisionConfidence: value, decisionConfidenceRated: true } }), accent, hintLeft: lang === "en" ? "not sure" : "не уверен", hintRight: lang === "en" ? "sure of process" : "уверен в решении" })] }),
       psychologyReady && jsx(SectionTitle, { children: l.chooseDecision }),
-      psychologyReady && jsx("div", { className: "grid grid-cols-3 gap-2 mb-3", children: choices.map(([id, label]) => jsx("button", { type: "button", onClick: () => patchActive({ finalDecision: id }), className: "h-12 rounded-[12px] text-[11px] font-semibold", style: { border: `1px solid ${active.finalDecision === id ? sideColor(id, accent) + "66" : BASE.line}`, background: active.finalDecision === id ? `${sideColor(id, accent)}0e` : BASE.surface, color: active.finalDecision === id ? sideColor(id, accent) : BASE.inkDim }, children: label }, id)) }),
+      psychologyReady && jsx("div", { className: "grid grid-cols-3 gap-2 mb-3", children: choices.map(([id, label]) => jsx(DecisionChoiceButton, { id, label, selected: active.finalDecision === id, onClick: () => patchActive({ finalDecision: id }), accent, size: "large" }, id)) }),
       cloudSyncing && jsx("div", { className: "text-center text-[9px] mb-2", style: { color: BASE.inkFaint }, children: l.syncPending }),
       psychologyReady && jsx(PrimaryButton, { accent, disabled: saving || !active.finalDecision || !allArgumentsRated || !finalRatingsReady, onClick: lock, icon: Check, children: l.lock })
     ] });

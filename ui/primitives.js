@@ -6,7 +6,7 @@ import { Download, X as XIcon, Maximize2, Minimize2, AlertTriangle } from "lucid
 import { jsx, jsxs } from "react/jsx-runtime";
 import { BASE } from "../config/app-config.js";
 
-export function Pill({ active, children, onClick, accent }) {
+export function Pill({ active, children, onClick }) {
   return /* @__PURE__ */ jsx(
     "button",
     {

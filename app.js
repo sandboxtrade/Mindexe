@@ -1,4 +1,4 @@
-// mind.exe — V5.4.4 DECISION PSYCHOLOGY SYNTHESIS / Vite production architecture
+// mind.exe — V5.4.5 INSIGHT QUALITY + DECISION PSYCHOLOGY RELIABILITY / Vite production architecture
 // Built on the v4.9.0 FINAL QA base.
 // - runtime dependencies repaired after modular extraction;
 // - Inter is the primary UI typeface, IBM Plex Mono is reserved for figures/technical data;
@@ -81,98 +81,29 @@ var firestoreStorage = createFirestoreStorage({
   setDoc,
   deleteDoc
 });
-var fsSanitizeKey = firestoreStorage.sanitizeKey;
 var fsDocRef = firestoreStorage.docRef;
 var storageGet = firestoreStorage.get;
 var storageSet = firestoreStorage.set;
 var storageDelete = firestoreStorage.delete;
 configureDashboardData({ storageGet, storageSet });
-import { Component, useState, useMemo, useRef, useEffect, lazy, Suspense } from "react";
+import { useState, useMemo, useRef, useEffect, lazy, Suspense } from "react";
 import {
   Sparkles,
   BookOpen,
   NotebookText,
   LineChart as LineChartIcon,
   Flame,
-  Search,
-  Trash2,
-  ChevronRight,
-  ChevronLeft,
-  ChevronDown,
-  Check,
-  X as XIcon,
-  CalendarCheck,
-  ShieldCheck,
-  PenLine,
-  TrendingUp,
-  Volume2,
-  VolumeX,
-  Download,
-  AlertTriangle,
-  Plus,
-  ImagePlus,
-  Gauge,
-  Upload,
-  Coins,
   User,
-  KeyRound,
-  Eye,
-  EyeOff,
-  LogOut,
   Bot,
-  Send,
   Brain,
-  Star,
-  TrendingDown,
-  Target,
-  RotateCcw,
-  Zap,
-  Info,
-  Camera,
-  Bitcoin,
-  Activity
+  Target
 } from "lucide-react";
 import { Fragment, jsx, jsxs } from "react/jsx-runtime";
 import {
-  CURRENCIES,
-  computePlannedRR,
-  computeRealizedRR,
-  countExcludedResultEntries,
-  entriesWithRealizedRR,
-  findCurrency,
-  formatBalance,
-  formatPriceValue,
-  formatResult,
-  formatStoredResult,
-  formatStrategyTotal,
-  getStoredResultMeta,
-  groupThousands,
-  hasRealizedRR,
-  normalizeResultByCloseType,
   normalizeResultCurrency,
-  normalizeResultMode,
-  outcomeFromResult,
-  resultEntriesForUnit,
-  resultMatchesUnit,
-  unitSymbol
+  normalizeResultMode
 } from "./core/trade-math.js";
-import {
-  computeRRWinRateStats,
-  st_mean,
-  st_median,
-  st_round2,
-  st_stdev
-} from "./core/stats.js";
-import {
-  EMOTION_SCALE_KEYS,
-  deriveEntryStatus,
-  emotionClampPct,
-  emotionScaleKeys,
-  emotionConflict,
-  isEntryClosed,
-  migrateEntry,
-  normalizeEmotions
-} from "./core/journal-model.js";
+import { migrateEntry } from "./core/journal-model.js";
 import { createFirestoreStorage } from "./core/firestore-storage.js";
 import { createJournalMediaStore } from "./core/journal-media.js";
 import { createProfileStore } from "./core/profile-store.js";
@@ -181,30 +112,18 @@ import { createDecisionStore } from "./core/decision-store.js";
 import { createDecisionMediaStore } from "./core/decision-media.js";
 import { createDecisionDraftCache } from "./core/decision-draft-cache.js";
 import { createAudioDraftStore } from "./audio/audio-draft-store.js";
-import { BASE, WIN, LOSS, FLAT, WARN, ACCENTS, INSTRUMENTS, SETUP_TAGS, DIRECTION_LABEL } from "./config/app-config.js";
+import { BASE, LOSS, ACCENTS } from "./config/app-config.js";
 import { STRINGS } from "./i18n/strings.js";
-import { TREND_ARROW, analyzeTraderPatterns, calculateTraderAnalytics, calculateTraderLevel } from "./analytics/trader-analytics.js";
-import {
-  CALIBRATION_QUESTIONS, CALIBRATION_QUESTIONS_EN, CALIBRATION_SCALE_SETS, CALIBRATION_SCALE_TYPES,
-  caWithTimeout, caScaleSet, scoreCalibrationDynamic, REVIEW_LIKERT, REVIEW_LIKERT_EN,
-  buildReviewQuiz, scoreJournalReview
-} from "./analytics/calibration-review.js";
-import { Pill, Card, Toast, ScreenshotPreviewHost, AppConfirmHost, Skeleton, SkeletonLines, EmptyState, StatCard } from "./ui/primitives.js";
+import { calculateTraderAnalytics } from "./analytics/trader-analytics.js";
+import { caWithTimeout } from "./analytics/calibration-review.js";
+import { Toast, ScreenshotPreviewHost, AppConfirmHost } from "./ui/primitives.js";
 import { LogoMark, Wordmark } from "./ui/brand.js";
 import { configureTradeAi } from "./ai/trade-tools.js";
 import { configureDecisionAi } from "./ai/decision-runtime.js";
 import { traceEvent } from "./core/performance-trace.js";
-import {
-  configureAiService, aiGetModel, aiGenerateInsight, aiChatReply, aiReviewQuestions,
-  aiReviewSummary, aiFetchMarketSnapshot, aiGenerateHomeAdvice, aiGenerateCalibrationQuestions
-} from "./ai/ai-service.js";
-import { aiBuildContext, aiHashContext, aiCompactRecentEntries, caComputeAdaptiveFactors, caBuildContext } from "./ai/context.js";
-import {
-  emotionStateText, emotionVerdict, emotionValuesText, emotionValuesColor,
-  entryStateText, entryStateColor, EmotionScales,
-  pointToEmotions, NewEntry, CloseTrade, EditTrade, Log
-} from "./features/journal/journal-ui.js";
-import { strategyAllTrades, calculateStrategyStats, normalizeStrategyResultByCloseType, strategyResultOutcome } from "./core/strategy-math.js";
+import { configureAiService, aiGetModel } from "./ai/ai-service.js";
+import { NewEntry, CloseTrade, EditTrade, Log } from "./features/journal/journal-ui.js";
+import { normalizeStrategyResultByCloseType, strategyResultOutcome } from "./core/strategy-math.js";
 import { configureDashboardData } from "./features/dashboard/dashboard-data.js";
 import { AuthScreen, LegacyMigratePrompt, BootIntro } from "./features/auth/auth-ui.js";
 import { BootLoading, ProfileLoadErrorScreen, Splash, WalletBadge, ProfileBadge, MobileNavItem, MobileNavPrimaryButton, WalletSheet, DesktopSidebar, AppErrorBoundary } from "./ui/app-shell.js";
@@ -449,8 +368,7 @@ var profileStore = createProfileStore({
   runTransaction,
   db: fbDb,
   profileBaseKey: PROFILE_KEY,
-  schemaVersion: SCHEMA_VERSION,
-  logger: console
+  schemaVersion: SCHEMA_VERSION
 });
 async function loadAiState(userId) {
   if (!fbAuth.currentUser || !userId) return { analysis: "", chatMessages: [] };
@@ -758,8 +676,7 @@ var strategyStore = createStrategyStore({
   db: fbDb,
   indexBaseKey: STRATEGY_INDEX_KEY,
   tradeBaseKey: STRATEGY_TRADE_KEY,
-  indexSchemaVersion: STRATEGY_SCHEMA_VERSION,
-  logger: console
+  indexSchemaVersion: STRATEGY_SCHEMA_VERSION
 });
 var decisionStore = createDecisionStore({
   storageGet,
@@ -1059,8 +976,17 @@ function mergeProfiles(cloudRaw, legacyRaw) {
   const legacy = migrateProfile(legacyRaw);
   if (!cloud) return legacy;
   if (!legacy) return cloud;
+
+  // Never resurrect pre-reset journal entries from an old device/local profile. Settings and wallet
+  // still merge with the current cloud copy winning, but an intentional reset is a hard boundary.
+  const resetBlocksLegacyJournal = cloud?.meta?.intentionalFullReset === true
+    || cloud?.meta?.intentionalJournalReset === true
+    || !!cloud?.meta?.fullResetAt
+    || !!cloud?.meta?.journalResetAt;
   const byId = /* @__PURE__ */ new Map();
-  for (const e of legacy.journal?.entries || []) if (e && e.id) byId.set(e.id, e);
+  if (!resetBlocksLegacyJournal) {
+    for (const e of legacy.journal?.entries || []) if (e && e.id) byId.set(e.id, e);
+  }
   for (const e of cloud.journal?.entries || []) if (e && e.id) byId.set(e.id, e);
   return {
     ...cloud,
@@ -1072,31 +998,63 @@ function mergeProfiles(cloudRaw, legacyRaw) {
   };
 }
 async function mergeLegacyIntoCloud(userId, legacyProfileRaw, legacyMediaRaw) {
+  if (!fbAuth.currentUser || fbAuth.currentUser.uid !== userId) throw new Error("legacy_migration_auth_missing");
+  let allowedEntryIds = null;
+
   if (legacyProfileRaw) {
     let existing = null;
     try {
-      const res = await storageGet(profileKey(userId), false);
-      existing = res?.value ? JSON.parse(res.value) : null;
-    } catch (_) {
-      // If we can't confirm what's already in the cloud, refuse to write \u2014 overwriting real data
-      // is strictly worse than skipping a migration the user can retry.
-      return;
+      // Read through the current split/revision store rather than the pre-v4.7 canonical document.
+      // This also establishes the CAS revision used by saveProfile below.
+      existing = await loadProfile(userId);
+    } catch (cause) {
+      const error = new Error("legacy_cloud_read_failed");
+      error.cause = cause;
+      throw error;
     }
-    const merged = mergeProfiles(existing, JSON.parse(legacyProfileRaw));
-    if (merged) await storageSet(profileKey(userId), JSON.stringify({ ...merged, version: SCHEMA_VERSION }), false);
+
+    let legacyProfile = null;
+    try {
+      legacyProfile = JSON.parse(legacyProfileRaw);
+    } catch (cause) {
+      const error = new Error("legacy_profile_invalid");
+      error.cause = cause;
+      throw error;
+    }
+    const merged = mergeProfiles(existing, legacyProfile);
+    if (merged) {
+      const committed = await saveProfile(userId, merged);
+      allowedEntryIds = new Set((committed?.journal?.entries || []).map((entry) => String(entry?.id || "")).filter(Boolean));
+    }
   }
+
   if (legacyMediaRaw) {
-    let media = {};
+    let media = null;
     try {
       media = JSON.parse(legacyMediaRaw) || {};
-    } catch (_) {
+    } catch (cause) {
+      const error = new Error("legacy_media_invalid");
+      error.cause = cause;
+      throw error;
     }
+    let mediaFailure = null;
     for (const [id, val] of Object.entries(media)) {
+      // If a journal reset deliberately excluded this legacy trade, do not create orphan media for it.
+      if (allowedEntryIds && !allowedEntryIds.has(String(id))) continue;
       try {
-        const cur = await storageGet(journalMediaStore.keys.entry(userId, id), false);
-        if (!cur?.value) await storageSet(journalMediaStore.keys.entry(userId, id), JSON.stringify(val), false);
-      } catch (_) {
+        const key = journalMediaStore.keys.entry(userId, id);
+        const cur = await storageGet(key, false);
+        if (!cur?.value) await storageSet(key, JSON.stringify(val), false);
+      } catch (cause) {
+        // Keep trying the remaining screenshots, then fail the migration as a whole so the local
+        // source is not retired. A later retry skips screenshots that already reached the cloud.
+        mediaFailure ||= cause || new Error("legacy_media_write_failed");
       }
+    }
+    if (mediaFailure) {
+      const error = new Error("legacy_media_migration_failed");
+      error.cause = mediaFailure;
+      throw error;
     }
   }
 }
@@ -1108,8 +1066,8 @@ async function migrateLocalAccountIfNeeded(uid, username) {
     const already = await storageGet(LOCAL_MIGRATED_KEY, false);
     if (already?.value) return "done";
     const [legacyProfile, legacyMedia] = await Promise.all([
-      legacyStorageGet(profileKey(legacyUser.id), false).catch(() => null),
-      legacyStorageGet(mediaKey(legacyUser.id), false).catch(() => null)
+      legacyStorageGet(profileKey(legacyUser.id), false),
+      legacyStorageGet(mediaKey(legacyUser.id), false)
     ]);
     await mergeLegacyIntoCloud(uid, legacyProfile?.value || null, legacyMedia?.value || null);
     await storageSet(LOCAL_MIGRATED_KEY, "1", false);
@@ -1215,18 +1173,19 @@ async function checkLegacyDataAvailable() {
   }
 }
 async function claimLegacyData(userId) {
-  if (!window.storage) return;
+  if (!window.storage || storageDegraded) throw new Error("legacy_storage_unavailable");
+  const [legacyProfile, legacyMedia] = await Promise.all([
+    legacyStorageGet(PROFILE_KEY, false),
+    legacyStorageGet(MEDIA_KEY, false)
+  ]);
+  // Only retire the one-time migration prompt after the cloud merge has actually succeeded.
+  // If Firestore/network fails here, keeping the marker unset lets the user retry without losing
+  // access to the still-intact local data on the next attempt/startup.
+  await mergeLegacyIntoCloud(userId, legacyProfile?.value || null, legacyMedia?.value || null);
   try {
-    const [legacyProfile, legacyMedia] = await Promise.all([
-      legacyStorageGet(PROFILE_KEY, false).catch(() => null),
-      legacyStorageGet(MEDIA_KEY, false).catch(() => null)
-    ]);
-    await mergeLegacyIntoCloud(userId, legacyProfile?.value || null, legacyMedia?.value || null);
-  } finally {
-    try {
-      await legacyStorageSet(LEGACY_CLAIMED_KEY, "1", false);
-    } catch (_) {
-    }
+    await legacyStorageSet(LEGACY_CLAIMED_KEY, "1", false);
+  } catch (_) {
+    // Marker persistence is best-effort. A repeated idempotent merge is safer than hiding data.
   }
 }
 async function skipLegacyData() {
@@ -2195,15 +2154,6 @@ function MindExe() {
       return false;
     }
   };
-  const awardCoins = (amount, reason) => {
-    const tx = { id: `mc_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`, amount, reason, date: (/* @__PURE__ */ new Date()).toISOString() };
-    const nextCoins = mindCoins + amount;
-    const nextLedger = [...coinLedger, tx];
-    setMindCoins(nextCoins);
-    setCoinLedger(nextLedger);
-    if (canPersistRef.current) persistNow({ mindCoins: nextCoins, coinLedger: nextLedger });
-    return tx;
-  };
   useEffect(() => {
     if (!loaded || !canPersistRef.current || authStatus !== "authenticated" || !userId) return;
     if (isToday(lastDailyReward)) return;
@@ -2816,7 +2766,6 @@ function MindExe() {
       onVideoEnd: () => setSplashVideoEnded(true)
     }),
     !showSplash && authStatus === "authenticated" && !migrateFor && blockingProfileError && /* @__PURE__ */ jsx(ProfileLoadErrorScreen, {
-      accent,
       lang,
       kind: profileDataError.kind,
       onRetry: () => {
@@ -2832,7 +2781,7 @@ function MindExe() {
     !showSplash && !blockingProfileError && !cachedReadOnly && (authStatus === "checking" || authStatus === "authenticated" && !migrateFor && !introResolved && !showBootIntro) && /* @__PURE__ */ jsx(BootLoading, { accent }),
     !showSplash && authStatus === "unauthenticated" && /* @__PURE__ */ jsx(AuthScreen, { accent, onRegister: handleRegister, onLogin: handleLogin, onGoogle: handleGoogleLogin }),
     !showSplash && authStatus === "authenticated" && migrateFor && /* @__PURE__ */ jsx(LegacyMigratePrompt, { accent, onMigrate: handleMigrate, onSkip: handleSkipMigrate }),
-    !showSplash && authStatus === "authenticated" && !migrateFor && profileUiAllowed && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { accent, name, lang, onDone: () => setShowBootIntro(false) }),
+    !showSplash && authStatus === "authenticated" && !migrateFor && profileUiAllowed && showBootIntro && /* @__PURE__ */ jsx(BootIntro, { name, lang, onDone: () => setShowBootIntro(false) }),
     !showSplash && authStatus === "authenticated" && !migrateFor && profileUiAllowed && introResolved && !showBootIntro && /* @__PURE__ */ jsxs(Fragment, { children: [
       cachedReadOnly && /* @__PURE__ */ jsxs("div", { className: "fixed top-3 left-1/2 -translate-x-1/2 z-[120] max-w-[calc(100%-24px)] rounded-full px-3 py-2 flex items-center gap-2", style: { background: "rgba(13,13,15,0.96)", border: `1px solid ${profileDataError?.cached ? LOSS + "66" : BASE.line}`, color: BASE.inkDim, backdropFilter: "blur(14px)" }, children: [
         /* @__PURE__ */ jsx("span", { className: "text-[10px] whitespace-nowrap", style: { fontFamily: "var(--font-mono)" }, children: profileDataError?.cached ? (lang === "en" ? "Cloud unavailable · cached view" : "Облако недоступно · локальная копия") : (lang === "en" ? "Verifying cloud data…" : "Проверяю облачные данные…") }),
@@ -3044,8 +2993,6 @@ function MindExe() {
               onThemeChange: (n) => showToast(`\u0422\u0435\u043C\u0430: ${n}`),
               soundOn,
               setSoundOn,
-              weeklyGoal,
-              setWeeklyGoal,
               onExport: exportJournal,
               onImport: importJournal,
               onExportBackup: exportFullBackup,

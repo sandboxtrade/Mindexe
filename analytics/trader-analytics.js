@@ -287,10 +287,10 @@ function sequenceAnalysis(sortedEntries) {
   const overtradingStats = pe_summarize(overtradingGroup);
   const normalDaysStats = pe_summarize(normalDaysGroup.length ? normalDaysGroup : sortedEntries);
   return {
-    revenge: { group: revengeStats, groupSize: revengeGroup.length, rest: normalAfterLossStats },
+    revenge: { group: revengeStats, groupSize: revengeGroup.length, rest: normalAfterLossStats, restSize: normalAfterLoss.length },
     lossStreak: { max: maxLossStreak, afterStreak: afterLossStreakStats, afterStreakSize: afterLossStreak2.length },
     winStreak: { max: maxWinStreak },
-    overtrading: { medianDayCount, group: overtradingStats, groupSize: overtradingGroup.length, normalDays: normalDaysStats }
+    overtrading: { medianDayCount, group: overtradingStats, groupSize: overtradingGroup.length, normalDays: normalDaysStats, normalDaysSize: normalDaysGroup.length }
   };
 }
 function disciplineAnalysis(sortedEntries, seq, risk) {
@@ -1032,33 +1032,63 @@ function rrWinRateInsightText(rr, lang = "ru") {
   }
   return null;
 }
-function buildInsights(patternsResult, calibration, discipline, lang = "ru", rrStats = null) {
+function taComparisonInsight(id, group, rest, lang = "ru", labels = {}) {
+  if (!group || !rest || group.rrSample < 5 || rest.rrSample < 5 || group.avgR == null || rest.avgR == null) return null;
+  const diff = st_round2(group.avgR - rest.avgR);
+  if (diff == null || Math.abs(diff) < 0.2) return null;
+  const fmt = (v) => `${v >= 0 ? "+" : ""}${st_round2(v)}R`;
+  const text = lang === "en"
+    ? `${labels.groupEn || "In the selected group"} (${group.rrSample} trades), average realized RR was ${fmt(group.avgR)}; ${labels.restEn || "in the comparison group"} (${rest.rrSample} trades), it was ${fmt(rest.avgR)}. That is a journal association, not proof that one behavior caused the result.`
+    : `${labels.groupRu || "В выбранной группе"} (${group.rrSample} сделок) средний realized RR был ${fmt(group.avgR)}; ${labels.restRu || "в группе сравнения"} (${rest.rrSample} сделок) — ${fmt(rest.avgR)}. Это связь в журнале, а не доказательство того, что одно поведение стало причиной результата.`;
+  return { id, basis: "comparison", confidence: group.rrSample >= 10 && rest.rrSample >= 10 ? "high" : "medium", sampleSize: group.rrSample + rest.rrSample, text, diffR: diff };
+}
+function buildInsights(patternsResult, calibration, discipline, seq, lang = "ru", rrStats = null) {
   const insights = [];
-  (patternsResult.patterns || []).slice(0, 3).forEach((p) => {
-    insights.push({ id: `pattern_${p.id}`, basis: "pattern", confidence: p.confidence, sampleSize: p.sampleSize, text: p.description });
-  });
-  if (calibration.available && calibration.divergenceNote) {
+
+  // Prefer relationships over isolated frequencies. A raw fact such as "33% of losses were followed
+  // by another trade within 30 minutes" is not an insight by itself. It becomes useful only when the
+  // journal has enough observations on BOTH sides of a comparison and the outcome differs materially.
+  if (seq?.revenge?.groupSize >= 5 && seq?.revenge?.restSize >= 5) {
+    const item = taComparisonInsight("compare_fast_after_loss", seq.revenge.group, seq.revenge.rest, lang, {
+      groupRu: "В быстрых повторных входах в течение 30 минут после убытка",
+      restRu: "в остальных входах после убытка",
+      groupEn: "In re-entries within 30 minutes after a loss",
+      restEn: "in the other entries after a loss"
+    });
+    if (item) insights.push(item);
+  }
+  if (seq?.overtrading?.groupSize >= 5 && seq?.overtrading?.normalDaysSize >= 5) {
+    const item = taComparisonInsight("compare_high_activity_days", seq.overtrading.group, seq.overtrading.normalDays, lang, {
+      groupRu: "В сделках в дни с аномально высокой активностью",
+      restRu: "в обычные по активности дни",
+      groupEn: "In trades from unusually high-activity days",
+      restEn: "on normal-activity days"
+    });
+    if (item) insights.push(item);
+  }
+
+  // Pattern engine already requires a broad journal sample. Do not surface low-confidence candidates
+  // as headline insights: they are useful inside the detailed breakdown, but too noisy for the card.
+  (patternsResult.patterns || [])
+    .filter((p) => p && p.confidence !== "low" && Number(p.sampleSize || 0) >= 5)
+    .slice(0, 3)
+    .forEach((p) => insights.push({ id: `pattern_${p.id}`, basis: "pattern", confidence: p.confidence, sampleSize: p.sampleSize, text: p.description }));
+
+  if (calibration.available && calibration.divergenceNote && ["moderate", "high"].includes(calibration.confidence) && calibration.dayTradeCount >= 6) {
     insights.push({ id: "calibration_divergence", basis: "calibration", confidence: calibration.confidence, sampleSize: calibration.dayTradeCount, text: calibration.divergenceNote });
   }
-  if (discipline.violations && discipline.violations.length) {
-    const top = discipline.violations[0];
-    const text = lang === "en" ? {
-      revenge_rate: `You re-enter a new trade within half an hour of a loss about ${top.value}% of the time.`,
-      overtrading_days: `About ${top.value}% of your trades fall on days with abnormally high activity.`,
-      risk_after_loss: `After a loss, your average risk increases by about ${top.value}%.`,
-      risk_after_win: `After a win, your average risk increases by about ${top.value}%.`
-    }[top.id] : {
-      revenge_rate: `\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0442\u044B \u0432\u0445\u043E\u0434\u0438\u0448\u044C \u0432 \u043D\u043E\u0432\u0443\u044E \u0441\u0434\u0435\u043B\u043A\u0443 \u0432 \u0442\u0435\u0447\u0435\u043D\u0438\u0435 \u043F\u043E\u043B\u0443\u0447\u0430\u0441\u0430 \u043F\u0440\u0438\u043C\u0435\u0440\u043D\u043E \u0432 ${top.value}% \u0441\u043B\u0443\u0447\u0430\u0435\u0432.`,
-      overtrading_days: `\u041F\u0440\u0438\u043C\u0435\u0440\u043D\u043E ${top.value}% \u0442\u0432\u043E\u0438\u0445 \u0441\u0434\u0435\u043B\u043E\u043A \u043F\u0440\u0438\u0445\u043E\u0434\u0438\u0442\u0441\u044F \u043D\u0430 \u0434\u043D\u0438 \u0441 \u0430\u043D\u043E\u043C\u0430\u043B\u044C\u043D\u043E \u0432\u044B\u0441\u043E\u043A\u043E\u0439 \u0430\u043A\u0442\u0438\u0432\u043D\u043E\u0441\u0442\u044C\u044E.`,
-      risk_after_loss: `\u041F\u043E\u0441\u043B\u0435 \u0443\u0431\u044B\u0442\u043A\u0430 \u0442\u0432\u043E\u0439 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0438\u0441\u043A \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0438\u043C\u0435\u0440\u043D\u043E \u043D\u0430 ${top.value}%.`,
-      risk_after_win: `\u041F\u043E\u0441\u043B\u0435 \u043F\u043E\u0431\u0435\u0434\u044B \u0442\u0432\u043E\u0439 \u0441\u0440\u0435\u0434\u043D\u0438\u0439 \u0440\u0438\u0441\u043A \u0443\u0432\u0435\u043B\u0438\u0447\u0438\u0432\u0430\u0435\u0442\u0441\u044F \u043F\u0440\u0438\u043C\u0435\u0440\u043D\u043E \u043D\u0430 ${top.value}%.`
-    }[top.id];
-    if (text) insights.push({ id: `discipline_${top.id}`, basis: "discipline", confidence: discipline.score.confidence, sampleSize: discipline.score.sampleSize, text });
-  }
+
   const rrText = rrWinRateInsightText(rrStats, lang);
-  if (rrText) insights.push({ id: "rr_winrate", basis: "rr_winrate", confidence: rrStats.sampleSize >= PATTERN_MIN_SAMPLE * 1.5 ? "medium" : "low", sampleSize: rrStats.sampleSize, text: rrText });
+  if (rrText && rrStats.sampleSize >= PATTERN_MIN_SAMPLE) {
+    insights.push({ id: "rr_winrate", basis: "rr_winrate", confidence: rrStats.sampleSize >= PATTERN_MIN_SAMPLE * 1.5 ? "medium" : "low", sampleSize: rrStats.sampleSize, text: rrText });
+  }
+
+  // `discipline` is intentionally not converted into a headline by itself. Its isolated rates still
+  // feed scores/details, but a single frequency without an outcome comparison is not useful enough.
+  void discipline;
   return insights;
 }
+
 export function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") {
   const validEntries = (entries || []).filter((e) => e && e.date instanceof Date && !isNaN(e.date.getTime()));
   const closedEntries = validEntries.filter(isEntryClosed);
@@ -1100,7 +1130,7 @@ export function calculateTraderAnalytics(entries, lastCalibration, lang = "ru") 
     missingRisk: closedEntries.filter((e) => !hasRealizedRR(e)).length,
     missingScreenshots: validEntries.filter((e) => !Array.isArray(e.screenshots) || e.screenshots.length === 0).length
   };
-  const insights = buildInsights(patternsResult, calibration, discipline, lang, rrStats);
+  const insights = buildInsights(patternsResult, calibration, discipline, seq, lang, rrStats);
   return {
     awareness: { ...awareness, trend: trend.awareness },
     emotionalState: emotional,

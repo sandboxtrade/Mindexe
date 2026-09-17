@@ -1,4 +1,4 @@
-# MIND.EXE v5.4.1 — FINAL QA / production smoke matrix
+# MIND.EXE v5.4.5 — FINAL QA / production smoke matrix
 
 Before deployment:
 
@@ -12,7 +12,7 @@ npm run build
 Expected source regression result:
 
 ```text
-127 regression checks passed.
+153 regression checks passed.
 MIND.EXE regression suite: OK
 ```
 
@@ -36,12 +36,12 @@ The production site must be deployed from `dist/`, not directly from source file
 
 ## C. Confirmed local profile bootstrap
 
-1. Complete one successful cloud load/save on v5.4.1, then fully close the PWA.
+1. Complete one successful cloud load/save on v5.4.5, then fully close the PWA.
 2. Reopen with a throttled connection. The last cloud-confirmed profile may appear quickly while verification continues.
 3. While the banner says `Проверяю облачные данные…`, taps/edits must not create writes.
 4. After cloud verification completes, the banner/blocker disappears and normal editing works.
-5. Test cloud unavailable after a previously confirmed v5.4.1 snapshot. The app may show the cached snapshot as read-only; it must not silently become writable.
-6. Upgrade directly from v5.2.1 and throttle the first launch. An old v5.2.1 shadow must NOT be trusted for fast bootstrap; v5.4.1 should first obtain the full cloud profile and only then create its confirmed local snapshot.
+5. Test cloud unavailable after a previously confirmed v5.4.5 snapshot. The app may show the cached snapshot as read-only; it must not silently become writable.
+6. Upgrade directly from v5.2.1 and throttle the first launch. An old v5.2.1 shadow must NOT be trusted for fast bootstrap; v5.4.5 should first obtain the full cloud profile and only then create its confirmed local snapshot.
 7. Use desktop + phone. A stale device must never upload its local snapshot before cloud revision verification.
 
 ## D. Profile save performance / safety
@@ -50,7 +50,7 @@ The production site must be deployed from `dist/`, not directly from source file
 2. Verify save latency is improved or at least not worse; immutable profile chunks now write concurrently.
 3. Interrupt network during a save. The previous active manifest revision must remain readable after reload.
 4. Retry after network recovery. CAS conflict/uncertain-write protections must behave exactly as before.
-5. Confirm Journal entries and coin ledger remain present after save/reload; v5.4.1 specifically fixes the full local-shadow return shape after chunked saves.
+5. Confirm Journal entries and coin ledger remain present after save/reload; v5.4.5 retains the full local-shadow return-shape fix after chunked saves.
 
 ## E. PWA service worker
 
@@ -93,7 +93,7 @@ Run the ordinary production chain:
 
 Journal create → screenshot AI recognition → copyedit → save → edit → close → reload → logout/login → Strategy Lab → Decision Lab → full backup/export → restore on a disposable account.
 
-No step should depend on source `?v=` query strings or CDN import maps after v5.4.1.
+No step should depend on source `?v=` query strings or CDN import maps in v5.4.5.
 
 
 ## v5.4.4 Decision psychological synthesis smoke test
@@ -107,3 +107,14 @@ No step should depend on source `?v=` query strings or CDN import maps after v5.
 7. Go back, change an argument weight or condition, then return. The old synthesis must be invalidated/regenerated.
 8. Lock the Decision, reopen it from history, and verify the saved synthesis is still visible and immutable.
 9. Simulate Gemini failure/offline state and verify Retry and Continue without it both work; final decision flow must not deadlock.
+
+
+## v5.4.5 insight quality + first-run psychology smoke test
+
+1. With fewer than ~8 useful closed trades, verify Home/“Что говорит журнал” does not turn one frequency (for example 2 manual closes of 6) into a behavioral conclusion. It should state that evidence is still too thin.
+2. With at least five comparable cases on each side of a repeated behavior, verify the headline names both sample sizes and both realized-RR results and uses association language, not causation.
+3. Confirm an old cached Home insight disappears after upgrade (`home-advice-v2`).
+4. In Decision Lab inspect LONG/SHORT/uncertainty chips on review/rating, considered-direction buttons, and final-choice buttons. Typography and geometry should be consistent and no 9px stretched uppercase pills should remain.
+5. Put every argument into “Неопределённость”, rate weight/emotion, and continue. Logical/emotional balance should say that all rated thoughts are uncertain, not “not enough rated arguments”.
+6. Run psychological synthesis several times from a fresh Decision. The first transition to “Перед решением” should either finish automatically or surface a genuine network/API error; a guard-rejected/malformed first model draft should be retried internally once.
+7. Verify synthesis text still contains no market validation, trade recommendation, chart-derived fact, AI-created probability or AI-selected LONG/SHORT direction.

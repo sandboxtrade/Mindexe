@@ -32,7 +32,7 @@ function BootLoading({ accent }) {
     /* @__PURE__ */ jsx("span", { className: "text-[11px] tracking-[0.14em] uppercase", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: "mind.exe" })
   ] }) });
 }
-function ProfileLoadErrorScreen({ accent, lang = "ru", onRetry, onLogout, kind = "load" }) {
+function ProfileLoadErrorScreen({ lang = "ru", onRetry, onLogout, kind = "load" }) {
   const isEn = lang === "en";
   const isConflict = kind === "conflict";
   const isSave = kind === "save";

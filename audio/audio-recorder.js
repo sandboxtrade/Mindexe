@@ -68,8 +68,9 @@ export function createAudioRecorder({
         recorder = new MediaRecorderImpl(stream);
       }
       const current = recorder;
-      current.onerror = () => {
-        try { onError?.(current.error || new Error("audio_recording_failed")); } catch (_) {}
+      current.onerror = (event) => {
+        const error = event?.error || /** @type {any} */ (current).error || new Error("audio_recording_failed");
+        try { onError?.(error); } catch (_) {}
         cleanup();
       };
       current.ondataavailable = (event) => {
@@ -121,7 +122,7 @@ export function createAudioRecorder({
     try {
       return await new Promise((resolve, reject) => {
         timeout = setTimeout(() => reject(new Error("audio_stop_timeout")), 12000);
-        const fail = () => reject(current.error || new Error("audio_recording_failed"));
+        const fail = (event) => reject(event?.error || /** @type {any} */ (current).error || new Error("audio_recording_failed"));
         current.onerror = fail;
         current.onstop = () => {
           try {

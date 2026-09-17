@@ -20,12 +20,9 @@ function safeCodeOf(err) {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function timeoutError(operation) {
-  const err = new Error(`${operation}_timeout`);
-  err.code = `${operation}_timeout`;
-  return err;
+  return Object.assign(new Error(`${operation}_timeout`), { code: `${operation}_timeout` });
 }
 
-export function isAiOperationActive(key) { return active.has(key); }
 
 export async function runAiRequest({
   key,

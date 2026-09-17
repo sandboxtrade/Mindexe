@@ -213,11 +213,14 @@ await test("TypeScript static audit finds no unresolved runtime identifiers when
   walk(root);
   const r = spawnSync("tsc", [
     "--allowJs", "--checkJs", "--noEmit", "--target", "ES2022", "--module", "ESNext",
-    "--moduleResolution", "Bundler", "--skipLibCheck", "--lib", "ES2022,DOM", ...files
+    "--moduleResolution", "Bundler", "--skipLibCheck", "--lib", "ES2022,DOM",
+    "--noUnusedLocals", "--noUnusedParameters", ...files
   ], { encoding: "utf8", cwd: root, maxBuffer: 8 * 1024 * 1024 });
   const output = `${r.stdout || ""}\n${r.stderr || ""}`;
   const unresolved = output.split(/\r?\n/).filter((line) => /error TS(?:2304|2552):/.test(line));
   ok(unresolved.length === 0, `unresolved runtime identifiers:\n${unresolved.join("\n")}`);
+  const unused = output.split(/\r?\n/).filter((line) => /error TS(?:6133|6192|6196|6198):/.test(line));
+  ok(unused.length === 0, `unused runtime identifiers:\n${unused.join("\n")}`);
 });
 
 await test("all relative JavaScript imports resolve to local files", () => {
@@ -296,10 +299,10 @@ await test("stage 5-7 feature modules stay extracted from app.js", () => {
   for (const token of [
     'from "./features/journal/journal-ui.js"',
     'from "./core/strategy-math.js"',
-    'from "./ai/context.js"',
     'from "./ai/ai-service.js"',
     'from "./ai/trade-tools.js"'
   ]) ok(appSource.includes(token), `feature module import missing: ${token}`);
+  ok(fs.existsSync(aiContextPath), "AI context module was removed after extraction");
   ok(appSource.includes('lazy(() => import("./features/strategy/strategy-lab.js")'), "Strategy Lab is not code-split");
 });
 
@@ -941,6 +944,29 @@ await test("planned and realized RR math is direction-safe", () => {
   ok(!s.computePlannedRR("Long", 100, 110, 120).ok, "invalid long SL accepted");
 });
 
+await test("close-trade header tolerates legacy entries without stored plannedRR", () => {
+  ok(journalUiSource.includes("planRR.toFixed(2)"), "close-trade header does not use the safe planned-RR fallback");
+  ok(!journalUiSource.includes("entry.plannedRR.toFixed(2)"), "legacy trade close can still crash on a missing plannedRR field");
+});
+
+await test("legacy merge respects an intentional journal reset boundary", () => {
+  const f = loadFunctions(["migrateProfile", "mergeProfiles"], "var SCHEMA_VERSION = 2;");
+  const cloud = {
+    version: 2,
+    user: { name: "cloud" }, settings: {}, progress: {}, wallet: {},
+    meta: { intentionalJournalReset: true, journalResetAt: "2026-09-01T00:00:00.000Z" },
+    journal: { entries: [] }
+  };
+  const legacy = {
+    version: 2,
+    user: { name: "old" }, settings: {}, progress: {}, wallet: {},
+    journal: { entries: [{ id: "old-trade" }] }
+  };
+  const merged = f.mergeProfiles(cloud, legacy);
+  eq(merged.journal.entries.length, 0, "old journal entry resurrected across reset boundary");
+  eq(merged.user.name, "cloud", "cloud profile must still win ordinary merge conflicts");
+});
+
 await test("legacy profile migration preserves old data under version 2", () => {
   const s = loadFunctions(["migrateProfile"], "var SCHEMA_VERSION = 2;");
   const out = s.migrateProfile({
@@ -1515,7 +1541,7 @@ await test("core logic stays extracted instead of drifting back into app.js", ()
     "function normalizeEmotions("
   ]) ok(!appSource.includes(token), `core implementation drifted back into app.js: ${token}`);
   ok(appSource.includes('from "./core/trade-math.js"'), "trade-math import missing");
-  ok(appSource.includes('from "./core/stats.js"'), "stats import missing");
+  ok(fs.existsSync(statsPath), "stats module was removed after extraction");
   ok(appSource.includes('from "./core/journal-model.js"'), "journal-model import missing");
   ok(appSource.includes('from "./core/firestore-storage.js"'), "firestore-storage import missing");
   ok(appSource.includes('from "./core/journal-media.js"'), "journal-media import missing");
@@ -1917,7 +1943,7 @@ await test("startup plays the complete splash while profile bootstrap runs behin
   ok(!indexSource.includes("esm.sh"), "runtime esm.sh dependency returned");
   ok(!indexSource.includes("www.gstatic.com/firebasejs"), "runtime Firebase CDN dependency returned");
   ok(!indexSource.includes('type="importmap"'), "runtime import map returned after Vite migration");
-  ok(fs.statSync(path.join(root, "splash.mp4")).size < 700 * 1024, "splash video is still too large for startup");
+  ok(fs.statSync(path.join(root, "public", "splash.mp4")).size < 700 * 1024, "splash video is still too large for startup");
 });
 
 await test("profile-store reads immutable revision chunks concurrently without changing reconstruction", async () => {
@@ -2296,6 +2322,70 @@ await test("Decision analytics cloud loading skips draft and abandoned sessions 
 
 
 
+await test("Journal headline insights suppress isolated small-sample discipline rates", async () => {
+  const analytics = await import(new URL("../analytics/trader-analytics.js?v=insight-quality-small", import.meta.url));
+  const base = Date.UTC(2026, 0, 1, 10, 0);
+  const rows = Array.from({ length: 6 }, (_, i) => ({
+    id: `small-${i}`,
+    date: new Date(base + i * 20 * 60000),
+    status: "closed",
+    outcome: i % 2 ? "Win" : "Loss",
+    realizedRR: i % 2 ? 1 : -1,
+    r: i % 2 ? 1 : -1,
+    resultMode: "R",
+    x: 50,
+    y: 50,
+    pull: "—",
+    lesson: "—",
+    screenshots: []
+  }));
+  const result = analytics.calculateTraderAnalytics(rows, null, "ru");
+  ok(result.discipline.violations.some((v) => v.id === "revenge_rate"), "test fixture did not create the raw discipline rate");
+  ok(!result.insights.some((i) => i.id === "discipline_revenge_rate"), "isolated revenge frequency still leaks into headline insights");
+  eq(result.insights.length, 0, "small sample fabricated a headline insight instead of staying quiet");
+});
+
+await test("Journal headline insight prefers a two-sided realized-RR comparison when evidence is repeated", async () => {
+  const analytics = await import(new URL("../analytics/trader-analytics.js?v=insight-quality-comparison", import.meta.url));
+  const rows = [];
+  let id = 0;
+  const add = (day, minute, outcome, rr) => rows.push({
+    id: `cmp-${id++}`,
+    date: new Date(Date.UTC(2026, 0, 1 + day, 10, 0) + minute * 60000),
+    status: "closed", outcome, realizedRR: rr, r: rr, resultMode: "R",
+    x: 50, y: 50, pull: "—", lesson: "—", screenshots: []
+  });
+  for (let d = 0; d < 5; d++) { add(d * 2, 0, "Loss", -1); add(d * 2, 10, "Win", 0.2); }
+  for (let d = 0; d < 5; d++) { add(d * 2 + 1, 0, "Loss", -1); add(d * 2 + 1, 90, "Win", 1.5); }
+  const result = analytics.calculateTraderAnalytics(rows, null, "ru");
+  eq(result.insights[0]?.id, "compare_fast_after_loss", "useful comparison did not outrank generic headline candidates");
+  ok(result.insights[0].text.includes("5 сделок") && result.insights[0].text.includes("+0.2R") && result.insights[0].text.includes("+1.5R"), "comparison insight lost its two real samples/results");
+  ok(result.insights[0].text.includes("не доказательство"), "comparison insight presents observational journal data as causation");
+});
+
+await test("Home and Coach insight generation gate weak evidence and reject causal wording", () => {
+  const service = fs.readFileSync(path.join(root, "ai", "ai-service.js"), "utf8");
+  const dashboard = fs.readFileSync(path.join(root, "features", "dashboard", "dashboard-ui.js"), "utf8");
+  ok(service.includes("aiHasUsefulJournalInsightEvidence") && service.includes("An isolated frequency"), "AI insight prompt still accepts isolated counts as useful analysis");
+  ok(service.includes("aiAssertJournalInsightQuality") && service.includes("ai_insight_causal_overreach"), "AI insight output has no causal-overreach guard");
+  ok(service.includes("2 of 6 trades were closed manually"), "home insight prompt lost the concrete rejected weak-example guard");
+  ok(dashboard.includes('HOME_ADVICE_KEY = "home-advice-v2"'), "old cached weak home insight can survive the quality-gate release");
+});
+
+await test("Decision choice controls share display typography and neutral-only balance has an honest state", () => {
+  const ui = fs.readFileSync(path.join(root, "features", "decision-lab", "decision-lab-ui.js"), "utf8");
+  ok(ui.includes("function DecisionChoiceButton") && ui.includes('fontFamily: "var(--font-display)"'), "Decision LONG/SHORT controls still use ad-hoc typography");
+  ok(!ui.includes('className: "px-2 py-1 rounded-full text-[9px] uppercase tracking-wide"'), "old tiny uppercase side-chip style is still present");
+  ok(ui.includes("neutralOnlyBalance") && ui.includes("neutralOnly ? l.neutralOnlyBalance"), "neutral-only reasoning still looks like missing ratings/broken balance");
+});
+
+await test("Decision psychology first-run path uses qualitative balance plus one automatic model-response retry", () => {
+  const psychology = fs.readFileSync(path.join(root, "ai", "decision-psychology.js"), "utf8");
+  ok(psychology.includes("psychologyBalanceForAi") && psychology.includes("qualitative only; the UI renders exact values"), "Gemini still receives the exact deterministic percentages it was forbidden to repeat");
+  ok(psychology.includes("Do not quote or invent") && psychology.includes("Do not repeat numeric weights/intensities"), "psychology prompt does not explicitly prevent numeric echo on first generation");
+  ok(psychology.includes("retries: 1") && psychology.includes("decision_psychology_model_response_rejected"), "malformed/guard-rejected psychology response still requires a manual second attempt");
+});
+
 await test("Decision psychological balance is deterministic and separates logic from emotion", async () => {
   const model = await import(new URL("../core/decision-model.js?v=psych-balance-model", import.meta.url));
   const psych = await import(new URL("../core/decision-psychology.js?v=psych-balance-core", import.meta.url));
@@ -2431,7 +2521,7 @@ await test("Home auto AI work is idle-scheduled and no longer wraps an AI call i
 
 await test("Approach 3 uses a Vite/npm production graph with no runtime dependency CDN", () => {
   const pkg = JSON.parse(packageSource);
-  eq(pkg.version, "5.4.4", "package release version not bumped");
+  eq(pkg.version, "5.4.5", "package release version not bumped");
   ok(pkg.scripts?.build?.includes("vite build"), "production build does not use Vite");
   for (const dep of ["react", "react-dom", "firebase", "lucide-react", "recharts"]) {
     ok(pkg.dependencies?.[dep], `npm dependency missing: ${dep}`);
@@ -2443,6 +2533,19 @@ await test("Approach 3 uses a Vite/npm production graph with no runtime dependen
   for (const forbidden of ["type=\"importmap\"", "https://esm.sh", "cdn.tailwindcss.com", "www.gstatic.com/firebasejs"]) {
     ok(!indexSource.includes(forbidden), `runtime CDN/import-map dependency remains: ${forbidden}`);
   }
+});
+
+await test("Final dependency floor includes audited Firebase and Vite fixes", () => {
+  const pkg = JSON.parse(packageSource);
+  eq(pkg.dependencies?.firebase, "12.19.0", "Firebase dependency regressed below the audited release");
+  eq(pkg.devDependencies?.vite, "7.3.5", "Vite dependency regressed below the audited security floor");
+});
+
+await test("Splash media has one canonical Vite source", () => {
+  ok(fs.existsSync(path.join(root, "public", "splash.mp4")), "public splash video is missing");
+  ok(fs.existsSync(path.join(root, "public", "splash-poster.jpg")), "public splash poster is missing");
+  ok(!fs.existsSync(path.join(root, "splash.mp4")), "duplicate root splash video returned");
+  ok(!fs.existsSync(path.join(root, "splash-poster.jpg")), "duplicate root splash poster returned");
 });
 
 await test("Approach 3 static Tailwind build contains critical responsive and arbitrary utilities", () => {
@@ -2539,7 +2642,7 @@ await test("profile-store never activates a partially failed parallel revision a
 });
 
 await test("Approach 3 service worker is same-origin only, build-precache aware and deferred until cloud readiness", () => {
-  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.4"'), "service-worker cache generation is stale");
+  ok(serviceWorkerSource.includes('CACHE_NAME = "mind-exe-shell-v5.4.5"'), "service-worker cache generation is stale");
   ok(!serviceWorkerSource.includes("skipWaiting"), "service worker still forces activation and can invalidate lazy chunks in an already-open old client");
   ok(serviceWorkerSource.includes('url.origin !== self.location.origin'), "service worker can intercept external Firebase/Gemini traffic");
   ok(serviceWorkerSource.includes("PRECACHE_URLS.map"), "service worker does not support build-generated shell precaching");
@@ -2652,6 +2755,66 @@ await test("Approach 3 defers Strategy and Decision reconciliation until the clo
 });
 
 
+
+await test("legacy migration is only retired after a verifiably complete cloud merge", () => {
+  const mergeBlock = section("async function mergeLegacyIntoCloud", "async function migrateLocalAccountIfNeeded");
+  const claimBlock = section("async function claimLegacyData", "async function skipLegacyData");
+  ok(mergeBlock.includes('throw error;') && mergeBlock.includes('legacy_cloud_read_failed'), "cloud read failure can still look like migration success");
+  ok(mergeBlock.includes('existing = await loadProfile(userId)') && mergeBlock.includes('await saveProfile(userId, merged)'), "legacy migration still bypasses the revisioned profile store");
+  ok(!mergeBlock.includes('storageGet(profileKey(userId)'), "legacy migration still reads only the obsolete canonical profile document");
+  ok(mergeBlock.includes('legacy_media_migration_failed'), "partial media migration does not fail the overall migration");
+  const mergeAt = claimBlock.indexOf("await mergeLegacyIntoCloud");
+  const markerAt = claimBlock.indexOf('await legacyStorageSet(LEGACY_CLAIMED_KEY, "1", false)');
+  ok(mergeAt >= 0 && markerAt > mergeAt, "legacy claimed marker can be written before the cloud merge completes");
+  ok(!claimBlock.includes("} finally {"), "legacy claimed marker is still written from a finally block");
+  ok(!claimBlock.includes("legacyStorageGet(PROFILE_KEY, false).catch"), "legacy source read failure can still be converted into an empty successful migration");
+  const accountMigration = section("async function migrateLocalAccountIfNeeded", "function createFirebaseAuthProvider");
+  ok(!accountMigration.includes("legacyStorageGet(profileKey(legacyUser.id), false).catch"), "local-account migration can still retire unread source data");
+  ok(authUiSource.includes("Локальная копия сохранена"), "migration failure is not surfaced to the user");
+});
+
+await test("image compression never returns a payload above its configured safe limit", () => {
+  ok(mediaUtilsSource.includes('if (smallest.dataUrl.length > limit) throw new Error("image_too_complex")'), "oversized image fallback can still escape the compressor");
+  ok(mediaUtilsSource.includes("canvas.width = 1") && mediaUtilsSource.includes("canvas.height = 1"), "large canvas backing buffers are not explicitly released");
+  ok(mediaUtilsSource.includes("for (let pass = 0; pass < 7 && dim > minDim; pass += 1)"), "oversized screenshots do not get bounded dimension-reduction retries");
+});
+
+await test("MediaRecorder error callbacks preserve the browser event error", () => {
+  const audioSource = fs.readFileSync(path.join(root, "audio", "audio-recorder.js"), "utf8");
+  ok(audioSource.includes("current.onerror = (event) =>"), "recording error handler ignores the MediaRecorder error event");
+  ok(audioSource.includes('event?.error || /** @type {any} */ (current).error || new Error("audio_recording_failed")'), "recording errors lose their real browser cause");
+  ok(audioSource.includes("const fail = (event) => reject(event?.error"), "stop-time recorder failures ignore the event error");
+});
+
+await test("runtime modules contain no unused named imports after the cleanup", () => {
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (["node_modules", "dist", ".git", "tests"].includes(entry.name)) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith(".js")) files.push(full);
+    }
+  };
+  walk(root);
+  const importRe = /import\s*\{([^}]+)\}\s*from\s*["'][^"']+["'];?/gs;
+  for (const file of files) {
+    const text = fs.readFileSync(file, "utf8");
+    for (const match of text.matchAll(importRe)) {
+      const body = text.slice(0, match.index) + text.slice(match.index + match[0].length);
+      for (const rawPart of match[1].split(",")) {
+        const part = rawPart.trim();
+        if (!part) continue;
+        const pieces = part.split(/\s+as\s+/);
+        const local = pieces[pieces.length - 1]?.trim();
+        if (!/^[A-Za-z_$][\w$]*$/.test(local || "")) continue;
+        const escaped = local.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        ok(new RegExp(`\\b${escaped}\\b`).test(body), `unused named import: ${path.relative(root, file)} -> ${local}`);
+      }
+    }
+  }
+});
+
 await test("Release hardening ships owner-only Firestore rules", () => {
   const rules = fs.readFileSync(path.join(root, "firestore.rules"), "utf8");
   const firebaseJson = JSON.parse(fs.readFileSync(path.join(root, "firebase.json"), "utf8"));
@@ -2667,6 +2830,11 @@ await test("Release hardening keeps a long-lived Firebase auth listener", () => 
   ok(appSource.includes("const unsubscribe = onAuthStateChanged("), "useAuth no longer owns a persistent auth subscription");
   ok(appSource.includes("return unsubscribe;"), "auth subscription is not cleaned up on unmount");
   ok(appSource.includes('"AUTH_STATE_CHANGE"'), "long-lived auth changes are not traced");
+});
+
+await test("GitHub Pages build forwards the Enterprise App Check key when configured", () => {
+  const workflow = fs.readFileSync(path.join(root, ".github", "workflows", "pages.yml"), "utf8");
+  ok(workflow.includes("VITE_RECAPTCHA_ENTERPRISE_SITE_KEY: ${{ secrets.VITE_RECAPTCHA_ENTERPRISE_SITE_KEY }}"), "Pages build does not expose the configured Enterprise App Check key to Vite");
 });
 
 await test("Release hardening prefers Enterprise App Check without breaking legacy deployments", () => {

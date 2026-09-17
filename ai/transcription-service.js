@@ -159,7 +159,7 @@ async function polishTranscript(rawText, { lang = "ru", symbol = "", direction =
   }
 }
 
-export async function transcribeDecisionAudio(blob, { mimeType = null, lang = "ru", symbol = "", direction = "" } = {}) {
+export async function transcribeDecisionAudio(blob, { lang = "ru", symbol = "", direction = "" } = {}) {
   if (!(blob instanceof Blob) || blob.size === 0) throw new Error("decision_audio_empty");
   if (blob.size > 18 * 1024 * 1024) throw new Error("decision_audio_too_large");
 

@@ -12,6 +12,21 @@ import {
 function stripCodeFence(text) {
   return String(text || "").replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
 }
+function psychologyBalanceForAi(balance) {
+  const mapSide = (side) => side === "left" ? balance.sides.left : side === "right" ? balance.sides.right : null;
+  const summarize = (row) => ({
+    available: !!row?.available,
+    dominantSide: mapSide(row?.dominantSide),
+    hasNeutralWeight: Number(row?.neutralTotal || 0) > 0,
+    ratedArguments: Number(row?.ratedCount || 0)
+  });
+  return {
+    mode: balance.mode,
+    logical: summarize(balance.logical),
+    emotional: summarize(balance.emotional),
+    alignment: balance.alignment
+  };
+}
 
 function assertPsychologyOnly(result) {
   const text = Object.values(result || {}).join(" \n ");
@@ -33,6 +48,7 @@ function assertPsychologyOnly(result) {
 export async function synthesizeDecisionPsychology({ session, lang = "ru" } = {}) {
   const context = buildDecisionPsychologyContext(session);
   const balance = calculateDecisionThoughtBalance(session);
+  const balanceForAi = psychologyBalanceForAi(balance);
   const sideLabels = context.mode === "entry"
     ? { a: lang === "en" ? "FOR ENTRY" : "ЗА ВХОД", b: lang === "en" ? "AGAINST ENTRY" : "ПРОТИВ ВХОДА" }
     : { a: "LONG", b: "SHORT" };
@@ -56,8 +72,8 @@ Weak = internally unstable inside the user's OWN reasoning: contradiction, condi
 low self-assigned weight, dependence on one unresolved assumption, or a large mismatch between logical weight and emotional pull.
 This is psychological/decision-structure analysis, NOT market analysis.
 
-DETERMINISTIC BALANCE CALCULATED BY CODE (you must not recalculate or invent scores):
-${JSON.stringify(balance)}
+DETERMINISTIC RELATIONSHIP CALCULATED BY CODE (qualitative only; the UI renders exact values):
+${JSON.stringify(balanceForAi)}
 
 USER'S OWN MATERIAL:
 ${JSON.stringify(context)}
@@ -70,9 +86,10 @@ TASK:
 5. Explain what is internally weakest/least stable in the user's reasoning.
 6. Identify the central psychological/logical conflict preventing clarity.
 7. Ask exactly one self-question that helps the user inspect that conflict. The question must not suggest a trade action.
-8. If you mention which side has more weight, only mirror the deterministic balance above. Never produce your own percentage,
-probability, prediction, recommendation or preferred trade direction.
-9. Do not use prescriptive phrases such as "тебе нужно войти", "лучше ждать", "дождись подтверждения", "you should enter".
+8. If you mention which side has more weight, only mirror the qualitative deterministic relationship above. Do not quote or invent
+percentages, numeric argument weights, emotion scores, probabilities, predictions, recommendations or a preferred trade direction.
+9. Do not repeat numeric weights/intensities from USER'S OWN MATERIAL even if the user wrote them. The UI already shows those values.
+10. Do not use prescriptive phrases such as "тебе нужно войти", "лучше ждать", "дождись подтверждения", "you should enter".
 
 RETURN EXACTLY JSON, no markdown:
 {"sideASummary":"...","sideBSummary":"...","neutralSummary":"...","strongPattern":"...","weakPattern":"...","mainConflict":"...","selfQuestion":"..."}`;
@@ -81,16 +98,26 @@ RETURN EXACTLY JSON, no markdown:
   return runAiRequest({
     key: "decision_psychology_synthesis",
     operation: "DECISION_PSYCHOLOGY_SYNTHESIS",
-    timeoutMs: 32000,
-    retries: 0,
+    timeoutMs: 36000,
+    retries: 1,
+    retryDelayMs: 220,
     slowMs: 7000,
     execute: async () => {
-      const result = await model.generateContent(prompt);
-      const text = result?.response?.text?.();
-      if (!text || !text.trim()) throw new Error("decision_psychology_empty");
-      let parsed;
-      try { parsed = JSON.parse(stripCodeFence(text)); } catch { throw new Error("decision_psychology_bad_json"); }
-      return assertPsychologyOnly(normalizeDecisionPsychologyAiResponse(parsed));
+      try {
+        const result = await model.generateContent(prompt);
+        const text = result?.response?.text?.();
+        if (!text || !text.trim()) throw new Error("decision_psychology_empty");
+        let parsed;
+        try { parsed = JSON.parse(stripCodeFence(text)); }
+        catch { throw new Error("decision_psychology_malformed_response"); }
+        return assertPsychologyOnly(normalizeDecisionPsychologyAiResponse(parsed));
+      } catch (error) {
+        const code = String(error?.message || error?.code || "");
+        if (/decision_psychology_(?:bad_json|incomplete|strategy_leak)/i.test(code)) {
+          throw new Error("decision_psychology_model_response_rejected");
+        }
+        throw error;
+      }
     }
   });
 }

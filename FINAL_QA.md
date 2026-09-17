@@ -1,12 +1,24 @@
-# MIND.EXE v5.4.4 — FINAL QA report
+# MIND.EXE v5.4.5 — FINAL QA report
 
 ## Verified in this source package
 
-- 139/139 regression checks pass.
+- 153/153 regression checks pass.
 - Every local JavaScript file passes syntax checking.
+- Firebase Web SDK is pinned to 12.19.0, which includes the current iOS/iPadOS authentication persistence fixes and newer AI Logic fixes.
+- Vite is pinned to 7.3.5, the patched Vite 7 security floor used by this release.
 - Every relative JavaScript import resolves and the local module graph remains acyclic.
+- Runtime modules pass the no-unused-locals/no-unused-parameters audit; stale imports, dead helpers and obsolete logger arguments found in this pass were removed.
+- Legacy local→cloud migration now writes through the active revisioned profile store, keeps retry available after read/write/partial-media failures, and respects intentional journal/full-reset boundaries.
+- Closing an older trade no longer dereferences a missing `entry.plannedRR`; the already-computed safe RR fallback is used instead.
+- Screenshot compression never returns a payload above its configured safe limit and releases large canvas buffers earlier on iOS.
+- MediaRecorder errors preserve the browser error event and still release microphone tracks.
+- Duplicate root splash assets were removed; `public/` is the single Vite source for splash media.
 - Profile/Journal/Strategy persistence invariants remain covered by regression tests.
 - Decision session CAS, stale-write rejection, stale-delete rejection and atomic session/index deletion are covered. Older abandoned records remain reachable from the full-history deletion UI.
+- Headline journal insights now suppress isolated small-sample frequencies and prefer repeated two-sided comparisons with real outcome differences.
+- Gemini journal insights reject causal overreach; weak evidence produces an explicit insufficient-data state rather than generic advice.
+- Decision LONG/SHORT/uncertainty controls use one shared display-font component across argument, considered-direction and final-choice states.
+- Psychological synthesis receives qualitative deterministic balance only and automatically retries one rejected/malformed model response before surfacing an error.
 - Decision Lab psychological synthesis is deterministic where it matters: logical/emotional side balance is calculated from user ratings in code, while Gemini only explains the structure of the user's own reasoning.
 - The psychology Gemini path receives no chart image, ticker/symbol, market feed or external market data. Prompt and response guards reject prescriptive trading language and AI-generated percentages.
 - Final clarity/confidence are collected only after psychological synthesis succeeds or the user explicitly skips it. Saved synthesis is fingerprinted and locked into the immutable pre-trade snapshot.

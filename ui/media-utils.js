@@ -69,6 +69,10 @@ async function encodeAt(decoded, maxDim, quality) {
   try { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high"; } catch (_) {}
   decoded.draw(ctx, width, height);
   const blob = await canvasToJpegBlob(canvas, quality);
+  // Release the large backing buffer before base64 conversion. This matters on iOS where several
+  // chart screenshots can otherwise keep tens of MB of canvas memory alive until the next GC.
+  canvas.width = 1;
+  canvas.height = 1;
   return { blob, dataUrl: await blobToDataUrl(blob), width, height };
 }
 
@@ -76,32 +80,44 @@ export async function compressImageFile(file, maxDim = 1280, quality = 0.72, max
   if (!(file instanceof Blob) || file.size === 0) throw new Error("image file empty");
   const decoded = await decodeImage(file);
   try {
-    const initialDim = Math.max(960, Number(maxDim) || 1280);
+    const initialDim = Math.max(320, Number(maxDim) || 1280);
     const initialQuality = Math.max(0.58, Math.min(0.94, Number(quality) || 0.72));
     const limit = Math.max(120000, Number(maxDataUrlChars) || 240000);
-
-    // Start at the requested quality. If it is too large, estimate a smaller dimension from the
-    // encoded-size ratio instead of repeatedly JPEG-encoding the same huge canvas dozens of times.
-    let encoded = await encodeAt(decoded, initialDim, initialQuality);
-    if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
-
-    let dim = Math.max(960, Math.min(initialDim - 1, Math.floor(initialDim * Math.sqrt(limit / encoded.dataUrl.length) * 0.95)));
+    const minDim = Math.min(initialDim, 480);
     const qualities = [...new Set([
       initialQuality,
-      Math.max(0.62, Number((initialQuality - 0.08).toFixed(2))),
-      Math.max(0.58, Number((initialQuality - 0.16).toFixed(2)))
+      Math.max(0.56, Number((initialQuality - 0.1).toFixed(2))),
+      Math.max(0.48, Number((initialQuality - 0.2).toFixed(2))),
+      0.42
     ])].sort((a, b) => b - a);
-    let smallest = encoded;
 
-    for (let pass = 0; pass < 3; pass += 1) {
+    let dim = initialDim;
+    let encoded = await encodeAt(decoded, dim, qualities[0]);
+    let smallest = encoded;
+    if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
+
+    // First preserve resolution and reduce JPEG quality. This is usually enough for screenshots.
+    for (const q of qualities.slice(1)) {
+      encoded = await encodeAt(decoded, dim, q);
+      if (encoded.dataUrl.length < smallest.dataUrl.length) smallest = encoded;
+      if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
+    }
+
+    // No encoded image is allowed to escape above maxDataUrlChars. The old 960px floor could
+    // return an oversized noisy screenshot and later exceed a Firestore record limit. Gradually
+    // reduce dimensions only when quality reduction is insufficient.
+    for (let pass = 0; pass < 7 && dim > minDim; pass += 1) {
+      const ratio = Math.sqrt(limit / Math.max(1, smallest.dataUrl.length));
+      const scale = Math.max(0.62, Math.min(0.86, ratio * 0.95));
+      dim = Math.max(minDim, Math.min(dim - 1, Math.floor(dim * scale)));
       for (const q of qualities) {
         encoded = await encodeAt(decoded, dim, q);
         if (encoded.dataUrl.length < smallest.dataUrl.length) smallest = encoded;
         if (encoded.dataUrl.length <= limit) return encoded.dataUrl;
       }
-      if (dim <= 960) break;
-      dim = Math.max(960, Math.floor(dim * 0.82));
     }
+
+    if (smallest.dataUrl.length > limit) throw new Error("image_too_complex");
     return smallest.dataUrl;
   } finally {
     decoded.close();

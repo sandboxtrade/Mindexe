@@ -1,5 +1,5 @@
 import { jsx, jsxs } from "react/jsx-runtime";
-import { Activity, Brain, BarChart3, TrendingUp, AlertTriangle } from "lucide-react";
+import { Activity, BarChart3, AlertTriangle } from "lucide-react";
 import { BASE, WIN, LOSS } from "../../config/app-config.js";
 import { buildDecisionAnalytics, buildDecisionInsights } from "../../core/decision-analytics.js";
 

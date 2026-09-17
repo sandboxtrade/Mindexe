@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
 import { BASE } from "../config/app-config.js";
 
-export function LogoMark({ size = 26, color, accent, animated = false }) {
+export function LogoMark({ size = 26, color, animated = false }) {
   const c = color || BASE.ink;
   const dashProps = animated ? { pathLength: 1, strokeDasharray: 1, strokeDashoffset: 1 } : {};
   return /* @__PURE__ */ jsxs("svg", { width: size, height: size, viewBox: "0 0 64 64", fill: "none", children: [
@@ -49,8 +49,8 @@ export function LogoMark({ size = 26, color, accent, animated = false }) {
     /* @__PURE__ */ jsx("rect", { x: "9", y: "45", width: "2.5", height: "2.5", fill: c, opacity: "0.35", style: animated ? { animation: "dotIn 0.3s ease 1.44s backwards" } : void 0 })
   ] });
 }
-export function LogoSpinner({ size = 22, color, accent }) {
-  return /* @__PURE__ */ jsx("span", { style: { display: "inline-flex", animation: "logoPulseFade 1.1s ease-in-out infinite" }, children: /* @__PURE__ */ jsx(LogoMark, { size, color, accent }) });
+export function LogoSpinner({ size = 22, color }) {
+  return /* @__PURE__ */ jsx("span", { style: { display: "inline-flex", animation: "logoPulseFade 1.1s ease-in-out infinite" }, children: /* @__PURE__ */ jsx(LogoMark, { size, color }) });
 }
 // ---- DecodeText.js -----------------------------------------------------------
 // Reveal effect for text/numbers. Was a per-character random-glyph "decrypt" animation; replaced
@@ -84,7 +84,7 @@ export function DecodeText({ text, as = "span", className = "", style, maxTotalM
     return /* @__PURE__ */ jsx("span", { style: { display: "inline-block", animation: `softReveal 0.5s cubic-bezier(0.22,0.61,0.36,1) ${wordIndex * stepMs}ms both` }, children: w }, i);
   }) });
 }
-export function Wordmark({ accent, size = 15, animated = false, wide = false }) {
+export function Wordmark({ size = 15, animated = false, wide = false }) {
   const c = BASE.ink;
   return /* @__PURE__ */ jsxs("span", { className: "flex items-baseline", style: { fontFamily: "var(--font-display)", fontWeight: 500, fontSize: size, letterSpacing: wide ? "0.28em" : void 0, color: c, animation: animated ? "riseIn 0.5s ease 1.55s backwards" : void 0 }, children: [
     "mind",

@@ -41,8 +41,7 @@ export function createProfileStore({
   profileBaseKey,
   schemaVersion,
   now = () => Date.now(),
-  revisionIdFactory = makeRevisionId,
-  logger = console
+  revisionIdFactory = makeRevisionId
 }) {
   if (typeof storageGet !== "function" || typeof storageSet !== "function" ||
       typeof storageDelete !== "function" || typeof getDocRef !== "function" ||
@@ -125,9 +124,7 @@ export function createProfileStore({
     for (const item of items || []) {
       const itemBytes = byteLength(item) + 2;
       if (itemBytes > PROFILE_ITEM_MAX_BYTES) {
-        const err = new Error("profile_item_too_large");
-        err.kind = kind;
-        throw err;
+        throw Object.assign(new Error("profile_item_too_large"), { kind });
       }
 
       const shouldFlush = current.length > 0 &&
@@ -450,6 +447,7 @@ export function createProfileStore({
       throw e;
     }
 
+    if (!committedManifest) throw new Error("profile_manifest_commit_missing");
     expectedActiveRevision = revisionId;
     expectedSequence = committedManifest.sequence;
     manifestSeen = true;

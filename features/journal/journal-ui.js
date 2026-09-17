@@ -861,7 +861,7 @@ export function CloseTrade({ entry, onSave, onCancel, accent, measureMode, curre
     /* @__PURE__ */ jsxs("p", { className: "text-[11px] text-center mb-5", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
       entry.instrument, " \xB7 ", DIRECTION_LABEL[entry.direction],
       entry.entryPrice != null ? ` \xB7 \u0432\u0445\u043E\u0434 ${formatPriceValue(entry.entryPrice)}` : "",
-      hasPlan ? ` \xB7 \u043F\u043B\u0430\u043D 1:${entry.plannedRR.toFixed(2)}` : ""
+      planRR != null ? ` \xB7 \u043F\u043B\u0430\u043D 1:${planRR.toFixed(2)}` : ""
     ] }),
     hasPlan && /* @__PURE__ */ jsxs("div", { className: "flex gap-3 mb-4 text-xs", style: { color: BASE.inkFaint, fontFamily: "var(--font-mono)" }, children: [
       /* @__PURE__ */ jsxs("span", { children: ["SL ", formatPriceValue(entry.stopLoss)] }),

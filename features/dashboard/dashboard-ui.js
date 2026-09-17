@@ -188,7 +188,7 @@ function Sparkline({ points, color, width = 84, height = 30 }) {
     /* @__PURE__ */ jsx("circle", { cx: last[0], cy: last[1], r: "2", fill: color })
   ] });
 }
-var HOME_ADVICE_KEY = "home-advice";
+var HOME_ADVICE_KEY = "home-advice-v2";
 // Кэш приватный (shared=false \u2192 users/{uid}/data/home-advice), поэтому совет одного пользователя
 // физически не может показаться другому. Ключ инвалидации \u2014 хэш того же контекста, который
 // уходит в модель: пока статистика, состояние и стратегия не менялись, запрос не уходит вообще.
@@ -280,7 +280,7 @@ async function getMarketSnapshot(assetClass, lang, { force = false } = {}) {
   finally { if (__marketInFlight[assetClass] === task) delete __marketInFlight[assetClass]; }
 }
 
-function Home({ entries, goTo, accent, name, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
+function Home({ entries, goTo, accent, measureMode, currency, startingCapital, lastCalibration, analytics, t, lang, tradingAsset, notify, strategyNote }) {
   const total = entries.length;
   const [patternOpen, setPatternOpen] = useState(false);
   const [marketSnapshot, setMarketSnapshot] = useState(null);
@@ -1373,7 +1373,7 @@ function ChallengeCard({ icon: Icon, title, desc, progress, goal, accent }) {
     ] })
   ] });
 }
-function Challenge({ entries, accent, weeklyGoal, t, lang }) {
+function Challenge({ entries, accent, t, lang }) {
   const { streak, week } = useStreak(entries, lang);
   const daysThisWeek = week.filter((d) => d.filled).length;
   const effectiveWeeklyGoal = 7;

@@ -180,11 +180,15 @@ function AuthScreen({ accent, onRegister, onLogin, onGoogle }) {
 }
 function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const run = async (fn) => {
     if (busy) return;
     setBusy(true);
+    setError("");
     try {
       await fn();
+    } catch (_) {
+      setError("Не удалось перенести данные. Локальная копия сохранена — попробуй ещё раз.");
     } finally {
       setBusy(false);
     }
@@ -199,6 +203,7 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
       /* @__PURE__ */ jsx("div", { className: "flex justify-center mb-6", children: /* @__PURE__ */ jsx(LogoMark, { size: 32, accent }) }),
       /* @__PURE__ */ jsx("p", { className: "text-sm mb-2", style: { color: BASE.ink, fontFamily: "var(--font-display)" }, children: "\u041D\u0430\u0439\u0434\u0435\u043D \u0441\u0443\u0449\u0435\u0441\u0442\u0432\u0443\u044E\u0449\u0438\u0439 \u043B\u043E\u043A\u0430\u043B\u044C\u043D\u044B\u0439 \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441" }),
       /* @__PURE__ */ jsx("p", { className: "text-xs mb-8 leading-relaxed", style: { color: BASE.inkFaint }, children: "\u0414\u043D\u0435\u0432\u043D\u0438\u043A, \u043A\u043E\u0448\u0435\u043B\u0451\u043A MindCoin, streak \u0438 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438, \u0441\u043E\u0445\u0440\u0430\u043D\u0451\u043D\u043D\u044B\u0435 \u043D\u0430 \u044D\u0442\u043E\u043C \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435 \u0440\u0430\u043D\u044C\u0448\u0435. \u041F\u0435\u0440\u0435\u043D\u0435\u0441\u0442\u0438 \u0438\u0445 \u0432 \u043D\u043E\u0432\u044B\u0439 \u0430\u043A\u043A\u0430\u0443\u043D\u0442?" }),
+      error && /* @__PURE__ */ jsx("p", { role: "alert", className: "text-xs mb-4 leading-relaxed", style: { color: "#D95858" }, children: error }),
       /* @__PURE__ */ jsx(
         "button",
         {
@@ -222,7 +227,7 @@ function LegacyMigratePrompt({ accent, onMigrate, onSkip }) {
     ] })
   ] });
 }
-function BootIntro({ accent, name, lang, onDone }) {
+function BootIntro({ name, lang, onDone }) {
   const isEn = lang === "en";
   const lines = isEn ? [
     "> mind.exe",

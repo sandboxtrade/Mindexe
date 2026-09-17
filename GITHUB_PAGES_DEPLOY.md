@@ -11,3 +11,12 @@ The workflow `.github/workflows/pages.yml` will:
 4. deploy only `dist/` to GitHub Pages.
 
 For normal updates, commit source changes to `main`. GitHub Actions will rebuild and publish automatically.
+
+## App Check production secret
+
+If you have provisioned reCAPTCHA Enterprise for Firebase App Check, add this GitHub Actions repository secret before deployment:
+
+`VITE_RECAPTCHA_ENTERPRISE_SITE_KEY`
+
+The Pages workflow forwards it only to the Vite build step. If the secret is absent, the existing registered reCAPTCHA v3 provider remains the compatibility fallback.
+

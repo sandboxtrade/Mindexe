@@ -1,6 +1,13 @@
-# MIND.EXE Decision Lab — v5.4.4
+# MIND.EXE Decision Lab — v5.4.5
 
 Decision Lab is an independent pre-trade reasoning system. It does not produce trading advice or a market signal. It records the user's own reasoning before the result is known, locks that pre-trade snapshot, and later compares it with Journal outcomes.
+
+## v5.4.5 reliability / choice typography
+
+- LONG / SHORT / uncertainty and FOR / AGAINST selectors share one display-font choice component across the Decision flow.
+- Neutral-only rated thoughts are shown as a valid uncertainty state, not as missing data.
+- Gemini receives only qualitative deterministic side dominance/alignment; exact balance percentages remain code/UI-owned.
+- A malformed, incomplete or guard-rejected psychology response gets one automatic retry before the UI asks the user to retry manually.
 
 ## v5.4.4 psychological synthesis
 

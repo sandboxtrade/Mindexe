@@ -418,10 +418,6 @@ export function setDecisionPostReview(session, review, now = Date.now()) {
   };
 }
 
-export function decisionArgumentReviewMap(session) {
-  const s = normalizeDecisionSession(session);
-  return new Map((s?.postReview?.argumentReviews || []).map((row) => [row.argumentId, row]));
-}
 
 export function decisionClarityDelta(session) {
   const s = normalizeDecisionSession(session);

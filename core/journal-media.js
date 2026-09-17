@@ -306,9 +306,10 @@ export function createJournalMediaStore({
       if (normalized.entry.length + normalized.exit.length === 0) continue;
       const sid = String(id);
       if (existing.has(sid) && !mediaReadyIds.has(sid)) {
-        const err = new Error(mediaFailedIds.has(sid) ? "journal_media_load_failed" : "journal_media_pending_load");
-        err.entryId = sid;
-        throw err;
+        throw Object.assign(
+          new Error(mediaFailedIds.has(sid) ? "journal_media_load_failed" : "journal_media_pending_load"),
+          { entryId: sid }
+        );
       }
     }
   }

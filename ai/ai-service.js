@@ -60,6 +60,44 @@ Rules:
 // V5.4: the previous task asked for "at least one concrete number", which the model satisfied with
 // a single stat wrapped in otherwise universal advice. It now has to build every sentence from a
 // relationship between fields, and is explicitly shown what a rejected answer looks like.
+function aiJournalInsightInsufficient(context) {
+  return context?.lang === "en"
+    ? "There is not enough repeated journal evidence yet to show a stable relationship between state, behavior, and outcome."
+    : "Пока в журнале недостаточно повторяющихся данных, чтобы выделить устойчивую связь между состоянием, поведением и результатом.";
+}
+function aiHasUsefulJournalInsightEvidence(context) {
+  if (!context || typeof context !== "object") return false;
+  const closed = Number(context?.statistics?.closedTrades || 0);
+  const local = Array.isArray(context.localInsights) ? context.localInsights : [];
+  if (local.some((i) => i && i.confidence !== "low" && Number(i.sampleSize || 0) >= 10)) return true;
+  const exit = context.exitBehavior;
+  if (exit && Number(exit.plannedTradesSample || 0) >= 10 && Number(exit.earlyExitCount || 0) >= 4 && exit.avgRRLostToEarlyExit != null) return true;
+  const shift = context.emotionalShift;
+  if (shift?.available && Number(shift.sample || 0) >= 8) return true;
+  const streak = context.afterStreakBehavior;
+  if (Number(streak?.afterTwoWins?.sample || 0) >= 5 || Number(streak?.afterTwoLosses?.sample || 0) >= 5) return true;
+  const repeated = context?.journal?.repeatedLessons || [];
+  if (repeated.some((r) => Number(r?.timesRepeated || 0) >= 3)) return true;
+  const patterns = [...(context.patterns || []), ...(context.healthyPatterns || [])];
+  if (patterns.some((p) => p && p.confidence !== "low" && Number(p.sampleSize || 0) >= 8)) return true;
+  const calibration = context.calibration;
+  if (calibration?.available && ["moderate", "high"].includes(calibration.confidence) && Number(calibration.tradesThatDay || 0) >= 6) return true;
+  return closed >= 12 && Array.isArray(context.recentClosedSequence) && context.recentClosedSequence.length >= 10;
+}
+function aiAssertJournalInsightQuality(text) {
+  const value = String(text || "").trim();
+  if (!value) throw new Error("ai_insight_empty");
+  const causalOverreach = [
+    /\b(?:напрямую|непосредственно)\s+(?:снижает|повышает|ухудшает|улучшает|влияет)\b/i,
+    /\b(?:приводит|приводят)\s+к\b/i,
+    /\b(?:вызывает|вызывают|становится причиной)\b/i,
+    /\b(?:directly|immediately)\s+(?:reduces|increases|hurts|improves|affects)\b/i,
+    /\b(?:causes?|leads?\s+to|results?\s+in)\b/i
+  ];
+  if (causalOverreach.some((re) => re.test(value))) throw new Error("ai_insight_causal_overreach");
+  return value;
+}
+
 var AI_INSIGHT_TASK = `Write a personal journal insight (3-6 sentences) for this specific trader, using ONLY the
 AGGREGATED_CONTEXT JSON below.
 
@@ -94,6 +132,11 @@ Hard requirements:
   and stop. A short honest "not enough data yet" answer is correct and preferred.
 - Do not describe market conditions, sentiment, or what the market is "waiting for" \u2014 you have no
   market data here, only this trader's journal.
+- Do NOT turn correlation into causation. Journal data is observational. Use wording such as
+  "in this group the result was..." / "this coincided with..." and never "X caused/reduced/improved Y".
+- An isolated frequency is NOT an insight by itself. "2 of 6 were manual closes" or "33% of losses
+  were followed by a quick re-entry" is too weak unless you can connect it to another measured field
+  with adequate samples. If you cannot, return the brief insufficient-data message instead.
 
 Rejected (too generic, never write like this): "You sometimes make emotional decisions." /
 "Be careful after a winning streak." / "Watch your discipline." / "The market is consolidating."
@@ -139,12 +182,16 @@ export async function aiCallGemini(prompt, { key = "ai_general", operation = "AI
   });
 }
 export async function aiGenerateInsight(context) {
+  if (!aiHasUsefulJournalInsightEvidence(context)) return aiJournalInsightInsufficient(context);
   const prompt = `${AI_INSIGHT_TASK}
 
 AGGREGATED_CONTEXT:
 ${JSON.stringify(context)}`;
-  return aiCallGemini(prompt, { key: "coach_analysis", operation: "AI_COACH_ANALYZE", timeoutMs: 25000 });
+  const text = await aiCallGemini(prompt, { key: "coach_analysis", operation: "AI_COACH_ANALYZE", timeoutMs: 25000, retries: 1 });
+  try { return aiAssertJournalInsightQuality(text); }
+  catch { return aiJournalInsightInsufficient(context); }
 }
+
 export async function aiChatReply(context, recentTrades, history, question) {
   const historyText = (history || []).slice(-10).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n");
   const prompt = `${AI_CHAT_TASK}
@@ -372,18 +419,37 @@ Hard rules:
   trader's decisions \u2014 a scalper with many trades per day is following their plan, not making a
   mistake. If no strategy is described, still do not judge style: stick to consistency with their
   OWN past behaviour and their own stated plans.
-- Ground it in a named number from the context (a count, an average, a percentage, "N of the last M").
-- No motivational filler and nothing that would be true for any trader. If the data is too thin
-  (few closed trades, empty reflections, no calibration), say plainly in one sentence what is
-  missing and stop \u2014 that is a correct answer.
+- A useful home insight must connect at least TWO measured facts: for example a behavior with its
+  realized RR, two sufficiently sized groups, a repeated lesson with later behavior, or entry state
+  with exit behavior. An isolated frequency such as "2 of 6 trades were closed manually" is NOT useful.
+- Do not claim causation. These are observational journal records. Say "coincided with", "in this
+  group", or "was associated with"; never "caused", "directly reduced", "led to", or equivalents.
+- Do not build a comparison when either side has fewer than about 5 observations. If there is no
+  relationship with enough repeated evidence, return exactly one short insufficient-data sentence.
+- No motivational filler and nothing that would be true for any trader.
 - Plain prose, no headers, no lists, no markdown.`;
 export async function aiGenerateHomeAdvice(context) {
-  const prompt = `${AI_HOME_ADVICE_TASK}
+  if (!aiHasUsefulJournalInsightEvidence(context)) return aiJournalInsightInsufficient(context);
+  const basePrompt = `${AI_HOME_ADVICE_TASK}
 
 AGGREGATED_CONTEXT:
 ${JSON.stringify(context)}`;
-  return aiCallGemini(prompt, { key: "home_advice", operation: "AI_HOME_ADVICE", timeoutMs: 20000 });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const prompt = attempt === 0
+      ? basePrompt
+      : `${basePrompt}
+
+REWRITE REQUIREMENT: The previous draft was rejected. Keep only an observed relationship between measured journal facts. Do not use causal language.`;
+    try {
+      const text = await aiCallGemini(prompt, { key: "home_advice", operation: "AI_HOME_ADVICE", timeoutMs: 20000 });
+      return aiAssertJournalInsightQuality(text);
+    } catch (_) {
+      if (attempt === 1) return aiJournalInsightInsufficient(context);
+    }
+  }
+  return aiJournalInsightInsufficient(context);
 }
+
 
 var AI_CALIBRATION_TASK = `You are generating a pre-session trading-psychology calibration for mind.exe. You will
 receive ADAPTIVE_CONTEXT: a compact JSON with yesterday's trading facts, a short recent window, detected

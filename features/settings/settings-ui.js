@@ -29,8 +29,6 @@ export function Settings({
   onThemeChange,
   soundOn,
   setSoundOn,
-  weeklyGoal,
-  setWeeklyGoal,
   onExport,
   onImport,
   onExportBackup,

@@ -4,8 +4,7 @@ import { getDecisionOrganizerModel } from "./decision-runtime.js";
 import { runAiRequest } from "../core/ai-request-runtime.js";
 import {
   DECISION_FACTOR_GROUPS,
-  DECISION_FACTORS,
-  normalizeDecisionFactor
+  DECISION_FACTORS
 } from "../core/decision-factor-taxonomy.js";
 import { validateDecisionOrganizerResponse } from "../core/decision-organizer-model.js";
 
